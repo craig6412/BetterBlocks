@@ -1,6 +1,8 @@
 package com.betterblocks
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,49 +14,83 @@ import kotlin.random.Random
 // --- Constants ---
 const val GRID_SIZE = 9
 const val BLOCKS_PER_ROUND = 3
-// Animation Timing Constants
-const val ANIMATION_DURATION_MS = 900L // Total time the animation takes before the cells vanish
-const val COIN_REWARD_THRESHOLD = 1000 // Points needed for reward
-const val COINS_PER_REWARD = 10 // Coins given per threshold
-const val ROTATION_COST = 10         // Cost in coins
-const val INITIAL_FREE_ROTATIONS = 3 // Free rotations per game
+const val ANIMATION_DURATION_MS = 900L
+const val COIN_REWARD_THRESHOLD = 1000
+const val COINS_PER_REWARD = 10
+const val ROTATION_COST = 10
+const val INITIAL_FREE_ROTATIONS = 3
 
-class GameViewModel : ViewModel() {
+// Persistence Keys
+const val PREFS_NAME = "BetterBlocksPrefs"
+const val KEY_HIGH_SCORE = "high_score"
+const val KEY_COINS = "user_coins"
+
+class GameViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // --- State Management ---
     private val _uiState = MutableStateFlow(createInitialState())
     val uiState: StateFlow<GameUiState> = _uiState
 
+    // Internal tracking to trigger the animation only once per session/high score beat
+    private var scoreToBeat: Int = 0
+
     /**
-     * Creates the initial state for a new game.
+     * Creates the initial state for a new game, loading saved data.
      */
     private fun createInitialState(): GameUiState {
+        val savedHighScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+        val savedCoins = prefs.getInt(KEY_COINS, 100) // Default 100 coins if new
+
+        // Set the target to beat for this session to the current high score
+        scoreToBeat = savedHighScore
+
         return GameUiState(
             board = Array(GRID_SIZE) { Array(GRID_SIZE) { null } },
             availableBlocks = generateNewBlocks(),
             score = 0,
-            coins = 9999, // Starting coins (can be changed later)
+            highScore = savedHighScore,
+            coins = savedCoins,
             freeRotations = INITIAL_FREE_ROTATIONS,
             lastRotatedBlockId = null,
             isGameOver = false,
             selectedBlock = null,
-            clearingCells = emptySet() // Initialize the animation set
+            clearingCells = emptySet(),
+            showHighScoreAnim = false // Banner hidden by default
         )
     }
 
-    /**
-     * Generates a new list of 3 random blocks from the BLOCK_MANAGER.
-     */
     private fun generateNewBlocks(): List<Block> {
         return BLOCK_MANAGER.shuffled(Random).take(BLOCKS_PER_ROUND)
+    }
+
+    // --- Persistence Helpers ---
+
+    private fun saveHighScore(score: Int) {
+        prefs.edit().putInt(KEY_HIGH_SCORE, score).apply()
+    }
+
+    private fun saveCoins(coins: Int) {
+        prefs.edit().putInt(KEY_COINS, coins).apply()
     }
 
     // --- Public Actions (Called by the UI) ---
 
     fun resetGame() {
-        // Preserve coins across resets, but reset free rotations
         val currentCoins = _uiState.value.coins
-        _uiState.value = createInitialState().copy(coins = currentCoins, freeRotations = INITIAL_FREE_ROTATIONS)
+        val currentHighScore = _uiState.value.highScore
+
+        // Reset UI state
+        _uiState.value = createInitialState().copy(
+            coins = currentCoins,
+            highScore = currentHighScore,
+            freeRotations = INITIAL_FREE_ROTATIONS,
+            showHighScoreAnim = false
+        )
+
+        // Reset the score to beat back to the high score
+        scoreToBeat = currentHighScore
     }
 
     fun selectBlock(block: Block) {
@@ -84,6 +120,7 @@ class GameViewModel : ViewModel() {
                 newFreeRotations -= 1
             } else if (newCoins >= ROTATION_COST) {
                 newCoins -= ROTATION_COST
+                saveCoins(newCoins) // Save new coin balance
             } else {
                 // Not enough resources to rotate
                 return
@@ -103,7 +140,7 @@ class GameViewModel : ViewModel() {
                 selectedBlock = rotatedBlock,
                 coins = newCoins,
                 freeRotations = newFreeRotations,
-                lastRotatedBlockId = currentBlock.id // Mark as paid/used
+                lastRotatedBlockId = currentBlock.id
             )
         }
     }
@@ -123,71 +160,85 @@ class GameViewModel : ViewModel() {
 
         viewModelScope.launch {
             // --- 1. PLACE BLOCK (Immediate State Change) ---
-            // MERGE: Placement score is now 0 (ignored) as per request
+            // Placement score is 0
             val (boardAfterPlacement, _) = placeBlock(selectedBlock, startRow, startCol, currentState.board)
             val clearResult = checkForClears(boardAfterPlacement)
 
             // --- 2. START ANIMATION SEQUENCE ---
             if (clearResult.totalClears > 0) {
-
-                // --- a) Update UI to show which cells are clearing (Animation starts here) ---
+                // Update UI to show which cells are clearing
                 _uiState.update {
                     it.copy(
-                        // Temporarily place the block onto the grid for the clear animation to run
                         board = boardAfterPlacement,
-                        // Set the coordinates that the UI should vaporize sequentially
                         clearingCells = getCoordsToAnimate(clearResult.newBoard, boardAfterPlacement)
                     )
                 }
-
-                // --- b) Pause execution for the duration of the animation ---
-                // The UI's animation uses a stagger that adds up to roughly 600-900ms
+                // Wait for animation to play out
                 delay(ANIMATION_DURATION_MS)
             }
 
             // --- 3. FINAL STATE UPDATE (Post-Animation) ---
 
-            // Get the final cleared board (which was calculated earlier)
             val boardAfterClears = clearResult.newBoard
-
-            // Update Inventory
             val newAvailableBlocks = currentState.availableBlocks.filter { it.id != selectedBlock.id }
             val finalBlocks = if (newAvailableBlocks.isEmpty()) generateNewBlocks() else newAvailableBlocks
 
-            // MERGE: Calculate Score (Only based on Clears)
+            // Calculate Score
             val clearScore = calculateClearScore(clearResult.totalClears)
             val newScore = currentState.score + clearScore
 
+            // --- HIGH SCORE CHECK ---
+            var currentHighScore = currentState.highScore
+            var triggerHighScoreAnim = false
+
+            if (newScore > scoreToBeat) {
+                // New High Score achieved!
+                currentHighScore = newScore
+                saveHighScore(currentHighScore)
+
+                // Trigger animation and ensure we don't trigger it again this session
+                triggerHighScoreAnim = true
+                scoreToBeat = Int.MAX_VALUE
+            } else if (newScore > currentHighScore) {
+                // Just updating the number if we are already past the "beat" threshold
+                currentHighScore = newScore
+                saveHighScore(currentHighScore)
+            }
+
             // --- Calculate Coins Earned ---
-            // Check how many 1000-point thresholds were crossed
             val scoreBefore = currentState.score
             val coinsEarned = ((newScore / COIN_REWARD_THRESHOLD) - (scoreBefore / COIN_REWARD_THRESHOLD)) * COINS_PER_REWARD
             val newTotalCoins = currentState.coins + coinsEarned
+            if (coinsEarned > 0) saveCoins(newTotalCoins)
 
-            // Check Game Over
             val isGameOver = isGameOver(finalBlocks, boardAfterClears)
 
             // Commit final state to UI
             _uiState.update {
                 it.copy(
-                    board = boardAfterClears, // Cleared board
+                    board = boardAfterClears,
                     availableBlocks = finalBlocks,
                     score = newScore,
-                    coins = newTotalCoins, // Update coin count
+                    highScore = currentHighScore,
+                    coins = newTotalCoins,
                     isGameOver = isGameOver,
                     selectedBlock = null, // Deselect block
-                    lastRotatedBlockId = null, // Reset rotation status on placement
-                    clearingCells = emptySet() // Clear animation state
+                    lastRotatedBlockId = null, // Reset rotation status
+                    clearingCells = emptySet(), // Clear animation state
+                    showHighScoreAnim = triggerHighScoreAnim // Show banner if true
                 )
+            }
+
+            // --- 4. HIDE BANNER AFTER DELAY ---
+            if (triggerHighScoreAnim) {
+                delay(3000) // Show banner for 3 seconds
+                _uiState.update { it.copy(showHighScoreAnim = false) }
             }
         }
     }
 
     // --- Private Game Logic Helpers ---
 
-    /**
-     * Determines which cells were cleared by comparing the board before and after clearing.
-     */
     private fun getCoordsToAnimate(clearedBoard: GameGrid, placementBoard: GameGrid): Set<Coord> {
         val coords = mutableSetOf<Coord>()
         for (r in 0 until GRID_SIZE) {
@@ -213,16 +264,11 @@ class GameViewModel : ViewModel() {
     private fun placeBlock(block: Block, startRow: Int, startCol: Int, board: GameGrid): Pair<GameGrid, Int> {
         val newBoard = board.map { it.clone() }.toTypedArray()
         for (coord in block.shape) {
-            // Uses colorResId (Int) from GameModel.kt
             newBoard[startRow + coord.row][startCol + coord.col] = block.colorResId
         }
-        // MERGE: Return 0 for placement score. Points are only awarded for clears.
         return Pair(newBoard, 0)
     }
 
-    /**
-     * Scans the board for any complete rows or columns (1010! style).
-     */
     private fun checkForClears(board: GameGrid): ClearResult {
         val cellsToClear = mutableSetOf<Coord>()
 
@@ -242,13 +288,11 @@ class GameViewModel : ViewModel() {
 
         if (cellsToClear.isEmpty()) return ClearResult(board, 0)
 
-        // Count clears BEFORE physically clearing the board
         val uniqueRows = cellsToClear.map { it.row }.toSet().filter { r -> (0 until GRID_SIZE).all { c -> cellsToClear.contains(Coord(r, c)) } }.size
         val uniqueCols = cellsToClear.map { it.col }.toSet().filter { c -> (0 until GRID_SIZE).all { r -> cellsToClear.contains(Coord(r, c)) } }.size
 
         val totalClears = uniqueRows + uniqueCols
 
-        // Create the final cleared board state
         val clearedBoard = board.map { it.clone() }.toTypedArray()
         for (cell in cellsToClear) {
             clearedBoard[cell.row][cell.col] = null
@@ -257,17 +301,10 @@ class GameViewModel : ViewModel() {
         return ClearResult(clearedBoard, totalClears)
     }
 
-    /**
-     * MERGE: Calculates score with a quadratic multiplier for combos.
-     * Formula: LinesCleared * 100 * LinesCleared
-     * 1 Line = 100
-     * 2 Lines = 400
-     * 3 Lines = 900
-     * 4 Lines = 1600
-     */
     private fun calculateClearScore(totalClears: Int): Int {
         if (totalClears == 0) return 0
         val basePoints = 100
+        // Quadratic multiplier: 1 line=100, 2=400, 3=900, 4=1600
         return totalClears * basePoints * totalClears
     }
 

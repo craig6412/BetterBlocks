@@ -14,8 +14,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material.icons.filled.Refresh
 // rotate_right is loaded via R.drawable
 import androidx.compose.material3.*
@@ -108,13 +108,13 @@ fun GameScreen(
     val dragOffsetYPx = with(density) { DRAG_OFFSET_Y.toPx() }
     val dragOffsetXPx = with(density) { DRAG_OFFSET_X.toPx() }
 
-    // Calculate Ghost Position (Anchor Point)
+    // Calculate Ghost Position
     val ghostPosition = remember(dragState.dragPosition, gridTopLeft, gridSizePx, uiState.selectedBlock) {
         if (!dragState.isDragging || gridSizePx == 0f || dragState.draggedBlock == null) null
         else calculateGridPosition(dragState.dragPosition, gridTopLeft, gridSizePx, 9)
     }
 
-    // [NEW] Smart Placement Check: Validates if the WHOLE block fits properly
+    // Smart Placement Check
     val isGhostValid = remember(ghostPosition, dragState.draggedBlock, uiState.board) {
         if (ghostPosition == null || dragState.draggedBlock == null) false
         else isValidPlacement(uiState.board, dragState.draggedBlock!!, ghostPosition)
@@ -155,7 +155,7 @@ fun GameScreen(
                         cellDp = cellDp,
                         ghostBlock = if (dragState.isDragging) dragState.draggedBlock else null,
                         ghostOrigin = ghostPosition,
-                        isGhostValid = isGhostValid, // Pass validation state down
+                        isGhostValid = isGhostValid,
                         onCellClick = onGridCellClicked,
                         uiState = uiState
                     )
@@ -192,9 +192,7 @@ fun GameScreen(
                         )
                     },
                     onDragEnd = {
-                        // Use the same smart grid calculation for the drop
                         val dropTarget = calculateGridPosition(dragState.dragPosition, gridTopLeft, gridSizePx, 9)
-
                         if (dropTarget != null && dragState.draggedBlock != null) {
                             onGridCellClicked(dropTarget.first, dropTarget.second)
                         }
@@ -236,21 +234,15 @@ fun GameScreen(
  * Checks boundaries and existing blocks.
  */
 fun isValidPlacement(board: GameGrid, block: Block, origin: Pair<Int, Int>): Boolean {
-    // 1. Check Bounds for the whole block shape
     if (origin.first + block.boundingBoxHeight > 9 || origin.second + block.boundingBoxWidth > 9) return false
 
     // 2. Check Overlaps
     for (coord in block.shape) {
         val r = origin.first + coord.row
         val c = origin.second + coord.col
-
-        // Safety check for bounds again
         if (r < 0 || r >= 9 || c < 0 || c >= 9) return false
-
-        // Collision check: if board cell is not null, we can't place here
         if (board[r][c] != null) return false
     }
-
     return true
 }
 
@@ -329,8 +321,23 @@ fun Header(uiState: GameUiState, onReset: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            ScoreDisplay(score = uiState.score, label = "Current", modifier = Modifier.weight(1f))
-            ScoreDisplay(score = 1250, label = "High Score", modifier = Modifier.weight(1f))
+            // CURRENT SCORE: Show trophy = false
+            ScoreDisplay(
+                score = uiState.score,
+                label = "Current",
+                showTrophy = false,
+                modifier = Modifier.weight(1f)
+            )
+
+            // HIGH SCORE: Show trophy = true, Gold tint
+            ScoreDisplay(
+                score = uiState.highScore,
+                label = "High Score",
+                showTrophy = true,
+                trophyTint = CoinGold,
+                modifier = Modifier.weight(1f)
+            )
+
             IconButton(onClick = onReset, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = LightText)
             }
@@ -339,18 +346,26 @@ fun Header(uiState: GameUiState, onReset: () -> Unit) {
 }
 
 @Composable
-fun ScoreDisplay(score: Int, label: String, modifier: Modifier = Modifier) {
+fun ScoreDisplay(
+    score: Int,
+    label: String,
+    modifier: Modifier = Modifier,
+    showTrophy: Boolean = true,
+    trophyTint: Color = LightText
+) {
     Column(
         modifier = modifier.padding(horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Filled.EmojiEvents,
-                contentDescription = "Trophy",
-                tint = LightText,
-                modifier = Modifier.size(20.dp).padding(end = 4.dp)
-            )
+            if (showTrophy) {
+                Icon(
+                    imageVector = Icons.Filled.EmojiEvents,
+                    contentDescription = "Trophy",
+                    tint = trophyTint,
+                    modifier = Modifier.size(20.dp).padding(end = 4.dp)
+                )
+            }
             Text(text = score.toString(), color = LightText, fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = Oswald)
         }
         Text(text = label, color = LightText.copy(alpha = 0.7f), fontSize = 12.sp, fontFamily = Oswald)
@@ -364,7 +379,7 @@ fun GameBoard(
     cellDp: Dp,
     ghostBlock: Block?,
     ghostOrigin: Pair<Int, Int>?,
-    isGhostValid: Boolean = false, // [NEW] Valid parameter for red/green coloring
+    isGhostValid: Boolean = false,
     onCellClick: (row: Int, col: Int) -> Unit,
     uiState: GameUiState
 ) {
@@ -395,16 +410,14 @@ fun GameBoard(
                 val animSpec = tween<Float>(durationMillis = 300, delayMillis = staggerDelay)
                 val blockScale: Float by animateFloatAsState(targetValue = targetScale, animationSpec = animSpec, label = "BlockClearScale")
 
-                // --- UPDATED GHOST LOGIC ---
+                // Ghost Logic
                 var isGhostCell = false
                 if (ghostBlock != null && ghostOrigin != null) {
                     val relativeR = r - ghostOrigin.first
                     val relativeC = c - ghostOrigin.second
-                    // Check if this specific cell is part of the ghost block
                     isGhostCell = ghostBlock.shape.any { it.row == relativeR && it.col == relativeC }
                 }
 
-                // Red for invalid placement, Green for valid placement
                 val ghostColor = if (isGhostCell) {
                     if (isGhostValid) Color.Green.copy(alpha = 0.5f) else Color.Red.copy(alpha = 0.5f)
                 } else {
@@ -419,7 +432,6 @@ fun GameBoard(
                             .graphicsLayer(alpha = blockScale)
                             .padding(BLOCK_PADDING)
                             .clip(RoundedCornerShape(4.dp))
-                            // Show ghostColor if not occupied, otherwise Transparent (so Image shows)
                             .background(if (isOccupied) Color.Transparent else ghostColor)
                             .border(BorderStroke(1.dp, if (cellValue != null) Color.Black.copy(0.1f) else DarkBackground.copy(0.3f)), RoundedCornerShape(4.dp))
                             .clickable { onCellClick(r, c) }
@@ -494,6 +506,7 @@ fun AvailableBlocks(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
         val isRotationEnabled = selectedBlock != null
         val buttonContainerColor = if (isRotationEnabled) DeepBlue else Color.Gray.copy(alpha = 0.3f)
         val buttonContentColor = if (isRotationEnabled) LightText else Color.White.copy(alpha = 0.5f)
@@ -597,5 +610,5 @@ fun BlockShapeDisplay(block: Block, cellSize: Dp) {
 @Preview(showBackground = true)
 @Composable
 fun GameScreenPreview() {
-    // ... (Preview remains same)
+    // Preview code
 }

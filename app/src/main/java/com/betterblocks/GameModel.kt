@@ -68,12 +68,14 @@ data class GameUiState(
     val board: GameGrid,
     val availableBlocks: List<Block>,
     val score: Int = 0,
-    val coins: Int = 0, // Tracks current coins
-    val freeRotations: Int = 3, // Tracks free spins (starts at 3)
-    val lastRotatedBlockId: Int? = null, // Tracks if current block has unlimited spins
+    val highScore: Int = 0, // <-- ADDED: Tracks the all-time high score
+    val coins: Int = 0,
+    val freeRotations: Int = 3,
+    val lastRotatedBlockId: Int? = null,
     val isGameOver: Boolean = false,
     val selectedBlock: Block? = null,
-    val clearingCells: Set<Coord> = emptySet() // Tracks cells currently animating out
+    val clearingCells: Set<Coord> = emptySet(),
+    val showHighScoreAnim: Boolean = false // <-- ADDED: Triggers the high score banner
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -82,12 +84,14 @@ data class GameUiState(
         if (!board.contentDeepEquals(other.board)) return false
         if (availableBlocks != other.availableBlocks) return false
         if (score != other.score) return false
+        if (highScore != other.highScore) return false
         if (coins != other.coins) return false
         if (freeRotations != other.freeRotations) return false
         if (lastRotatedBlockId != other.lastRotatedBlockId) return false
         if (isGameOver != other.isGameOver) return false
         if (selectedBlock != other.selectedBlock) return false
         if (clearingCells != other.clearingCells) return false
+        if (showHighScoreAnim != other.showHighScoreAnim) return false // <-- ADDED CHECK
         return true
     }
 
@@ -95,12 +99,14 @@ data class GameUiState(
         var result = board.contentDeepHashCode()
         result = 31 * result + availableBlocks.hashCode()
         result = 31 * result + score
+        result = 31 * result + highScore
         result = 31 * result + coins
         result = 31 * result + freeRotations
         result = 31 * result + (lastRotatedBlockId ?: 0)
         result = 31 * result + isGameOver.hashCode()
         result = 31 * result + (selectedBlock?.hashCode() ?: 0)
         result = 31 * result + clearingCells.hashCode()
+        result = 31 * result + showHighScoreAnim.hashCode() // <-- ADDED HASH
         return result
     }
 }
@@ -112,40 +118,27 @@ data class ClearResult(val newBoard: GameGrid, val totalClears: Int)
 // ---------------------------
 
 val BLOCK_MANAGER: List<Block> = listOf(
-    // 1-Cell
-    Block(1, "1x1 Dot", BLOCK_DRAWABLES[5], listOf(Coord(0, 0))), // Red
-
-    // 2-Cell
-    Block(2, "1x2 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1))), // Blue
-
-    // 3-Cell
-    Block(3, "1x3 Bar", BLOCK_DRAWABLES[1], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2))), // Green
-    Block(4, "L Triomino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0), Coord(1, 1))), // Yellow
-
-    // 4-Cell (Tetrominos)
-    Block(5, "1x4 Bar", BLOCK_DRAWABLES[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))), // Pink
-    Block(6, "Square", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))), // Purple
-    Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))), // Pumpkin
+    Block(1, "1x1 Dot", BLOCK_DRAWABLES[5], listOf(Coord(0, 0))),
+    Block(2, "1x2 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1))),
+    Block(3, "1x3 Bar", BLOCK_DRAWABLES[1], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2))),
+    Block(4, "L Triomino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0), Coord(1, 1))),
+    Block(5, "1x4 Bar", BLOCK_DRAWABLES[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))),
+    Block(6, "Square", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))),
+    Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))),
     Block(8, "J Tetromino", BLOCK_DRAWABLES[4], listOf(Coord(0, 1), Coord(1, 1), Coord(2, 1), Coord(2, 0))),
     Block(9, "T Tetromino", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
     Block(10, "S Tetromino", BLOCK_DRAWABLES[1], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
     Block(11, "Z Tetromino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
-
-    // 5-Cell (Pentominos)
     Block(12, "1x5 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3), Coord(0, 4))),
     Block(13, "L Pentomino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
     Block(14, "Plus Pentomino", BLOCK_DRAWABLES[2], listOf(Coord(0, 1), Coord(1, 0), Coord(1, 1), Coord(1, 2), Coord(2, 1))),
     Block(15, "U Pentomino", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 2), Coord(1, 0), Coord(1, 1), Coord(1, 2))),
     Block(16, "Wide T", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
-
-    // 9-Cell (Large Square)
     Block(17, "3x3 Square", BLOCK_DRAWABLES[1], listOf(
         Coord(0, 0), Coord(0, 1), Coord(0, 2),
         Coord(1, 0), Coord(1, 1), Coord(1, 2),
         Coord(2, 0), Coord(2, 1), Coord(2, 2)
     )),
-
-    // Misc
     Block(18, "Small L", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0))),
     Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1)))
 )
