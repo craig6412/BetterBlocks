@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="BlockPreviewView">
+        <!-- String representation of block shape, e.g., "0,0;1,0;2,0" -->
+        <attr name="blockShapeData" format="string" />
+        <!-- Drawable resource ID for the block's texture/color -->
+        <attr name="blockColorRes" format="reference" />
+    </declare-styleable>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Represents an empty cell on the game board -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <!-- The cell background color from the image reference (a lightened dark-blue) -->
+    <solid android:color="#373D6A" />
+    <!-- Optional: Add a slight inset border if needed to simulate depth, but margin handles the grid lines -->
+</shape>

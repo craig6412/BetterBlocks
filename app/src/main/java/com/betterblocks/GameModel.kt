@@ -10,49 +10,35 @@ package com.betterblocks
 data class Coord(val row: Int, val col: Int)
 
 /**
- * Type alias for the game board grid: a 2D array of nullable color strings.
- * A non-null string means the cell is occupied by a block of that color.
+ * Type alias for the game board grid: a 2D array of nullable Resource IDs (Int).
+ * A non-null value means the cell is occupied by a block with that drawable ID.
  */
-typealias GameGrid = Array<Array<String?>>
+typealias GameGrid = Array<Array<Int?>>
 
 /**
- * Common color palette for blocks, matching a vibrant theme.
+ * Your custom drawable resources.
+ * Index 0 = Blue, 1 = Green, 2 = Pink, 3 = Pumpkin Orange, 4 = Purple, 5 = Red, 6 = Yellow
  */
-val BLOCK_COLOR_HEX = listOf(
-    "#3b82f6", // Blue
-    "#f59e0b", // Amber
-    "#10b981", // Emerald
-    "#ef4444", // Red
-    "#8b5cf6", // Violet
-    "#ec4899", // Pink
-    "#06b6d4", // Cyan
-    "#eab308", // Yellow
-    "#f472b6", // Rose
-    "#fbbf24", // Yellow-Amber
-    "#9333ea", // Purple
-    "#4ade80", // Light Green
-    "#f97316", // Orange
-    "#a855f7", // Fuchsia
-    "#d946ef", // Magenta
-    "#6366f1", // Indigo
-    "#14b8a6", // Teal
-    "#65a30d", // Lime
-    "#facc15"  // Gold
+val BLOCK_DRAWABLES = listOf(
+    R.drawable.blue,           // 0
+    R.drawable.green,          // 1
+    R.drawable.pink,           // 2
+    R.drawable.pumpkin_orange, // 3
+    R.drawable.purple,         // 4
+    R.drawable.red,            // 5
+    R.drawable.yellow          // 6
 )
 
 /**
- * Represents a single block shape and color.
- * @param name A descriptive name for the block shape.
- *S * @param color The hex color string for the block.
- * @param shape A list of coordinates (row, col) relative to the top-left corner (0,0) of the block's bounding box.
+ * Represents a single block shape and texture.
+ * @param colorResId The Drawable Resource ID (Int) for the block's texture.
  */
 data class Block(
     val id: Int,
     val name: String,
-    val color: String,
+    val colorResId: Int,
     val shape: List<Coord>
 ) {
-    // Helper to get the bounding dimensions for rendering
     val boundingBoxWidth: Int
         get() = (shape.maxOfOrNull { it.col } ?: -1) + 1
 
@@ -64,19 +50,10 @@ data class Block(
  * Extension function to rotate the block 90 degrees clockwise.
  */
 fun Block.rotate(): Block {
-    // Find the new height, which will be the old width
     val newHeight = this.boundingBoxWidth
-
     val newShape = this.shape.map { coord ->
-        // Rotation logic: (row, col) -> (col, newHeight - 1 - row)
-        // This correctly pivots the block within its bounding box
-        Coord(
-            row = coord.col,
-            col = newHeight - 1 - coord.row
-        )
+        Coord(row = coord.col, col = newHeight - 1 - coord.row)
     }
-
-    // Normalize the shape to be at (0,0) origin again
     val minRow = newShape.minOfOrNull { it.row } ?: 0
     val minCol = newShape.minOfOrNull { it.col } ?: 0
     val normalizedShape = newShape.map { Coord(it.row - minRow, it.col - minCol) }
@@ -91,10 +68,13 @@ data class GameUiState(
     val board: GameGrid,
     val availableBlocks: List<Block>,
     val score: Int = 0,
+    val coins: Int = 0, // Tracks current coins
+    val freeRotations: Int = 3, // Tracks free spins (starts at 3)
+    val lastRotatedBlockId: Int? = null, // Tracks if current block has unlimited spins
     val isGameOver: Boolean = false,
-    val selectedBlock: Block? = null
+    val selectedBlock: Block? = null,
+    val clearingCells: Set<Coord> = emptySet() // Tracks cells currently animating out
 ) {
-    // Custom equals/hashcode for array comparison
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -102,8 +82,12 @@ data class GameUiState(
         if (!board.contentDeepEquals(other.board)) return false
         if (availableBlocks != other.availableBlocks) return false
         if (score != other.score) return false
+        if (coins != other.coins) return false
+        if (freeRotations != other.freeRotations) return false
+        if (lastRotatedBlockId != other.lastRotatedBlockId) return false
         if (isGameOver != other.isGameOver) return false
         if (selectedBlock != other.selectedBlock) return false
+        if (clearingCells != other.clearingCells) return false
         return true
     }
 
@@ -111,58 +95,57 @@ data class GameUiState(
         var result = board.contentDeepHashCode()
         result = 31 * result + availableBlocks.hashCode()
         result = 31 * result + score
+        result = 31 * result + coins
+        result = 31 * result + freeRotations
+        result = 31 * result + (lastRotatedBlockId ?: 0)
         result = 31 * result + isGameOver.hashCode()
         result = 31 * result + (selectedBlock?.hashCode() ?: 0)
+        result = 31 * result + clearingCells.hashCode()
         return result
     }
 }
 
-/**
- * A helper class to return the result of a line-clearing check.
- */
-data class ClearResult(
-    val newBoard: GameGrid,
-    val totalClears: Int // Total number of rows, columns, and/or zones cleared
-)
+data class ClearResult(val newBoard: GameGrid, val totalClears: Int)
 
 // ---------------------------
-// 2. Block Definitions (Full 19 Set)
+// 2. Block Definitions (Mapped to Custom Drawables)
 // ---------------------------
 
 val BLOCK_MANAGER: List<Block> = listOf(
     // 1-Cell
-    Block(1, "1x1 Dot", BLOCK_COLOR_HEX[0], listOf(Coord(0, 0))),
+    Block(1, "1x1 Dot", BLOCK_DRAWABLES[5], listOf(Coord(0, 0))), // Red
 
     // 2-Cell
-    Block(2, "1x2 Bar", BLOCK_COLOR_HEX[1], listOf(Coord(0, 0), Coord(0, 1))),
+    Block(2, "1x2 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1))), // Blue
 
     // 3-Cell
-    Block(3, "1x3 Bar", BLOCK_COLOR_HEX[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2))),
-    Block(4, "L Triomino", BLOCK_COLOR_HEX[3], listOf(Coord(0, 0), Coord(1, 0), Coord(1, 1))),
+    Block(3, "1x3 Bar", BLOCK_DRAWABLES[1], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2))), // Green
+    Block(4, "L Triomino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0), Coord(1, 1))), // Yellow
 
     // 4-Cell (Tetrominos)
-    Block(5, "1x4 Bar", BLOCK_COLOR_HEX[4], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))),
-    Block(6, "Square", BLOCK_COLOR_HEX[5], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))),
-    Block(7, "L Tetromino", BLOCK_COLOR_HEX[6], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))),
-    Block(8, "J Tetromino", BLOCK_COLOR_HEX[7], listOf(Coord(0, 1), Coord(1, 1), Coord(2, 1), Coord(2, 0))),
-    Block(9, "T Tetromino", BLOCK_COLOR_HEX[8], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
-    Block(10, "S Tetromino", BLOCK_COLOR_HEX[9], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
-    Block(11, "Z Tetromino", BLOCK_COLOR_HEX[10], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
+    Block(5, "1x4 Bar", BLOCK_DRAWABLES[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))), // Pink
+    Block(6, "Square", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))), // Purple
+    Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))), // Pumpkin
+    Block(8, "J Tetromino", BLOCK_DRAWABLES[4], listOf(Coord(0, 1), Coord(1, 1), Coord(2, 1), Coord(2, 0))),
+    Block(9, "T Tetromino", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
+    Block(10, "S Tetromino", BLOCK_DRAWABLES[1], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
+    Block(11, "Z Tetromino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
 
-    // 5-Cell (Pentominos - simplified set for this game)
-    Block(12, "1x5 Bar", BLOCK_COLOR_HEX[11], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3), Coord(0, 4))),
-    Block(13, "L Pentomino", BLOCK_COLOR_HEX[12], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
-    Block(14, "Plus Pentomino", BLOCK_COLOR_HEX[13], listOf(Coord(0, 1), Coord(1, 0), Coord(1, 1), Coord(1, 2), Coord(2, 1))),
-    Block(15, "U Pentomino", BLOCK_COLOR_HEX[14], listOf(Coord(0, 0), Coord(0, 2), Coord(1, 0), Coord(1, 1), Coord(1, 2))),
-    Block(16, "Wide T", BLOCK_COLOR_HEX[15], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
+    // 5-Cell (Pentominos)
+    Block(12, "1x5 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3), Coord(0, 4))),
+    Block(13, "L Pentomino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
+    Block(14, "Plus Pentomino", BLOCK_DRAWABLES[2], listOf(Coord(0, 1), Coord(1, 0), Coord(1, 1), Coord(1, 2), Coord(2, 1))),
+    Block(15, "U Pentomino", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 2), Coord(1, 0), Coord(1, 1), Coord(1, 2))),
+    Block(16, "Wide T", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
 
     // 9-Cell (Large Square)
-    Block(17, "3x3 Square", BLOCK_COLOR_HEX[16], listOf(
+    Block(17, "3x3 Square", BLOCK_DRAWABLES[1], listOf(
         Coord(0, 0), Coord(0, 1), Coord(0, 2),
         Coord(1, 0), Coord(1, 1), Coord(1, 2),
         Coord(2, 0), Coord(2, 1), Coord(2, 2)
     )),
+
     // Misc
-    Block(18, "Small L", BLOCK_COLOR_HEX[17], listOf(Coord(0, 0), Coord(1, 0))), // 2-cell L
-    Block(19, "Small T", BLOCK_COLOR_HEX[18], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))) // Same as T-Tetro
+    Block(18, "Small L", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0))),
+    Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1)))
 )

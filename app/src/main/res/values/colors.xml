@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Main wood tone (rich, dark brown) -->
+    <color name="wood_primary">#5D4037</color>
+    <!-- Secondary wood tone (lighter brown, good for contrast/highlights) -->
+    <color name="wood_secondary">#A1887F</color>
+
+    <!-- Background color for the rounded card (off-white/very light gray) -->
+    <color name="card_background">#F5F5F5</color>
+
+    <!-- A light, parchment-like color for the main screen background -->
+    <color name="app_background">#FFF8E1</color>
+
+    <!-- Standard text color on light backgrounds -->
+    <color name="text_on_light">#333333</color>
+</resources>

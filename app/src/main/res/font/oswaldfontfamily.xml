@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ExtraLight (Weight 200) -->
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="200"
+        android:font="@font/oswald_extra_light" />
+
+    <!-- Light (Weight 300) -->
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="300"
+        android:font="@font/oswald_light" />
+
+    <!-- Regular (Default, Weight 400) -->
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="400"
+        android:font="@font/oswald_regular" />
+
+    <!-- Medium (Weight 500) -->
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="500"
+        android:font="@font/oswald_medium" />
+
+    <!-- SemiBold (Weight 600) -->
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="600"
+        android:font="@font/oswald_semi_bold" />
+
+    <!-- Bold (Weight 700) -->
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="700"
+        android:font="@font/oswald_bold" />
+</font-family>

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1069774404370",
+    "project_id": "better-blocks",
+    "storage_bucket": "better-blocks.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1069774404370:android:f561cdede7c5c9528591cb",
+        "android_client_info": {
+          "package_name": "com.betterblocks"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCIKbTz25SxsJBJ6Di91j99OL-ZxFC1tZw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

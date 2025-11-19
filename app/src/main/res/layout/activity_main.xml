@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#A0CE19"
+    tools:context=".MainActivity">
+
+    <!--
+    This 'tools:context' line explicitly tells the Android Studio designer which Activity
+    to associate with this layout (MainActivity), which ensures the preview doesn't
+    accidentally pull in data from another Activity like a game or score screen.
+    -->
+
+    <!-- Game Title/Logo Placeholder -->
+    <TextView
+        android:id="@+id/text_view_game_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="BETTER BLOCKS"
+        android:textSize="48sp"
+        android:fontFamily="@font/oswald_bold"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:letterSpacing="0.08"
+        android:padding="16dp"
+        app:layout_constraintVertical_chainStyle="packed"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/button_play"/>
+
+    <!-- Main Menu Buttons -->
+
+    <!-- 1. Play Button (Primary Action) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/button_play"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="48dp"
+        android:text="PLAY GAME"
+        android:textSize="20sp"
+        android:fontFamily="@font/oswald_bold"
+        android:textStyle="bold"
+        android:backgroundTint="#4CAF50"
+        app:cornerRadius="50dp"
+        app:layout_constraintWidth_percent="0.65"
+        app:layout_constraintTop_toBottomOf="@+id/text_view_game_title"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/button_high_scores"/>
+
+    <!-- 2. High Scores Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/button_high_scores"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="HIGH SCORES"
+        android:textSize="20sp"
+        android:fontFamily="@font/oswald_bold"
+        android:backgroundTint="#2196F3"
+        app:cornerRadius="8dp"
+        app:layout_constraintWidth_percent="0.65"
+        app:layout_constraintTop_toBottomOf="@+id/button_play"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@+id/button_settings"/>
+
+    <!-- 3. Settings Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/button_settings"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="SETTINGS"
+        android:backgroundTint="#FF9800"
+        android:textSize="20sp"
+        android:fontFamily="@font/oswald_bold"
+        app:cornerRadius="8dp"
+        app:layout_constraintWidth_percent="0.65"
+        app:layout_constraintTop_toBottomOf="@+id/button_high_scores"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintVertical_bias="0.0"/>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

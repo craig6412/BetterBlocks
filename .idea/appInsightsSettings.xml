@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.betterblocks" />
+                  <option name="mobileSdkAppId" value="1:1069774404370:android:f561cdede7c5c9528591cb" />
+                  <option name="projectId" value="better-blocks" />
+                  <option name="projectNumber" value="1069774404370" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

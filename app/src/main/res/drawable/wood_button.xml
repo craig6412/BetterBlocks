@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- State when the button is pressed (darker feedback) -->
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <!-- Use a slightly darker color for pressed state -->
+            <solid android:color="#4E342E" />
+            <corners android:radius="12dp" />
+            <padding android:left="16dp" android:right="16dp" android:top="8dp" android:bottom="8dp" />
+        </shape>
+    </item>
+
+    <!-- Default state (unpressed) -->
+    <item>
+        <shape android:shape="rectangle">
+            <!-- Use the defined color resource -->
+            <solid android:color="@color/wood_primary" />
+            <!-- Slightly smaller corner radius than the card for a tighter look -->
+            <corners android:radius="12dp" />
+            <padding android:left="16dp" android:right="16dp" android:top="8dp" android:bottom="8dp" />
+        </shape>
+    </item>
+</selector>
