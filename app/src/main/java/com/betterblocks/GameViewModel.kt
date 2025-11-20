@@ -14,11 +14,16 @@ import kotlin.random.Random
 // --- Constants ---
 const val GRID_SIZE = 9
 const val BLOCKS_PER_ROUND = 3
-const val ANIMATION_DURATION_MS = 900L
-const val COIN_REWARD_THRESHOLD = 1000
-const val COINS_PER_REWARD = 10
+// Animation Timing Constants
+const val ANIMATION_DURATION_MS = 900L // Total time the animation takes before the cells vanish
+const val COIN_REWARD_THRESHOLD = 1000 // Points needed for reward
+const val COINS_PER_REWARD = 10 // Coins given per threshold
 const val ROTATION_COST = 10
 const val INITIAL_FREE_ROTATIONS = 3
+const val RAINBOW_BLOCK_SCORE = 1800 // Special score for board wipe
+
+const val INITIAL_RAINBOW_COUNT = 3 // <-- UPDATED: Start with 3
+const val SPECIAL_METER_MAX = 5 // <-- NEW: Meter fills in 5 combo steps
 
 // Persistence Keys
 const val PREFS_NAME = "BetterBlocksPrefs"
@@ -57,7 +62,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isGameOver = false,
             selectedBlock = null,
             clearingCells = emptySet(),
-            showHighScoreAnim = false // Banner hidden by default
+            showHighScoreAnim = false, // Banner hidden by default
+            rainbowBlockCount = INITIAL_RAINBOW_COUNT, // <-- UPDATED to 3
+            specialMeterValue = 0 // <-- ADDED
         )
     }
 
@@ -75,23 +82,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putInt(KEY_COINS, coins).apply()
     }
 
-    // --- Public Actions (Called by the UI) ---
+    // --- Special Meter Logic ---
 
-    fun resetGame() {
-        val currentCoins = _uiState.value.coins
-        val currentHighScore = _uiState.value.highScore
-
-        // Reset UI state
-        _uiState.value = createInitialState().copy(
-            coins = currentCoins,
-            highScore = currentHighScore,
-            freeRotations = INITIAL_FREE_ROTATIONS,
-            showHighScoreAnim = false
-        )
-
-        // Reset the score to beat back to the high score
-        scoreToBeat = currentHighScore
+    /**
+     * Called when a player achieves a combo clear of 2 or more lines.
+     * Fills the meter, or awards a Rainbow Block if full.
+     */
+    private fun onSpecialMeterFilled(currentRainbowCount: Int, currentMeterValue: Int) {
+        // Since this is called only if totalClears >= 2, we increment by 1 each time.
+        if (currentMeterValue + 1 >= SPECIAL_METER_MAX) {
+            // Award block and reset meter
+            _uiState.update {
+                it.copy(
+                    rainbowBlockCount = currentRainbowCount + 1,
+                    specialMeterValue = 0
+                )
+            }
+        } else {
+            // Fill meter
+            _uiState.update {
+                it.copy(
+                    specialMeterValue = currentMeterValue + 1
+                )
+            }
+        }
     }
+
+    // --- Public Actions (Called by the UI) ---
 
     fun selectBlock(block: Block) {
         if (_uiState.value.isGameOver) return
@@ -99,6 +116,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { currentState ->
             val newSelectedBlock = if (currentState.selectedBlock == block) null else block
             currentState.copy(selectedBlock = newSelectedBlock)
+        }
+    }
+
+    /**
+     * Selects the Rainbow Block for placement if available.
+     */
+    fun selectRainbowBlock() {
+        val currentState = _uiState.value
+        if (currentState.isGameOver || currentState.rainbowBlockCount <= 0) return
+
+        val rainbowBlock = RAINBOW_BLOCK // Defined in GameModel.kt
+
+        _uiState.update {
+            // Toggle selection
+            val newSelectedBlock = if (it.selectedBlock?.id == rainbowBlock.id) null else rainbowBlock
+            it.copy(selectedBlock = newSelectedBlock)
         }
     }
 
@@ -130,8 +163,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val rotatedBlock = currentBlock.rotate()
 
-        val newAvailableBlocks = currentState.availableBlocks.map {
-            if (it.id == currentBlock.id) rotatedBlock else it
+        // If it's a standard block, update it in the available list
+        val newAvailableBlocks = if (!currentBlock.isSpecial) {
+            currentState.availableBlocks.map {
+                if (it.id == currentBlock.id) rotatedBlock else it
+            }
+        } else {
+            currentState.availableBlocks // Don't update list for special blocks
         }
 
         _uiState.update {
@@ -140,7 +178,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 selectedBlock = rotatedBlock,
                 coins = newCoins,
                 freeRotations = newFreeRotations,
-                lastRotatedBlockId = currentBlock.id
+                lastRotatedBlockId = currentBlock.id // Mark as paid
             )
         }
     }
@@ -150,15 +188,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onGridCellClicked(startRow: Int, startCol: Int) {
         val currentState = _uiState.value
-        val selectedBlock = currentState.selectedBlock
+        val selectedBlock = currentState.selectedBlock ?: return
 
-        if (selectedBlock == null || currentState.isGameOver) return
+        if (currentState.isGameOver) return
 
         if (!canPlaceBlock(selectedBlock, startRow, startCol, currentState.board)) {
             return // Invalid placement
         }
 
         viewModelScope.launch {
+
+            // --- SPECIAL HANDLING FOR RAINBOW BLOCK ---
+            if (selectedBlock.isSpecial && selectedBlock.id == 999) {
+                handleRainbowWipe(selectedBlock, startRow, startCol, currentState)
+                return@launch
+            }
+
             // --- 1. PLACE BLOCK (Immediate State Change) ---
             // Placement score is 0
             val (boardAfterPlacement, _) = placeBlock(selectedBlock, startRow, startCol, currentState.board)
@@ -185,53 +230,134 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             // Calculate Score
             val clearScore = calculateClearScore(clearResult.totalClears)
-            val newScore = currentState.score + clearScore
 
-            // --- HIGH SCORE CHECK ---
-            var currentHighScore = currentState.highScore
-            var triggerHighScoreAnim = false
+            // Use helper to update everything, passing totalClears
+            updateScoreAndState(currentState, newAvailableBlocks, finalBlocks, clearScore, boardAfterClears, totalClears = clearResult.totalClears)
+        }
+    }
 
-            if (newScore > scoreToBeat) {
-                // New High Score achieved!
-                currentHighScore = newScore
-                saveHighScore(currentHighScore)
+    /**
+     * Logic for the Rainbow Block: Visual placement, Full Board Wipe animation, then Clear.
+     */
+    private suspend fun handleRainbowWipe(block: Block, startRow: Int, startCol: Int, currentState: GameUiState) {
+        // 1. Temporarily place the rainbow block so the user sees it
+        val (boardWithRainbow, _) = placeBlock(block, startRow, startCol, currentState.board)
 
-                // Trigger animation and ensure we don't trigger it again this session
+        // 2. Trigger "Wipe" animation: Set ALL occupied cells to be clearing
+        val allOccupiedCells = mutableSetOf<Coord>()
+        for(r in 0 until GRID_SIZE) {
+            for(c in 0 until GRID_SIZE) {
+                if (boardWithRainbow[r][c] != null) {
+                    allOccupiedCells.add(Coord(r, c))
+                }
+            }
+        }
+
+        _uiState.update {
+            it.copy(
+                board = boardWithRainbow,
+                clearingCells = allOccupiedCells
+            )
+        }
+
+        // 3. Wait for animation
+        delay(ANIMATION_DURATION_MS)
+
+        // 4. Clear the entire board
+        val emptyBoard = Array(GRID_SIZE) { Array<Int?>(GRID_SIZE) { null } }
+
+        // 5. Decrease rainbow count
+        val newRainbowCount = currentState.rainbowBlockCount - 1
+
+        // Reuse the update helper
+        updateScoreAndState(
+            currentState,
+            currentState.availableBlocks,
+            currentState.availableBlocks, // Don't change available blocks for special move
+            RAINBOW_BLOCK_SCORE,
+            emptyBoard,
+            newRainbowCount
+        )
+    }
+
+    /**
+     * Consolidated logic for updating scores, high scores, coins, and game over state.
+     */
+    private fun updateScoreAndState(
+        currentState: GameUiState,
+        newAvailableBlocks: List<Block>, // Just used for Game Over check
+        finalBlocks: List<Block>,       // The blocks to show next
+        pointsToAdd: Int,
+        newBoard: GameGrid,
+        newRainbowCount: Int? = null,
+        totalClears: Int = 0
+    ) {
+        val newScore = currentState.score + pointsToAdd
+
+        // High Score Check
+        var currentHighScore = currentState.highScore
+        var triggerHighScoreAnim = false
+        if (newScore > scoreToBeat) {
+            currentHighScore = newScore
+            saveHighScore(currentHighScore)
+
+            // Only trigger animation once per threshold beat
+            if (!currentState.showHighScoreAnim && scoreToBeat != Int.MAX_VALUE) {
                 triggerHighScoreAnim = true
                 scoreToBeat = Int.MAX_VALUE
-            } else if (newScore > currentHighScore) {
-                // Just updating the number if we are already past the "beat" threshold
-                currentHighScore = newScore
-                saveHighScore(currentHighScore)
             }
+        } else if (newScore > currentHighScore) {
+            currentHighScore = newScore
+            saveHighScore(currentHighScore)
+        }
 
-            // --- Calculate Coins Earned ---
-            val scoreBefore = currentState.score
-            val coinsEarned = ((newScore / COIN_REWARD_THRESHOLD) - (scoreBefore / COIN_REWARD_THRESHOLD)) * COINS_PER_REWARD
-            val newTotalCoins = currentState.coins + coinsEarned
-            if (coinsEarned > 0) saveCoins(newTotalCoins)
+        // Coin Calc
+        val scoreBefore = currentState.score
+        val coinsEarned = ((newScore / COIN_REWARD_THRESHOLD) - (scoreBefore / COIN_REWARD_THRESHOLD)) * COINS_PER_REWARD
+        val newTotalCoins = currentState.coins + coinsEarned
+        if (coinsEarned > 0) saveCoins(newTotalCoins)
 
-            val isGameOver = isGameOver(finalBlocks, boardAfterClears)
+        val isGameOver = isGameOver(finalBlocks, newBoard)
 
-            // Commit final state to UI
-            _uiState.update {
-                it.copy(
-                    board = boardAfterClears,
-                    availableBlocks = finalBlocks,
-                    score = newScore,
-                    highScore = currentHighScore,
-                    coins = newTotalCoins,
-                    isGameOver = isGameOver,
-                    selectedBlock = null, // Deselect block
-                    lastRotatedBlockId = null, // Reset rotation status
-                    clearingCells = emptySet(), // Clear animation state
-                    showHighScoreAnim = triggerHighScoreAnim // Show banner if true
-                )
-            }
+        val currentRainbowCount = newRainbowCount ?: currentState.rainbowBlockCount
+        var newMeterValue = currentState.specialMeterValue
 
-            // --- 4. HIDE BANNER AFTER DELAY ---
-            if (triggerHighScoreAnim) {
-                delay(3000) // Show banner for 3 seconds
+        // --- SPECIAL METER CHECK ---
+        if (totalClears >= 2) {
+            // This will award the block or increment the meter, and performs its own update() call.
+            onSpecialMeterFilled(currentRainbowCount, newMeterValue)
+
+            // Re-fetch the state after the meter update has potentially awarded a block/reset the meter.
+            val finalStateAfterMeterCheck = _uiState.value
+
+            // Use these finalized values for the main update call below
+            newMeterValue = finalStateAfterMeterCheck.specialMeterValue
+            // If the meter awarded a block, finalStateAfterMeterCheck.rainbowBlockCount is +1,
+            // but we must use the original 'newRainbowCount' if it was set (i.e., by handleRainbowWipe).
+        }
+
+
+        _uiState.update {
+            it.copy(
+                board = newBoard,
+                availableBlocks = finalBlocks,
+                score = newScore,
+                highScore = currentHighScore,
+                coins = newTotalCoins,
+                isGameOver = isGameOver,
+                selectedBlock = null, // Deselect block
+                lastRotatedBlockId = null, // Reset rotation status
+                clearingCells = emptySet(), // Clear animation state
+                showHighScoreAnim = triggerHighScoreAnim,
+                rainbowBlockCount = if (totalClears >= 2 && newRainbowCount == null) _uiState.value.rainbowBlockCount else (newRainbowCount ?: currentState.rainbowBlockCount),
+                specialMeterValue = newMeterValue // Use the potentially updated value
+            )
+        }
+
+        // Hide banner after delay
+        if (triggerHighScoreAnim) {
+            viewModelScope.launch {
+                delay(3000)
                 _uiState.update { it.copy(showHighScoreAnim = false) }
             }
         }
@@ -252,11 +378,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun canPlaceBlock(block: Block, startRow: Int, startCol: Int, board: GameGrid): Boolean {
+        // SPECIAL: Rainbow block ignores overlap, only checks bounds
+        val ignoreCollision = block.isSpecial
+
         for (coord in block.shape) {
             val boardRow = startRow + coord.row
             val boardCol = startCol + coord.col
             if (boardRow < 0 || boardRow >= GRID_SIZE || boardCol < 0 || boardCol >= GRID_SIZE) return false
-            if (board[boardRow][boardCol] != null) return false
+
+            // Standard logic: If not special, check for overlap
+            if (!ignoreCollision && board[boardRow][boardCol] != null) return false
         }
         return true
     }
@@ -288,11 +419,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (cellsToClear.isEmpty()) return ClearResult(board, 0)
 
+        // Count clears BEFORE physically clearing the board
         val uniqueRows = cellsToClear.map { it.row }.toSet().filter { r -> (0 until GRID_SIZE).all { c -> cellsToClear.contains(Coord(r, c)) } }.size
         val uniqueCols = cellsToClear.map { it.col }.toSet().filter { c -> (0 until GRID_SIZE).all { r -> cellsToClear.contains(Coord(r, c)) } }.size
 
         val totalClears = uniqueRows + uniqueCols
 
+        // Create the final cleared board state
         val clearedBoard = board.map { it.clone() }.toTypedArray()
         for (cell in cellsToClear) {
             clearedBoard[cell.row][cell.col] = null

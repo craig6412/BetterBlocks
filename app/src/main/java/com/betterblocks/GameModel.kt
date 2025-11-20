@@ -17,7 +17,7 @@ typealias GameGrid = Array<Array<Int?>>
 
 /**
  * Your custom drawable resources.
- * Index 0 = Blue, 1 = Green, 2 = Pink, 3 = Pumpkin Orange, 4 = Purple, 5 = Red, 6 = Yellow
+ * Index 0 = Blue, 1 = Green, 2 = Pink, 3 = Pumpkin Orange, 4 = Purple, 5 = Red, 6 = Yellow, 7 = Rainbow
  */
 val BLOCK_DRAWABLES = listOf(
     R.drawable.blue,           // 0
@@ -26,7 +26,8 @@ val BLOCK_DRAWABLES = listOf(
     R.drawable.pumpkin_orange, // 3
     R.drawable.purple,         // 4
     R.drawable.red,            // 5
-    R.drawable.yellow          // 6
+    R.drawable.yellow,         // 6
+    R.drawable.rainbow         // 7 (NEW: Rainbow Texture)
 )
 
 /**
@@ -37,7 +38,8 @@ data class Block(
     val id: Int,
     val name: String,
     val colorResId: Int,
-    val shape: List<Coord>
+    val shape: List<Coord>,
+    val isSpecial: Boolean = false // <-- ADDED: To identify special blocks like Rainbow
 ) {
     val boundingBoxWidth: Int
         get() = (shape.maxOfOrNull { it.col } ?: -1) + 1
@@ -68,14 +70,16 @@ data class GameUiState(
     val board: GameGrid,
     val availableBlocks: List<Block>,
     val score: Int = 0,
-    val highScore: Int = 0, // <-- ADDED: Tracks the all-time high score
+    val highScore: Int = 0,
     val coins: Int = 0,
     val freeRotations: Int = 3,
     val lastRotatedBlockId: Int? = null,
     val isGameOver: Boolean = false,
     val selectedBlock: Block? = null,
     val clearingCells: Set<Coord> = emptySet(),
-    val showHighScoreAnim: Boolean = false // <-- ADDED: Triggers the high score banner
+    val showHighScoreAnim: Boolean = false,
+    val rainbowBlockCount: Int = 1, // <-- Will be changed in ViewModel to 3 for start
+    val specialMeterValue: Int = 0 // <-- ADDED: New meter value (0 to MAX))
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -91,7 +95,9 @@ data class GameUiState(
         if (isGameOver != other.isGameOver) return false
         if (selectedBlock != other.selectedBlock) return false
         if (clearingCells != other.clearingCells) return false
-        if (showHighScoreAnim != other.showHighScoreAnim) return false // <-- ADDED CHECK
+        if (showHighScoreAnim != other.showHighScoreAnim) return false
+        if (rainbowBlockCount != other.rainbowBlockCount) return false
+        if (specialMeterValue != other.specialMeterValue) return false// <-- ADDED CHECK
         return true
     }
 
@@ -106,7 +112,9 @@ data class GameUiState(
         result = 31 * result + isGameOver.hashCode()
         result = 31 * result + (selectedBlock?.hashCode() ?: 0)
         result = 31 * result + clearingCells.hashCode()
-        result = 31 * result + showHighScoreAnim.hashCode() // <-- ADDED HASH
+        result = 31 * result + showHighScoreAnim.hashCode()
+        result = 31 * result + rainbowBlockCount
+        result = 31 * result + specialMeterValue // <-- ADDED HASH// <-- ADDED HASH
         return result
     }
 }
@@ -114,14 +122,30 @@ data class GameUiState(
 data class ClearResult(val newBoard: GameGrid, val totalClears: Int)
 
 // ---------------------------
-// 2. Block Definitions (Mapped to Custom Drawables)
+// 2. Block Definitions
 // ---------------------------
 
+// The Special Rainbow Block (1x9 Line)
+val RAINBOW_BLOCK = Block(
+    id = 999,
+    name = "Rainbow Wipe",
+    colorResId = BLOCK_DRAWABLES[7], // Rainbow texture
+    shape = listOf(
+        Coord(0,0), Coord(0,1), Coord(0,2), Coord(0,3), Coord(0,4),
+        Coord(0,5), Coord(0,6), Coord(0,7), Coord(0,8)
+    ),
+    isSpecial = true
+)
+
 val BLOCK_MANAGER: List<Block> = listOf(
+    // 1-Cell
     Block(1, "1x1 Dot", BLOCK_DRAWABLES[5], listOf(Coord(0, 0))),
+    // 2-Cell
     Block(2, "1x2 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1))),
+    // 3-Cell
     Block(3, "1x3 Bar", BLOCK_DRAWABLES[1], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2))),
     Block(4, "L Triomino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0), Coord(1, 1))),
+    // 4-Cell
     Block(5, "1x4 Bar", BLOCK_DRAWABLES[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))),
     Block(6, "Square", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))),
     Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))),
@@ -129,16 +153,19 @@ val BLOCK_MANAGER: List<Block> = listOf(
     Block(9, "T Tetromino", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
     Block(10, "S Tetromino", BLOCK_DRAWABLES[1], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
     Block(11, "Z Tetromino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
+    // 5-Cell
     Block(12, "1x5 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3), Coord(0, 4))),
     Block(13, "L Pentomino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
     Block(14, "Plus Pentomino", BLOCK_DRAWABLES[2], listOf(Coord(0, 1), Coord(1, 0), Coord(1, 1), Coord(1, 2), Coord(2, 1))),
     Block(15, "U Pentomino", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 2), Coord(1, 0), Coord(1, 1), Coord(1, 2))),
     Block(16, "Wide T", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
+    // 9-Cell
     Block(17, "3x3 Square", BLOCK_DRAWABLES[1], listOf(
         Coord(0, 0), Coord(0, 1), Coord(0, 2),
         Coord(1, 0), Coord(1, 1), Coord(1, 2),
         Coord(2, 0), Coord(2, 1), Coord(2, 2)
     )),
+    // Misc
     Block(18, "Small L", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0))),
     Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1)))
 )
