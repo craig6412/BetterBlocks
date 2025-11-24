@@ -55,16 +55,14 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
             }
 
             // --- 1. Banner Scale ---
-            DevSettingCard(title = "Main Menu Banner Scale: ${(currentBannerScale * 100).toInt()}%") {
+           /* DevSettingCard(title = "Main Menu Banner Scale: ${(currentBannerScale * 100).toInt()}%") {
                 Slider(
                     value = currentBannerScale,
                     onValueChange = { GameSettings.bannerScale.value = it },
                     valueRange = 0.5f..3.0f,
                     colors = devSliderColors()
                 )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
+            }*/
 
             // --- 2. Rotate Button Scale ---
             DevSettingCard(title = "Rotate Button Scale: ${(currentBtnScale * 100).toInt()}%") {
@@ -99,9 +97,91 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- 5. Header Vertical Padding ---
+            DevSettingCard(title = "headerVerticalPadding: ${GameSettings.headerVerticalPadding.value.toInt()} dp") {
+                Slider(
+                    value = GameSettings.headerVerticalPadding.value,
+                    onValueChange = { GameSettings.headerVerticalPadding.value = it },
+                    valueRange = -50f..50f,
+                    colors = devSliderColors()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "availableBlocksRowHeight: ${GameSettings.availableBlocksRowHeight.value.toInt()} dp") {
+                Slider(
+                    value = GameSettings.availableBlocksRowHeight.value,
+                    onValueChange = { GameSettings.availableBlocksRowHeight.value = it },
+                    valueRange = -50f..200f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "bottomBarVerticalPadding: ${GameSettings.bottomBarVerticalPadding.value.toInt()} dp") {
+                Slider(
+                    value = GameSettings.bottomBarVerticalPadding.value.toFloat(),
+                    onValueChange = { GameSettings.bottomBarVerticalPadding.value = it.toInt() },
+                    valueRange = -50f..50f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "Icon Spacing: ${GameSettings.bottomBarIconSpacing.value.value.toInt()} dp") {
+                Slider(
+                    value = GameSettings.bottomBarIconSpacing.value.value,
+                    onValueChange = { GameSettings.bottomBarIconSpacing.value = it.dp },
+                    valueRange = 0f..80f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+// --- BUTTON BORDER WIDTH ---
+            DevSettingCard(title = "Button Border: ${GameSettings.bottomBarButtonBorderWidth.value.value.toInt()} dp") {
+                Slider(
+                    value = GameSettings.bottomBarButtonBorderWidth.value.value,
+                    onValueChange = { GameSettings.bottomBarButtonBorderWidth.value = it.dp },
+                    valueRange = 0f..10f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+// --- BADGE SCALE ---
+            DevSettingCard(title = "Badge Scale: ${"%.2f".format(GameSettings.bottomBarBadgeScale.value)}") {
+                Slider(
+                    value = GameSettings.bottomBarBadgeScale.value,
+                    onValueChange = { GameSettings.bottomBarBadgeScale.value = it },
+                    valueRange = 0.4f..2.0f,
+                    colors = devSliderColors()
+                )
+            }
+
+
+            }
         }
     }
-}
+
+
+/*
+
+var bottomBarPadding: Dp = 12.dp
+var bottomBarIconSpacing: Dp = 24.dp
+var bottomBarIconScale: Float = 1.0f
+var bottomBarIconSize: Dp = 36.dp        // rotation icon size
+var bottomBarSpecialIconSize: Dp = 55.dp // rainbow & color wipe buttons
+var bottomBarBadgeScale: Float = 1.0f    // x63, x0 text bubbles
+var bottomBarButtonCorner: Dp = 16.dp
+var bottomBarButtonBorderWidth: Dp = 2.dp
+
+*/
+
 
 @Composable
 fun DevSettingCard(title: String, content: @Composable () -> Unit) {

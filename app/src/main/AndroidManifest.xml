@@ -27,19 +27,16 @@
             android:name=".GameActivity"
             android:exported="false" />
 
-        <!-- 3. Highscores Activity -->
-        <activity
-            android:name=".HighscoresActivity"
-            android:exported="false" />
-
         <!-- 4. Shop Activity -->
         <activity
             android:name=".ShopActivity"
             android:exported="false" />
 
-        <!-- 5. Settings Activity -->
         <activity
             android:name=".SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".HighScoreActivity"
             android:exported="false" />
 
         <!-- 6. Developer Activity (Use this to fix the crash) -->

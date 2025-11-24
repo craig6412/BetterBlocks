@@ -31,12 +31,17 @@ class GameActivity : ComponentActivity() {
                         onSelectBlock = viewModel::selectBlock,
                         onRotateBlock = viewModel::rotateSelectedBlock,
                         onSelectRainbow = viewModel::selectRainbowBlock,
-                        // Fix: We must pass a value for the onReset parameter, even if it's an empty function,
-                        // because the GameScreen composable still requires it.
                         onReset = { /* Do nothing */ },
                         onGoToMenu = {
                             finish() // Closes GameActivity -> Returns to MainMenu
-                        }
+                        },
+                        // --- NEW REQUIRED PARAMETERS ---
+                        onLastChanceUsed = viewModel::onLastChanceUsed,
+                        onLastChanceDeclined = viewModel::onLastChanceDeclined,
+                        onToggleSound = viewModel::toggleSound,
+                        onToggleMusic = viewModel::toggleMusic,
+                        onUseRainbowImmediately = viewModel::useRainbowWipeImmediately,
+                        onColorWipeSpinResult = viewModel::onColorWipeSpinResult
                     )
                 }
             }

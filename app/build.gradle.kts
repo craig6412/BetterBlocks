@@ -2,11 +2,12 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {
     namespace = "com.betterblocks"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.betterblocks"
@@ -51,7 +52,7 @@ configurations.configureEach {
 dependencies {
     // Use BOM to align Compose artifact versions
     implementation(platform("androidx.compose:compose-bom:2024.05.00"))
-
+    implementation("com.android.billingclient:billing:7.0.0") // Or latest version
     implementation("androidx.activity:activity-compose:1.8.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
@@ -60,6 +61,8 @@ dependencies {
     // Material Icons (for MonetizationOn and others)
     implementation("androidx.compose.material:material-icons-core")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.ui.unit)
+    implementation(libs.androidx.ui.graphics)
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -67,6 +70,8 @@ dependencies {
     //firebase sdk
     implementation(platform("com.google.firebase:firebase-bom:32.8.1"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-crashlytics")
+    implementation("com.google.firebase:firebase-auth")
 
     // --- View-system libraries required by existing XML layouts ---
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")

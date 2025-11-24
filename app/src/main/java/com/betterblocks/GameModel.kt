@@ -1,5 +1,8 @@
 package com.betterblocks
 
+import com.betterblocks.R
+
+
 // ---------------------------
 // 1. Core Data Models
 // ---------------------------
@@ -27,7 +30,7 @@ val BLOCK_DRAWABLES = listOf(
     R.drawable.purple,         // 4
     R.drawable.red,            // 5
     R.drawable.yellow,         // 6
-    R.drawable.rainbow         // 7 (NEW: Rainbow Texture)
+    R.drawable.rainbow         // 7 (Rainbow Texture)
 )
 
 /**
@@ -39,7 +42,7 @@ data class Block(
     val name: String,
     val colorResId: Int,
     val shape: List<Coord>,
-    val isSpecial: Boolean = false // <-- ADDED: To identify special blocks like Rainbow
+    val isSpecial: Boolean = false
 ) {
     val boundingBoxWidth: Int
         get() = (shape.maxOfOrNull { it.col } ?: -1) + 1
@@ -75,16 +78,22 @@ data class GameUiState(
     val freeRotations: Int = 3,
     val lastRotatedBlockId: Int? = null,
     val isGameOver: Boolean = false,
+    val isLastChance: Boolean = false,
     val selectedBlock: Block? = null,
     val clearingCells: Set<Coord> = emptySet(),
     val showHighScoreAnim: Boolean = false,
-    val rainbowBlockCount: Int = 1, // <-- Will be changed in ViewModel to 3 for start
-    val specialMeterValue: Int = 0 // <-- ADDED: New meter value (0 to MAX))
+    val rainbowBlockCount: Int = 3,
+    val colorWipeCount: Int = 3, // <-- ADDED: Color Wipe Inventory
+    val specialMeterValue: Int = 0,
+    val isSoundEnabled: Boolean = true,
+    val isMusicEnabled: Boolean = true
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
+
         other as GameUiState
+
         if (!board.contentDeepEquals(other.board)) return false
         if (availableBlocks != other.availableBlocks) return false
         if (score != other.score) return false
@@ -93,11 +102,16 @@ data class GameUiState(
         if (freeRotations != other.freeRotations) return false
         if (lastRotatedBlockId != other.lastRotatedBlockId) return false
         if (isGameOver != other.isGameOver) return false
+        if (isLastChance != other.isLastChance) return false
         if (selectedBlock != other.selectedBlock) return false
         if (clearingCells != other.clearingCells) return false
         if (showHighScoreAnim != other.showHighScoreAnim) return false
         if (rainbowBlockCount != other.rainbowBlockCount) return false
-        if (specialMeterValue != other.specialMeterValue) return false// <-- ADDED CHECK
+        if (colorWipeCount != other.colorWipeCount) return false // <-- ADDED
+        if (specialMeterValue != other.specialMeterValue) return false
+        if (isSoundEnabled != other.isSoundEnabled) return false
+        if (isMusicEnabled != other.isMusicEnabled) return false
+
         return true
     }
 
@@ -110,11 +124,15 @@ data class GameUiState(
         result = 31 * result + freeRotations
         result = 31 * result + (lastRotatedBlockId ?: 0)
         result = 31 * result + isGameOver.hashCode()
+        result = 31 * result + isLastChance.hashCode()
         result = 31 * result + (selectedBlock?.hashCode() ?: 0)
         result = 31 * result + clearingCells.hashCode()
         result = 31 * result + showHighScoreAnim.hashCode()
         result = 31 * result + rainbowBlockCount
-        result = 31 * result + specialMeterValue // <-- ADDED HASH// <-- ADDED HASH
+        result = 31 * result + colorWipeCount // <-- ADDED
+        result = 31 * result + specialMeterValue
+        result = 31 * result + isSoundEnabled.hashCode()
+        result = 31 * result + isMusicEnabled.hashCode()
         return result
     }
 }
