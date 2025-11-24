@@ -338,8 +338,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         clearingCells = getCoordsToAnimate(clearResult.newBoard, boardAfterPlacement)
                     )
                 }
+                if (clearResult.totalClears > 0 && currentState.isSoundEnabled) {
+                    SoundManager.playLineClear()
+
+                }
                 // Wait for animation to play out
                 delay(ANIMATION_DURATION_MS)
+
             }
 
             if (clearResult.totalClears > 0 && currentState.isSoundEnabled) {
@@ -384,11 +389,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
+        if (currentState.isSoundEnabled) {
+            SoundManager.playRainbowClear()
+
+
         // 3. Wait for animation
         delay(ANIMATION_DURATION_MS)
 
-        if (currentState.isSoundEnabled) {
-            SoundManager.playRainbowClear()
+
         }
 
         // 4. Clear the board
