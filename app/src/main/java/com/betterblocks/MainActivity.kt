@@ -17,6 +17,7 @@ class MainActivity : ComponentActivity() {
 
         // --- THEME CONSISTENCY ---
         // Set System Bar Colors to match Game Theme immediately on launch
+        SoundManager.init(this)
         window.statusBarColor = android.graphics.Color.parseColor("#1E214A")
         window.navigationBarColor = android.graphics.Color.parseColor("#1E214A")
 
@@ -27,6 +28,10 @@ class MainActivity : ComponentActivity() {
                     // Use our specific DarkBackground instead of the default Material theme background
                     color = DarkBackground
                 ) {
+
+                    //made by Craig Ungaro started in November Maybe october don't judge.
+                    //it's not true I had nothing on, I had the radio on - M.M.
+                    //You make take our lives but you will never take our freedom -W.W
 
 
                     // Display the Main Menu UI with functional callbacks

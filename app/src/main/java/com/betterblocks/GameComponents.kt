@@ -596,7 +596,8 @@ fun ColorWipeButton(
 @Composable
 fun ColorWheelDialog(
     onDismiss: () -> Unit,
-    onSpinFinished: (Int) -> Unit // Returns the BLOCK_DRAWABLE index (0-6)
+    onSpinFinished: (Int) -> Unit
+// Returns the BLOCK_DRAWABLE index (0-6)
 ) {
     // Map indices to approximate Colors for the wheel visual
     val segmentColors = listOf(
@@ -617,6 +618,7 @@ fun ColorWheelDialog(
 
     LaunchedEffect(isSpinning) {
         if (isSpinning) {
+            SoundManager.startWheelSpinLoop()
             val segmentAngle = 360f / 7f
             // Target rotation logic: 5 spins + adjustment to land index at 270 deg (top)
             val targetRotation = 360f * 5 + (270f - (targetIndex * segmentAngle) - (segmentAngle / 2))
@@ -625,7 +627,7 @@ fun ColorWheelDialog(
                 targetValue = targetRotation,
                 animationSpec = tween(durationMillis = 3000, easing = FastOutSlowInEasing)
             )
-
+            SoundManager.stopWheelSpinLoop()
             // Animation done, trigger the action
             kotlinx.coroutines.delay(500)
             onSpinFinished(targetIndex)

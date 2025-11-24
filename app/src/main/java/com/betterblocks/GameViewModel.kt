@@ -18,17 +18,17 @@ const val BLOCKS_PER_ROUND = 3
 const val ANIMATION_DURATION_MS = 900L // Total time the animation takes before the cells vanish
 const val COIN_REWARD_THRESHOLD = 1000 // Points needed for reward
 const val COINS_PER_REWARD = 10 // Coins given per threshold
-const val ROTATION_COST = 10
+const val ROTATION_COST = 15
 const val INITIAL_FREE_ROTATIONS = 3
-const val RAINBOW_BLOCK_SCORE = 1800 // Special score for board wipe
+const val RAINBOW_BLOCK_SCORE = 1000 // Special score for board wipe
 
 const val INITIAL_RAINBOW_COUNT = 3 // Standard start count
-const val SPECIAL_METER_MAX = 5 // Meter fills in 5 combo steps
+const val SPECIAL_METER_MAX = 50 // Meter fills in 5 combo steps
 
 // --- DEVELOPER OVERRIDES ---
 private const val DEV_INITIAL_COINS = 9999 // $9,999 for development
 private const val DEV_INITIAL_RAINBOW = 99 // 99 blocks for development
-private const val DEV_INITIAL_COLOR_WIPE = 5 // Start with 5 Color Wipes
+private const val DEV_INITIAL_COLOR_WIPE = 99 // Start with 5 Color Wipes
 
 // Persistence Keys
 const val PREFS_NAME = "BetterBlocksPrefs"
@@ -308,7 +308,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (currentState.isGameOver || currentState.isLastChance) return
 
         if (!canPlaceBlock(selectedBlock, startRow, startCol, currentState.board)) {
-            return // Invalid placement
+            if (_uiState.value.isSoundEnabled) {
+                SoundManager.playBadPlacement()
+            }
+            return
         }
 
         viewModelScope.launch {
@@ -322,6 +325,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // --- 1. PLACE BLOCK (Immediate State Change) ---
             val (boardAfterPlacement, _) = placeBlock(selectedBlock, startRow, startCol, currentState.board)
             val clearResult = checkForClears(boardAfterPlacement)
+            if (currentState.isSoundEnabled) {
+                SoundManager.playBlockPlace()
+            }
 
             // --- 2. START ANIMATION SEQUENCE ---
             if (clearResult.totalClears > 0) {
@@ -335,6 +341,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Wait for animation to play out
                 delay(ANIMATION_DURATION_MS)
             }
+
+            if (clearResult.totalClears > 0 && currentState.isSoundEnabled) {
+            SoundManager.playLineClear()
+        }
+
 
             // --- 3. FINAL STATE UPDATE (Post-Animation) ---
 
@@ -376,8 +387,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // 3. Wait for animation
         delay(ANIMATION_DURATION_MS)
 
+        if (currentState.isSoundEnabled) {
+            SoundManager.playRainbowClear()
+        }
+
         // 4. Clear the board
-        val emptyBoard = Array(GRID_SIZE) { Array<Int?>(GRID_SIZE) { null } }
+        val emptyBoard = Array(GRID_SIZE) { Array<Int?>(GRID_SIZE) { null }
+
+        }
 
         // 5. Final Update (Count already handled by caller)
         updateScoreAndState(
