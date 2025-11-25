@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorFilter.Companion.tint
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shape
+import android.util.Log
 
 
 import kotlin.math.roundToInt
@@ -1181,8 +1182,10 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
 // -------------------------------------------------------------
 
 fun calculateGridPosition(dragPos: Offset, gridTopLeft: Offset, gridSizePx: Float, gridSize: Int): Pair<Int, Int>? {
+    Log.d("GRID", "calc dragPos=$dragPos gridTopLeft=$gridTopLeft gridSizePx=$gridSizePx")
     val relativeX = dragPos.x - gridTopLeft.x
     val relativeY = dragPos.y - gridTopLeft.y
+    Log.d("GRID", " relativeX=$relativeX relativeY=$relativeY")
 
     val cellSize = gridSizePx / gridSize
 
@@ -1197,6 +1200,7 @@ fun calculateGridPosition(dragPos: Offset, gridTopLeft: Offset, gridSizePx: Floa
     // Uses roundToInt() for that "magnetic" center snap feel
     val col = (relativeX / cellSize).roundToInt().coerceIn(0, gridSize - 1)
     val row = (relativeY / cellSize).roundToInt().coerceIn(0, gridSize - 1)
+    Log.d("GRID", " → row=$row col=$col")
     return Pair(row, col)
 }
 

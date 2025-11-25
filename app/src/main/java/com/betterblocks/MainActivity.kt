@@ -14,6 +14,7 @@ import com.betterblocks.ui.theme.BetterBlocksTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AdManager.initialize(this)
 
         // --- THEME CONSISTENCY ---
         // Set System Bar Colors to match Game Theme immediately on launch
@@ -60,7 +61,8 @@ class MainActivity : ComponentActivity() {
                             // Launch the Developer Activity
                             val intent = Intent(this, DeveloperActivity::class.java)
                             startActivity(intent)
-                        }
+                        },
+                        banner = { BannerAdView(modifier = Modifier.fillMaxWidth()) }
                     )
                 }
             }

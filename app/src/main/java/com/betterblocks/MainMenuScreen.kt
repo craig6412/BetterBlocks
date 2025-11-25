@@ -37,7 +37,8 @@ fun MainMenuScreen(
     onShopClicked: () -> Unit,
     onHighScoresClicked: () -> Unit,
     onSettingsClicked: () -> Unit,
-    onDeveloperClicked: () -> Unit // New callback
+    onDeveloperClicked: () -> Unit, // New callback
+    banner: @Composable (() -> Unit)? = null // Nullable banner slot
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -121,6 +122,9 @@ fun MainMenuScreen(
             )
 
             Spacer(modifier = Modifier.weight(1f))
+
+            // --- Banner Slot Injection ---
+            banner?.invoke()
 
             Text(
                 text = "v1.0",

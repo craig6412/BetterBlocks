@@ -50,6 +50,7 @@ import com.betterblocks.GameSettings
 import com.betterblocks.GameUiState
 import com.betterblocks.R
 import androidx.compose.ui.draw.scale
+import android.util.Log
 
 
 
@@ -181,6 +182,7 @@ fun GameScreen(
                                 uiState = uiState,
                                 onSelectBlock = onSelectBlock,
                                 onDragStart = { block, previewCardOffset ->
+                                    Log.d("DRAG", "START block=${block.name}  offset=$previewCardOffset")
                                     onSelectBlock(block)
                                     val initialDragViewOffset = previewCardOffset - rootTopLeft
                                     val initialPos = initialDragViewOffset + Offset(
@@ -196,7 +198,9 @@ fun GameScreen(
                                     )
                                 },
                                 onDrag = { dragAmount ->
+                                    Log.d("DRAG", "DRAG amount=$dragAmount currentOffset=${dragState.currentDragOffset}")
                                     val newOffset = dragState.currentDragOffset + dragAmount
+
                                     dragState = dragState.copy(
                                         currentDragOffset = newOffset,
                                         dragPosition = dragState.dragViewOffset + newOffset +
@@ -204,15 +208,27 @@ fun GameScreen(
                                     )
                                 },
                                 onDragEnd = {
+                                    Log.d("DRAG", "END at dragPos=${dragState.dragPosition}")
+
                                     val dropTarget = calculateGridPosition(
                                         dragState.dragPosition + rootTopLeft, // Convert to window coords
                                         gridTopLeft,
                                         gridSizePx,
                                         9
+
+
                                     )
+
+                                    Log.d("DRAG", " dropTarget=$dropTarget")
+
                                     if (dropTarget != null && dragState.draggedBlock != null) {
+                                        Log.d("DRAG", " VALID drop → placing ${dragState.draggedBlock!!.name}")
                                         onGridCellClicked(dropTarget.first, dropTarget.second)
                                     }
+                                    else{
+
+                                        Log.d("DRAG", " INVALID drop → ignoring")}
+                                    Log.d("DRAG", " END dragState=$dragState")
                                     dragState = DragState()
                                 }
                             )

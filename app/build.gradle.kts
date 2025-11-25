@@ -15,6 +15,19 @@ android {
         targetSdk = 34
     }
 
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            // DEBUG keeps defaults; BuildConfig.DEBUG stays true
+        }
+    }
+
     // Ensure Java compilation uses Java 17 to match Kotlin's JVM target
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -63,6 +76,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.ui.unit)
     implementation(libs.androidx.ui.graphics)
+    implementation(libs.play.services.ads.api)
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.compose.ui:ui-tooling-preview")
