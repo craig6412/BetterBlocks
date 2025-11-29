@@ -1,5 +1,6 @@
 package com.betterblocks.ui
 
+import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -18,15 +19,18 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,9 +53,8 @@ import com.betterblocks.Block
 import com.betterblocks.GameSettings
 import com.betterblocks.GameUiState
 import com.betterblocks.R
-import androidx.compose.ui.draw.scale
-import android.util.Log
-
+import com.betterblocks.trophyColorForTier
+import com.betterblocks.model.TrophyTier
 
 
 // --- DRAG STATE ---
@@ -78,7 +81,9 @@ fun GameScreen(
     onToggleSound: () -> Unit,
     onToggleMusic: () -> Unit,
     onUseRainbowImmediately: () -> Unit,
-    onColorWipeSpinResult: (Int) -> Unit = {}
+    onColorWipeSpinResult: (Int) -> Unit = {},
+    onDismissTierPromotion: () -> Unit = {},
+    onShareTier: (TrophyTier) -> Unit = {}
 ) {
     var dragState by remember { mutableStateOf(DragState()) }
     var gridTopLeft by remember { mutableStateOf(Offset.Zero) }
@@ -108,7 +113,9 @@ fun GameScreen(
     }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing),   // <-- this is the ONLY inset padding you need
         color = DarkBackground
     ) {
         Box(
@@ -390,6 +397,23 @@ fun GameScreen(
                     }
                 )
             }
+
+            if (uiState.showZeroCoinsDialog) {
+                ZeroCoinsDialog(
+                    onDismiss = { /* TODO hook to VM */ },
+                    onWatchAd = { /* TODO load ad */ },
+                    onGoToShop = { /* TODO open shop */ }
+                )
+            }
+
+            if (uiState.showTierPromotionDialog && uiState.newlyUnlockedTier != null) {
+                val tier = uiState.newlyUnlockedTier
+                TierPromotionDialog(
+                    tier = tier,
+                    onDismiss = onDismissTierPromotion,
+                    onShare = { onShareTier(tier) }
+                )
+            }
         }
     }
 }
@@ -433,4 +457,42 @@ fun GameScreenPreview() {
             onUseRainbowImmediately = {}
         )
     }
+}
+
+@Composable
+fun TierPromotionDialog(
+    tier: TrophyTier,
+    onDismiss: () -> Unit,
+    onShare: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "New Rank Achieved!",
+                fontFamily = Oswald,
+                fontSize = 22.sp,
+                color = LightText
+            )
+        },
+        text = {
+            Text(
+                text = "You've unlocked the ${tier.name} tier!",
+                fontFamily = Oswald,
+                fontSize = 18.sp,
+                color = trophyColorForTier(tier)
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onShare) {
+                Text("Share", color = CoinGold, fontFamily = Oswald)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close", color = LightText, fontFamily = Oswald)
+            }
+        },
+        containerColor = DeepBlue
+    )
 }

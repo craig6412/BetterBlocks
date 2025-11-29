@@ -1,6 +1,7 @@
 package com.betterblocks
 
 import com.betterblocks.R
+import com.betterblocks.model.TrophyTier
 
 
 // ---------------------------
@@ -86,7 +87,11 @@ data class GameUiState(
     val colorWipeCount: Int = 3, // <-- ADDED: Color Wipe Inventory
     val specialMeterValue: Int = 0,
     val isSoundEnabled: Boolean = true,
-    val isMusicEnabled: Boolean = true
+    val isMusicEnabled: Boolean = true,
+    val showZeroCoinsDialog: Boolean = false, // <-- ADDED: Zero Coins Dialog Fla
+    val trophyTier: TrophyTier = TrophyTier.UNRANKED,
+    val showTierPromotionDialog: Boolean = false,
+    val newlyUnlockedTier: TrophyTier? = null
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -111,6 +116,9 @@ data class GameUiState(
         if (specialMeterValue != other.specialMeterValue) return false
         if (isSoundEnabled != other.isSoundEnabled) return false
         if (isMusicEnabled != other.isMusicEnabled) return false
+        if (showZeroCoinsDialog != other.showZeroCoinsDialog) return false // <-- ADDED
+        if (showTierPromotionDialog != other.showTierPromotionDialog) return false // <-- ADDED
+        if (newlyUnlockedTier != other.newlyUnlockedTier) return false // <-- ADDED
 
         return true
     }
@@ -133,6 +141,9 @@ data class GameUiState(
         result = 31 * result + specialMeterValue
         result = 31 * result + isSoundEnabled.hashCode()
         result = 31 * result + isMusicEnabled.hashCode()
+        result = 31 * result + showZeroCoinsDialog.hashCode() // <-- ADDED
+        result = 31 * result + showTierPromotionDialog.hashCode() // <-- ADDED
+        result = 31 * result + (newlyUnlockedTier?.hashCode() ?: 0) // <-- ADDED
         return result
     }
 }
@@ -187,3 +198,6 @@ val BLOCK_MANAGER: List<Block> = listOf(
     Block(18, "Small L", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0))),
     Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1)))
 )
+fun getBlockById(id: Int): Block? {
+    return BLOCK_MANAGER.firstOrNull { it.id == id }
+}

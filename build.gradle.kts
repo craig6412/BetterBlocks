@@ -5,8 +5,20 @@ plugins {
     id("com.google.gms.google-services") version "4.4.4" apply false
     // Add the Crashlytics Gradle plugin
     id("com.google.firebase.crashlytics") version "2.9.9" apply false
+    // Add the Play Services Ads plugin
+
 }
 
+configurations.all {
+    resolutionStrategy {
+        force(
+            "org.jetbrains.kotlin:kotlin-stdlib:1.9.0",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0",
+            "org.jetbrains.kotlin:kotlin-stdlib-common:1.9.0",
+        )
+    }
+}
 
 
 

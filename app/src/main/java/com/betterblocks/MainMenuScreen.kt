@@ -5,13 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build // Icon for Developer
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -19,27 +19,82 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.betterblocks.BuildConfig
 import com.betterblocks.R
-import com.betterblocks.GameSettings // Import the settings
+import com.betterblocks.GameSettings
+import com.betterblocks.GameUiState
+import com.betterblocks.GameViewModel
+import com.betterblocks.ui.PowerUpsPopup
+import com.betterblocks.ui.hasShownPowerUpPopup
+import com.betterblocks.ui.setPowerUpPopupShown
 
-// Define the gradient colors based on the banner image
-val BannerBlueTop = Color(0xFF2A5092) // Brighter blue from the top of the banner
-val BannerBlueBottom = Color(0xFF1E3A71) // Darker blue from the bottom of the banner
+
+// Gradient colors for background
+val BannerBlueTop = Color(0xFF2A5092)
+val BannerBlueBottom = Color(0xFF1E3A71)
+
+
+@Composable
+fun PowerupHeader(uiState: GameUiState) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("💰", fontSize = 22.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(uiState.coins.toString(), color = Color.White, fontSize = 18.sp)
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🌈", fontSize = 22.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(uiState.rainbowBlockCount.toString(), color = Color.White, fontSize = 18.sp)
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_palette_colorwipe),
+                contentDescription = "Color Wipe",
+                tint = Color.Unspecified,
+                modifier = Modifier.size(26.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(uiState.colorWipeCount.toString(), color = Color.White, fontSize = 18.sp)
+        }
+    }
+}
+
 
 @Composable
 fun MainMenuScreen(
+    viewModel: GameViewModel,
     onPlayClicked: () -> Unit,
     onShopClicked: () -> Unit,
     onHighScoresClicked: () -> Unit,
     onSettingsClicked: () -> Unit,
-    onDeveloperClicked: () -> Unit, // New callback
-    banner: @Composable (() -> Unit)? = null // Nullable banner slot
+    onDeveloperClicked: () -> Unit,
+    banner: @Composable (() -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val uiState = viewModel.uiState.collectAsState().value
+
+    var showPopup by remember {
+        mutableStateOf(!hasShownPowerUpPopup(context))
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color.Transparent
@@ -47,32 +102,32 @@ fun MainMenuScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(
-                    colors = listOf(BannerBlueTop, BannerBlueBottom)
-                ))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(BannerBlueTop, BannerBlueBottom)
+                    )
+                )
+                .padding(WindowInsets.systemBars.asPaddingValues())
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // --- Banner Image Section ---
+
+            PowerupHeader(uiState)
+
             Spacer(modifier = Modifier.weight(0.8f))
 
-            Box(contentAlignment = Alignment.Center) {
-                Image(
-                    painter = painterResource(id = R.drawable.banner),
-                    contentDescription = "Better Blocks Game Title",
-                    modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .aspectRatio(3.2f)
-                        // APPLY THE SCALE SETTING HERE
-                        .scale(GameSettings.bannerScale.value),
-                    contentScale = ContentScale.Fit
-                )
-            }
+            Image(
+                painter = painterResource(id = R.drawable.banner),
+                contentDescription = "Better Blocks Game Title",
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .aspectRatio(3.2f)
+                    .scale(GameSettings.bannerScale.value),
+                contentScale = ContentScale.Fit
+            )
 
             Spacer(modifier = Modifier.height(48.dp))
-
-            // --- Menu Buttons ---
 
             MenuButton(
                 text = "PLAY",
@@ -110,20 +165,22 @@ fun MainMenuScreen(
                 containerColor = DeepBlue
             )
 
-            // New Developer Button
             Spacer(modifier = Modifier.height(16.dp))
 
             MenuButton(
                 text = "DEVELOPER",
                 icon = Icons.Default.Build,
                 onClick = onDeveloperClicked,
-                containerColor = Color(0xFF607D8B), // Grey-Blue to distinguish it
+                containerColor = Color(0xFF607D8B),
                 height = 50.dp
             )
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // --- Banner Slot Injection ---
+            if (BuildConfig.DEBUG) {
+                Text("Test Ad", color = Color.Gray, fontSize = 10.sp)
+            }
+
             banner?.invoke()
 
             Text(
@@ -132,10 +189,23 @@ fun MainMenuScreen(
                 fontSize = 12.sp,
                 fontFamily = Oswald
             )
+
+            if (showPopup) {
+                PowerUpsPopup(
+                    onDismiss = {
+                        setPowerUpPopupShown(context)
+                        showPopup = false
+                    }
+                )
+            }
         }
     }
 }
 
+
+// ----------------------
+// Menu Button Composable
+// ----------------------
 @Composable
 fun MenuButton(
     text: String,
@@ -143,7 +213,7 @@ fun MenuButton(
     onClick: () -> Unit,
     containerColor: Color,
     contentColor: Color = LightText,
-    height: androidx.compose.ui.unit.Dp = 60.dp
+    height: Dp = 60.dp
 ) {
     Button(
         onClick = onClick,
@@ -155,7 +225,10 @@ fun MenuButton(
             containerColor = containerColor,
             contentColor = contentColor
         ),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp, pressedElevation = 2.dp)
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 8.dp,
+            pressedElevation = 2.dp
+        )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -178,10 +251,14 @@ fun MenuButton(
     }
 }
 
+
 @Preview(showBackground = true)
 @Composable
 fun MainMenuScreenPreview() {
+    val vm: GameViewModel = viewModel()
+
     MainMenuScreen(
+        viewModel = vm,
         onPlayClicked = {},
         onShopClicked = {},
         onHighScoresClicked = {},

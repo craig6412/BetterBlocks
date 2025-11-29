@@ -41,7 +41,9 @@ class GameActivity : ComponentActivity() {
                         onToggleSound = viewModel::toggleSound,
                         onToggleMusic = viewModel::toggleMusic,
                         onUseRainbowImmediately = viewModel::useRainbowWipeImmediately,
-                        onColorWipeSpinResult = viewModel::onColorWipeSpinResult
+                        onColorWipeSpinResult = viewModel::onColorWipeSpinResult,
+                        onDismissTierPromotion = viewModel::dismissTierPromotion,
+                        onShareTier = { tier -> viewModel.shareTierAchievement(this, tier) }
                     )
                 }
             }

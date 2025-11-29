@@ -25,7 +25,12 @@ class BillingManager(
     val productDetailsMap = _productDetailsMap.asStateFlow()
 
     // Defined Product IDs from Google Play Console
-    private val productIds = listOf("coins_small", "coins_medium", "coins_large")
+    private val productIds = listOf(
+        "coins_small",
+        "coins_medium",
+        "coins_large",
+        "coins_mega" // NEW
+    )
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { billingResult, purchases ->
         if (billingResult.responseCode == BillingResponseCode.OK && purchases != null) {
@@ -131,6 +136,7 @@ class BillingManager(
                             "coins_small" -> 1000
                             "coins_medium" -> 7500
                             "coins_large" -> 15000
+                            "coins_mega" -> 75000
                             else -> 0
                         }
 

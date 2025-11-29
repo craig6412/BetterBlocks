@@ -4,64 +4,65 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.betterblocks.ads.AdManager
+import com.betterblocks.ads.BannerAdView
 import com.betterblocks.ui.DarkBackground
 import com.betterblocks.ui.MainMenuScreen
 import com.betterblocks.ui.theme.BetterBlocksTheme
+import androidx.core.view.WindowCompat
+import android.graphics.Color
+
 
 class MainActivity : ComponentActivity() {
+
+    // ✔ Create the GameViewModel using Android's viewModel delegate
+    private val gameViewModel: GameViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AdManager.initialize(this)
 
-        // --- THEME CONSISTENCY ---
-        // Set System Bar Colors to match Game Theme immediately on launch
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        AdManager.initialize(this)
         SoundManager.init(this)
-        window.statusBarColor = android.graphics.Color.parseColor("#1E214A")
-        window.navigationBarColor = android.graphics.Color.parseColor("#1E214A")
+
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+
+        // Theme
 
         setContent {
             BetterBlocksTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    // Use our specific DarkBackground instead of the default Material theme background
                     color = DarkBackground
                 ) {
 
-                    //made by Craig Ungaro started in November Maybe october don't judge.
-                    //it's not true I had nothing on, I had the radio on - M.M.
-                    //You make take our lives but you will never take our freedom -W.W
-
-
-                    // Display the Main Menu UI with functional callbacks
                     MainMenuScreen(
+                        viewModel = gameViewModel,   // ✔ FIXED — now passed properly
+
                         onPlayClicked = {
-                            // Launch the Game
-                            val intent = Intent(this, GameActivity::class.java)
-                            startActivity(intent)
+                            startActivity(Intent(this, GameActivity::class.java))
                         },
                         onShopClicked = {
-                            // Launch the Shop (Now fully implemented)
-                            val intent = Intent(this, ShopActivity::class.java)
-                            startActivity(intent)
+                            startActivity(Intent(this, ShopActivity::class.java))
                         },
                         onHighScoresClicked = {
-                            // Launch High Scores (Coming Soon screen)
-                            val intent = Intent(this, HighScoreActivity::class.java)
-                            startActivity(intent)
+                            startActivity(Intent(this, HighScoreActivity::class.java))
                         },
                         onSettingsClicked = {
-                            // Launch Settings (Coming Soon screen)
-                            val intent = Intent(this, SettingsActivity::class.java)
-                            startActivity(intent)
+                            startActivity(Intent(this, SettingsActivity::class.java))
                         },
                         onDeveloperClicked = {
-                            // Launch the Developer Activity
-                            val intent = Intent(this, DeveloperActivity::class.java)
-                            startActivity(intent)
+                            startActivity(Intent(this, DeveloperActivity::class.java))
                         },
+
                         banner = { BannerAdView(modifier = Modifier.fillMaxWidth()) }
                     )
                 }

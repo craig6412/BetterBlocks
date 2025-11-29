@@ -130,7 +130,16 @@ fun ShopScreen(
             price = "$100.00",
             imageResId = R.drawable.shop_coins_large,
             badge = "BEST VALUE"
+        ),
+        ShopItem(
+            id = "coins_mega",
+            title = "Mega Coin Hoard",
+            coinAmount = 75000,
+            price = "$400.00",
+            imageResId = R.drawable.shop_coins_mega,
+            badge = "GOD MODE"
         )
+
     )
 
     Column(
