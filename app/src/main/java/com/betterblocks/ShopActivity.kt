@@ -82,6 +82,7 @@ class ShopActivity : ComponentActivity() {
      * when the user returns to the Game Activity.
      */
     private fun addCoinsToUserAccount(amount: Int) {
+
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val currentCoins = prefs.getInt(KEY_COINS, 100)
         val newBalance = currentCoins + amount

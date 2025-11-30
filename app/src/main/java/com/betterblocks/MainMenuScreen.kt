@@ -27,14 +27,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.betterblocks.BuildConfig
 import com.betterblocks.R
 import com.betterblocks.GameSettings
 import com.betterblocks.GameUiState
 import com.betterblocks.GameViewModel
-import com.betterblocks.ui.PowerUpsPopup
-import com.betterblocks.ui.hasShownPowerUpPopup
-import com.betterblocks.ui.setPowerUpPopupShown
+import com.betterblocks.BuildConfig
+import androidx.compose.ui.platform.LocalInspectionMode
+
+
 
 
 // Gradient colors for background
@@ -177,7 +177,8 @@ fun MainMenuScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            if (BuildConfig.DEBUG) {
+            if (!LocalInspectionMode.current && BuildConfig.DEBUG) {
+
                 Text("Test Ad", color = Color.Gray, fontSize = 10.sp)
             }
 

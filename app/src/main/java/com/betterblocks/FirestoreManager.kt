@@ -1,127 +1,124 @@
-// ====================================================================
-// REQUIRED FIRESTORE INDEXES (create these in Firebase Console)
-//
-// 1) For tier leaderboard (score DESC):
-//
-// Collection: leaderboards
-// Fields:
-//   trophyTier = Ascending
-//   score      = Descending
-//
-// 2) For unranked leaderboard (score DESC):
-//
-// Collection: leaderboards
-// Fields:
-//   trophyTier = Ascending
-//   score      = Descending
-//
-// If Firestore shows "needs index" error, click the console link
-// ====================================================================
-
 package com.betterblocks
 
+import android.content.Context
+import android.util.Log
 import com.betterblocks.model.TrophyTier
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import android.content.SharedPreferences
+import com.google.firebase.ktx.app
 
 object FirestoreManager {
+
     private val db = Firebase.firestore
+    private const val COLLECTION = "leaderboards"
+    private lateinit var prefs: SharedPreferences
+
+    fun init(context: Context) {
+        prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun currentPlayerName(): String {
+        return prefs.getString(KEY_PLAYER_NAME, "")?.takeIf { it.isNotBlank() } ?: ""
+    }
 
     data class LeaderboardEntry(
         val userId: String = "",
         val score: Int = 0,
         val trophyTier: String = "",
-        val updatedAt: com.google.firebase.Timestamp? = null
+        val updatedAt: Timestamp? = null,
+        val updatedAt_fallback: Long = 0L,
+        val playerName: String = ""
     )
 
-    // ---------------------------
+    // ----------------------------------------------------
     // WRITE / UPDATE SCORE
-    // ---------------------------
-    fun updateLeaderboard(userId: String, score: Int, tier: TrophyTier) {
+    // ----------------------------------------------------
+    fun updateLeaderboard(userId: String, score: Int, tier: TrophyTier, playerNameOverride: String? = null) {
         try {
+            val now = System.currentTimeMillis()
+            val playerName = playerNameOverride?.takeIf { it.isNotBlank() } ?: currentPlayerName()
+
             val data = hashMapOf(
                 "userId" to userId,
                 "score" to score,
                 "trophyTier" to tier.name,
-                "updatedAt" to FieldValue.serverTimestamp()
+                "playerName" to playerName,
+                "updatedAt" to FieldValue.serverTimestamp(),
+                "updatedAt_fallback" to now
             )
 
-            db.collection("leaderboards")
+            db.collection(COLLECTION)
                 .document(userId)
                 .set(data, SetOptions.merge())
-        } catch (_: Exception) {
-            // Swallow exceptions to ensure game never crashes from Firestore issues
+                .addOnFailureListener {
+                    Log.e("FirestoreManager", "Failed to update leaderboard", it)
+                }
+
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Exception in updateLeaderboard()", e)
         }
     }
 
-    // ---------------------------
-    // QUERY: Get leaderboard for a trophy tier
-    // Ordered by score descending
-    // Limit 100 players
-    // ---------------------------
+    // ----------------------------------------------------
+    // GET LEADERBOARD BY TIER (One-Time Load)
+    // ----------------------------------------------------
     fun getLeaderboardForTier(
         tier: TrophyTier,
         onResult: (List<LeaderboardEntry>) -> Unit,
         onError: (Exception) -> Unit
     ) {
         try {
-            db.collection("leaderboards")
+            db.collection(COLLECTION)
                 .whereEqualTo("trophyTier", tier.name)
                 .orderBy("score", Query.Direction.DESCENDING)
-                .orderBy("updatedAt", Query.Direction.DESCENDING)
+                .orderBy("updatedAt_fallback", Query.Direction.DESCENDING)
                 .limit(100)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        onError(error)
-                        return@addSnapshotListener
-                    }
-
-                    if (snapshot == null) {
-                        onResult(emptyList())
-                        return@addSnapshotListener
-                    }
-
-                    val list = snapshot.documents.mapNotNull { doc ->
-                        doc.toObject(LeaderboardEntry::class.java)
-                    }
+                .get()
+                .addOnSuccessListener { snapshot ->
+                    val list = snapshot.documents.mapNotNull { it.toObject(LeaderboardEntry::class.java) }
                     onResult(list)
                 }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreManager", "Tier leaderboard load failed", error)
+                    onError(error)
+                }
+
         } catch (e: Exception) {
+            Log.e("FirestoreManager", "Exception in getLeaderboardForTier()", e)
             onError(e)
         }
     }
 
-    // ---------------------------
-    // QUERY: Get UNRANKED users
-    // ---------------------------
+    // ----------------------------------------------------
+    // GET UNRANKED PLAYERS (One-Time Load)
+    // ----------------------------------------------------
     fun getUnranked(
         onResult: (List<LeaderboardEntry>) -> Unit,
         onError: (Exception) -> Unit
     ) {
         try {
-            db.collection("leaderboards")
+            db.collection(COLLECTION)
                 .whereEqualTo("trophyTier", "UNRANKED")
                 .orderBy("score", Query.Direction.DESCENDING)
-                .orderBy("updatedAt", Query.Direction.DESCENDING)
+                .orderBy("updatedAt_fallback", Query.Direction.DESCENDING)
                 .limit(100)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        onError(error)
-                        return@addSnapshotListener
-                    }
-
-                    if (snapshot == null) {
-                        onResult(emptyList())
-                        return@addSnapshotListener
-                    }
-
+                .get()
+                .addOnSuccessListener { snapshot ->
                     val list = snapshot.documents.mapNotNull { it.toObject(LeaderboardEntry::class.java) }
                     onResult(list)
                 }
+                .addOnFailureListener { error ->
+                    Log.e("FirestoreManager", "Unranked leaderboard load failed", error)
+                    onError(error)
+                }
+
         } catch (e: Exception) {
+            Log.e("FirestoreManager", "Exception in getUnranked()", e)
             onError(e)
         }
     }

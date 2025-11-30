@@ -29,6 +29,8 @@ class MainActivity : ComponentActivity() {
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        FirestoreManager.init(this)
+
         AdManager.initialize(this)
         SoundManager.init(this)
 

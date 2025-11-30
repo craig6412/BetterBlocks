@@ -2,121 +2,320 @@ package com.betterblocks
 
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.getTrophyTierForScore
 import com.betterblocks.ui.*
 import com.betterblocks.ui.theme.BetterBlocksTheme
-import com.google.firebase.Timestamp
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
-
-private const val TAG = "HighScoreActivity"
-const val KEY_SELECTED_TROPHY_TAB = "selected_trophy_tab"
+import kotlin.random.Random
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.CornerRadius
 
 class HighScoreActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             BetterBlocksTheme {
-                HighscoreScreen(onBack = { finish() })
+                // Assuming you have a dark theme, forcing a dark surface for safety
+                Surface(color = DarkBackground, modifier = Modifier.fillMaxSize()) {
+                    HighscoreScreen(onBack = { finish() })
+                }
             }
         }
     }
 }
 
+// ---------------------------------------------------------
+// HIGH SCORE SCREEN — Refined UI
+// ---------------------------------------------------------
+
+const val KEY_PLAYER_NAME = "player_name"
+private const val KEY_FIREBASE_USER_ID = "firebase_user_id"
+private val PLAYER_NAME_REGEX = Regex("^[A-Za-z0-9 ]+")
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HighscoreScreen(
-    onBack: () -> Unit = {}
-) {
-    // Read and persist selected tab inside the composable so callers just provide onBack
+fun HighscoreScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val prefs = remember { context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
-    val saved = prefs.getString(KEY_SELECTED_TROPHY_TAB, TrophyTier.UNRANKED.name) ?: TrophyTier.UNRANKED.name
-    val initialTier = remember { try { TrophyTier.valueOf(saved) } catch (_: Throwable) { TrophyTier.UNRANKED } }
+    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val savedName = prefs.getString(KEY_PLAYER_NAME, null)
+    var showNameDialog by remember { mutableStateOf(savedName == null) }
+    var playerName by remember { mutableStateOf(savedName ?: "") }
 
-    val (selectedTier, setSelectedTier) = remember { mutableStateOf(initialTier) }
+    val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, 0)
 
-    // Background gradient
-    val bg = Brush.verticalGradient(listOf(DarkBackground, DeepBlue))
+    // Data Loading Logic (Unchanged)
+    val purchasedPremiumTierNames = prefs.getString(KEY_PREMIUM_TIERS, "") ?: ""
+    val purchasedPremiumTiers = purchasedPremiumTierNames
+        .split(",")
+        .filter { it.isNotBlank() }
+        .mapNotNull { runCatching { TrophyTier.valueOf(it) }.getOrNull() }
+        .toSet()
 
-    Surface(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier
+    val playerTier = getTrophyTierForScore(lifetimeCoins, purchasedPremiumTiers)
+    val tiers = TrophyTier.values().toList()
+
+    val saved = prefs.getString(KEY_SELECTED_TROPHY_TAB, playerTier.name)
+    val initialTier = runCatching { TrophyTier.valueOf(saved!!) }.getOrDefault(playerTier)
+    val initialIndex = tiers.indexOf(initialTier).coerceAtLeast(0)
+
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { tiers.size }
+    )
+    val coroutineScope = rememberCoroutineScope()
+
+    // A subtle gradient background
+    val backgroundBrush = Brush.verticalGradient(
+        colors = listOf(DarkBackground, DeepBlue.copy(alpha = 0.8f))
+    )
+
+    Column(
+        Modifier
             .fillMaxSize()
-            .background(brush = bg)
-            .padding(16.dp)) {
+            .background(backgroundBrush)
+            .statusBarsPadding() // Ensures we don't overlap system tray
+    ) {
 
-            Column(modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(12.dp))
-                .background(DarkBackground)
-                .padding(16.dp)) {
+        // 1. TOP BAR
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp)
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = LightText
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "HIGH SCORES",
+                fontFamily = Oswald,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = LightText
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            TextButton(onClick = { showNameDialog = true }) {
+                Text(
+                    "Change Name",
+                    color = LightText.copy(alpha = 0.8f),
+                    fontFamily = Oswald,
+                    fontSize = 14.sp
+                )
+            }
+        }
 
-                // Header
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
-                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back", tint = LightText)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "HIGH SCORES",
-                        fontFamily = Oswald,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = LightText,
-                        modifier = Modifier.align(Alignment.CenterVertically)
+        // 2. PLAYER STATS (HERO CARD)
+        PlayerStatsCard(lifetimeCoins, playerTier)
+
+        Spacer(Modifier.height(16.dp))
+
+        // 3. SCROLLABLE TABS (Fixes the vertical text issue)
+        ScrollableTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            containerColor = Color.Transparent,
+            contentColor = LightText,
+            edgePadding = 16.dp, // Adds spacing at the start so first tab isn't smashed
+            divider = {}, // Removes the default line
+            indicator = { tabPositions ->
+                val current = tabPositions.getOrNull(pagerState.currentPage)
+                if (current != null) {
+                    Box(
+                        Modifier
+                            .wrapContentSize(unbounded = true)
+                            .offset { IntOffset(current.left.roundToPx(), 0) }
+                            .width(current.width)
+                            .height(4.dp)
+                            .background(
+                                trophyColorForIndex(pagerState.currentPage),
+                                RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                            )
                     )
                 }
+            }
+        ) {
+            tiers.forEachIndexed { index, tier ->
+                val isSelected = pagerState.currentPage == index
+                val color = if (isSelected) trophyColorForTier(tier) else LightText.copy(alpha = 0.5f)
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Tabs
-                TrophyTabs(selectedIndex = trophyIndexOf(selectedTier), onTabSelected = { idx ->
-                    val tier = trophyForIndex(idx)
-                    setSelectedTier(tier)
-                    // Persist selection
-                    try {
+                Tab(
+                    selected = isSelected,
+                    onClick = {
+                        coroutineScope.launch { pagerState.animateScrollToPage(index) }
                         prefs.edit().putString(KEY_SELECTED_TROPHY_TAB, tier.name).apply()
-                    } catch (_: Throwable) {
-                        Log.w(TAG, "Failed to save selected tab")
+                    },
+                    text = {
+                        Text(
+                            text = tier.name,
+                            fontFamily = Oswald, // Assuming you have this font variable
+                            fontSize = 14.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = color
+                        )
                     }
-                })
+                )
+            }
+        }
 
-                Spacer(modifier = Modifier.height(8.dp))
+        Divider(color = LightText.copy(alpha = 0.1f), thickness = 1.dp)
 
-                HorizontalDivider(color = LightText.copy(alpha = 0.12f))
+        // 4. PAGER CONTENT
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            val tier = tiers[page]
 
-                Spacer(modifier = Modifier.height(12.dp))
+            // Sync preference on swipe
+            LaunchedEffect(pagerState.currentPage) {
+                if (pagerState.currentPage == page) {
+                    prefs.edit().putString(KEY_SELECTED_TROPHY_TAB, tier.name).apply()
+                }
+            }
 
-                // Leaderboard content loads based on selectedTier
-                LeaderboardLoader(tier = selectedTier)
+            LeaderboardLoader(tier)
+        }
+    }
+
+    if (showNameDialog) {
+        PlayerNameDialog(
+            currentName = playerName.takeIf { it.isNotBlank() },
+            onSave = { chosenName ->
+                val finalName = chosenName.ifBlank { generateFallbackPlayerName() }
+                playerName = finalName
+                prefs.edit().putString(KEY_PLAYER_NAME, finalName).apply()
+                showNameDialog = false
+
+                val userId = prefs.getString(KEY_FIREBASE_USER_ID, null)
+                val currentScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+                if (!userId.isNullOrBlank()) {
+                    FirestoreManager.updateLeaderboard(
+                        userId = userId,
+                        score = currentScore,
+                        tier = playerTier,
+                        playerNameOverride = finalName
+                    )
+                }
+            },
+            onCancel = { showNameDialog = false }
+        )
+    }
+}
+
+// ---------------------------------------------------------
+// COMPOSABLES
+// ---------------------------------------------------------
+
+@Composable
+fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
+    val formatter = NumberFormat.getIntegerInstance()
+    val tierColor = trophyColorForTier(playerTier)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue),
+        elevation = CardDefaults.cardElevation(8.dp),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Tier Icon with glow effect container
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(tierColor.copy(alpha = 0.2f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.EmojiEvents,
+                    contentDescription = null,
+                    tint = tierColor,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            Spacer(Modifier.width(16.dp))
+
+            Column {
+                Text(
+                    text = "YOUR RANKING",
+                    fontFamily = Oswald,
+                    fontSize = 12.sp,
+                    color = LightText.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = playerTier.name,
+                    fontFamily = Oswald,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = LightText
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "${formatter.format(lifetimeCoins)} Coins",
+                    fontFamily = Oswald,
+                    fontSize = 16.sp,
+                    color = CoinGold // Assuming CoinGold exists, else use Color(0xFFFFD700)
+                )
             }
         }
     }
 }
+
+// ---------------- LEADERBOARD LOGIC & LIST --------------------
 
 @Composable
 fun LeaderboardLoader(tier: TrophyTier) {
@@ -130,154 +329,264 @@ fun LeaderboardLoader(tier: TrophyTier) {
         entries = emptyList()
 
         if (tier == TrophyTier.UNRANKED) {
-            FirestoreManager.getUnranked(onResult = { list ->
-                entries = list
-                isLoading = false
-            }, onError = { e ->
-                Log.e(TAG, "Failed to load unranked: ${e.message}")
-                errorMsg = "Failed to load leaderboard"
-                isLoading = false
-            })
+            FirestoreManager.getUnranked(
+                onResult = { entries = it; isLoading = false },
+                onError = { errorMsg = "Failed to load"; isLoading = false }
+            )
         } else {
-            FirestoreManager.getLeaderboardForTier(tier = tier, onResult = { list ->
-                entries = list
-                isLoading = false
-            }, onError = { e ->
-                Log.e(TAG, "Failed to load tier ${tier.name}: ${e.message}")
-                errorMsg = "Failed to load leaderboard"
-                isLoading = false
-            })
+            FirestoreManager.getLeaderboardForTier(
+                tier = tier,
+                onResult = { entries = it; isLoading = false },
+                onError = { errorMsg = "Failed to load"; isLoading = false }
+            )
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        when {
-            isLoading -> {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = LightText)
-            }
-            errorMsg != null -> {
-                Text(text = errorMsg ?: "Unknown error", color = LightText, modifier = Modifier.align(Alignment.Center))
-            }
-            entries.isEmpty() -> {
-                Text(text = "No players in this tier yet", color = LightText, fontFamily = Oswald, modifier = Modifier.align(Alignment.Center))
-            }
-            else -> {
-                LeaderboardList(entries = entries, tier = tier)
-            }
+    Box(Modifier.fillMaxSize()) {
+        if (isLoading) {
+            CircularProgressIndicator(Modifier.align(Alignment.Center), color = trophyColorForTier(tier))
+        } else if (errorMsg != null) {
+            Text(errorMsg!!, Modifier.align(Alignment.Center), color = Color.Red)
+        } else if (entries.isEmpty()) {
+            EmptyState(tier)
+        } else {
+            LeaderboardList(entries, tier)
         }
     }
 }
 
 @Composable
-fun TrophyTabs(selectedIndex: Int, onTabSelected: (Int) -> Unit) {
-    val tiers = listOf(
-        TrophyTier.UNRANKED,
-        TrophyTier.BRONZE,
-        TrophyTier.SILVER,
-        TrophyTier.GOLD,
-        TrophyTier.PLATINUM,
-        TrophyTier.DIAMOND,
-        TrophyTier.GOD
-    )
-
-    ScrollableTabRow(
-        selectedTabIndex = selectedIndex,
-        edgePadding = 8.dp,
-        containerColor = DeepBlue,
-        contentColor = LightText,
-        // Custom indicator: use the selected tab's left/width to draw a colored underline
-        indicator = { tabPositions ->
-            val color = trophyColorForIndex(selectedIndex)
-            val current = tabPositions.getOrNull(selectedIndex)
-            if (current != null) {
-                Box(modifier = Modifier
-                    .offset(x = current.left)
-                    .width(current.width)
-                    .height(3.dp)
-                    .background(color)
-                )
-            }
-        }
+fun EmptyState(tier: TrophyTier) {
+    Column(
+        Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        tiers.forEachIndexed { index, tier ->
-            val isSelected = index == selectedIndex
-            Tab(selected = isSelected, onClick = { onTabSelected(index) }, text = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val icon = if (tier == TrophyTier.UNRANKED) Icons.Filled.Star else Icons.Filled.EmojiEvents
-                    Icon(imageVector = icon, contentDescription = tier.name, tint = if (isSelected) LightText else LightText.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = tier.name, fontFamily = Oswald, color = if (isSelected) LightText else LightText.copy(alpha = 0.6f), fontSize = 14.sp)
-                }
-            })
-        }
+        Icon(
+            Icons.Default.EmojiEvents,
+            contentDescription = null,
+            tint = LightText.copy(alpha = 0.2f),
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "No Champions Yet",
+            fontFamily = Oswald,
+            fontSize = 18.sp,
+            color = LightText.copy(alpha = 0.5f)
+        )
+        Text(
+            "Be the first to reach ${tier.name}!",
+            fontFamily = Oswald,
+            fontSize = 14.sp,
+            color = LightText.copy(alpha = 0.3f)
+        )
     }
 }
 
 @Composable
 fun LeaderboardList(entries: List<FirestoreManager.LeaderboardEntry>, tier: TrophyTier) {
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-        itemsIndexed(entries) { index, entry ->
-            LeaderboardRow(index = index + 1, entry = entry, tier = tier)
-            Spacer(modifier = Modifier.height(8.dp))
-        }
+    LazyColumn(
+        contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)
+    ) {
+        // Table Header
         item {
-            Spacer(modifier = Modifier.height(16.dp))
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                Text("#", Modifier.width(40.dp), color = LightText.copy(0.5f), fontSize = 12.sp)
+                Text("PLAYER", Modifier.weight(1f), color = LightText.copy(0.5f), fontSize = 12.sp)
+                Text("SCORE", color = LightText.copy(0.5f), fontSize = 12.sp)
+            }
+        }
+
+        itemsIndexed(entries) { index, entry ->
+            LeaderboardRow(rank = index + 1, entry = entry, tier = tier)
         }
     }
 }
 
 @Composable
-fun LeaderboardRow(index: Int, entry: FirestoreManager.LeaderboardEntry, tier: TrophyTier) {
-    val sdf = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
-    val scoreText = remember(entry.score) { NumberFormat.getIntegerInstance().format(entry.score) }
-    val updatedText = remember(entry.updatedAt) {
-        val ts = entry.updatedAt
-        try {
-            if (ts is Timestamp) {
-                sdf.format(ts.toDate())
-            } else null
-        } catch (_: Exception) {
-            null
-        } ?: "-"
+fun LeaderboardRow(rank: Int, entry: FirestoreManager.LeaderboardEntry, tier: TrophyTier) {
+    val isTopThree = rank <= 3
+    val rankColor = when (rank) {
+        1 -> Color(0xFFFFD700) // Gold
+        2 -> Color(0xFFC0C0C0) // Silver
+        3 -> Color(0xFFCD7F32) // Bronze
+        else -> LightText
     }
 
-    val trophyColor = trophyColorForTier(tier)
+    val backgroundColor = if (isTopThree) DeepBlue.copy(alpha = 0.6f) else DeepBlue.copy(alpha = 0.3f)
 
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .height(68.dp)
-        .clip(RoundedCornerShape(12.dp))
-        .background(DeepBlue)
-        .padding(8.dp),
-        colors = CardDefaults.cardColors(containerColor = DeepBlue)
+    Card(
+        colors = CardDefaults.cardColors(containerColor = backgroundColor),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(0.dp) // Flat look
     ) {
-        Row(modifier = Modifier
-            .fillMaxSize()
-            .padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-
-            // Rank
-            Text(text = "#${index}", fontFamily = Oswald, color = LightText, fontSize = 16.sp, modifier = Modifier.width(48.dp))
-
-            // Trophy Icon
-            Icon(imageVector = Icons.Filled.EmojiEvents, contentDescription = "trophy", tint = trophyColor, modifier = Modifier.size(28.dp))
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Score and date
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = scoreText, fontFamily = Oswald, color = LightText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "Updated: $updatedText", fontFamily = Oswald, color = LightText.copy(alpha = 0.7f), fontSize = 12.sp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // RANK COLUMN
+            Box(
+                modifier = Modifier.width(40.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = "#$rank",
+                    fontFamily = Oswald,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = if (isTopThree) 18.sp else 16.sp,
+                    color = rankColor
+                )
             }
 
-            // User id (short)
-            Text(text = entry.userId.take(8), fontFamily = Oswald, color = LightText.copy(alpha = 0.7f), fontSize = 12.sp)
+            // PLAYER INFO COLUMN
+            Column(Modifier.weight(1f)) {
+                val nameToDisplay = if (entry.playerName.isNotBlank()) entry.playerName else entry.userId.take(8)
+
+                Text(
+                    text = nameToDisplay,
+                    fontFamily = Oswald,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 16.sp,
+                    color = LightText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val dateStr = entry.updatedAt?.toDate()?.let {
+                    SimpleDateFormat("MMM dd", Locale.getDefault()).format(it)
+                } ?: ""
+
+                Text(
+                    text = dateStr,
+                    fontSize = 12.sp,
+                    color = LightText.copy(alpha = 0.5f)
+                )
+            }
+
+            // SCORE COLUMN
+            Text(
+                text = NumberFormat.getIntegerInstance().format(entry.score),
+                fontFamily = Oswald,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = if(isTopThree) rankColor else LightText,
+                textAlign = TextAlign.End
+            )
         }
     }
 }
 
-// Helpers
-fun trophyForIndex(index: Int): TrophyTier = when(index) {
+// ---------------------------------------------------------
+// PLAYER NAME DIALOG
+// ---------------------------------------------------------
+
+@Composable
+fun PlayerNameDialog(
+    currentName: String?,
+    onSave: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var name by rememberSaveable(currentName) { mutableStateOf(currentName ?: "") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    val focusRequester = remember { FocusRequester() }
+
+    fun attemptSave() {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) {
+            errorText = null
+            onSave(generateFallbackPlayerName())
+            return
+        }
+        when {
+            trimmed.length < 3 || trimmed.length > 16 -> {
+                errorText = "Name must be 3–16 characters"
+            }
+            !PLAYER_NAME_REGEX.matches(trimmed) -> {
+                errorText = "Only letters, numbers, spaces allowed"
+            }
+            else -> {
+                errorText = null
+                onSave(trimmed)
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = {
+            Text(
+                "Choose Display Name",
+                fontFamily = Oswald,
+                fontWeight = FontWeight.Bold,
+                color = LightText
+            )
+        },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        if (errorText != null) errorText = null
+                        name = it
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
+                    textStyle = TextStyle(fontFamily = Oswald, color = LightText),
+                    singleLine = true,
+                    placeholder = {
+                        Text("Player Name", fontFamily = Oswald, color = LightText.copy(alpha = 0.6f))
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { attemptSave() }),
+                    isError = errorText != null
+                )
+                if (errorText != null) {
+                    Text(
+                        errorText!!,
+                        color = MaterialTheme.colorScheme.error,
+                        fontFamily = Oswald,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { attemptSave() }) {
+                Text("Save", fontFamily = Oswald)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("Cancel", fontFamily = Oswald)
+            }
+        }
+    )
+
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+}
+
+private fun generateFallbackPlayerName(): String {
+    val digits = Random.nextInt(0, 10_000)
+    return "Player%04d".format(digits)
+}
+
+// ---------------------------------------------------------
+// HELPERS (Kept exactly as provided)
+// ---------------------------------------------------------
+
+fun trophyForIndex(index: Int): TrophyTier = when (index) {
     0 -> TrophyTier.UNRANKED
     1 -> TrophyTier.BRONZE
     2 -> TrophyTier.SILVER
@@ -288,19 +597,9 @@ fun trophyForIndex(index: Int): TrophyTier = when(index) {
     else -> TrophyTier.UNRANKED
 }
 
-fun trophyIndexOf(tier: TrophyTier): Int = when(tier) {
-    TrophyTier.UNRANKED -> 0
-    TrophyTier.BRONZE -> 1
-    TrophyTier.SILVER -> 2
-    TrophyTier.GOLD -> 3
-    TrophyTier.PLATINUM -> 4
-    TrophyTier.DIAMOND -> 5
-    TrophyTier.GOD -> 6
-}
+fun trophyColorForIndex(index: Int) = trophyColorForTier(trophyForIndex(index))
 
-fun trophyColorForIndex(index: Int): Color = trophyColorForTier(trophyForIndex(index))
-
-fun trophyColorForTier(tier: TrophyTier): Color = when(tier) {
+fun trophyColorForTier(tier: TrophyTier): Color = when (tier) {
     TrophyTier.UNRANKED -> LightText
     TrophyTier.BRONZE -> Color(0xFFCD7F32)
     TrophyTier.SILVER -> Color(0xFFC0C0C0)

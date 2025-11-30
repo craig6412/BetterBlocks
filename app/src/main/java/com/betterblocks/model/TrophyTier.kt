@@ -5,19 +5,36 @@ enum class TrophyTier {
     BRONZE,
     SILVER,
     GOLD,
+
+    // Premium tiers – purchase only
     PLATINUM,
     DIAMOND,
     GOD
 }
 
-fun getTrophyTierForScore(score: Int): TrophyTier {
+/**
+ * Determines trophy tier based on lifetime coins and premium purchases.
+ *
+ * @param coins The player's total lifetime coins.
+ * @param purchasedPremiumTiers A set of premium tiers the user has purchased.
+ */
+fun getTrophyTierForScore(
+    coins: Int,
+    purchasedPremiumTiers: Set<TrophyTier>
+): TrophyTier {
+
+    // Premium tiers override normal tiers
+    when {
+        TrophyTier.GOD in purchasedPremiumTiers -> return TrophyTier.GOD
+        TrophyTier.DIAMOND in purchasedPremiumTiers -> return TrophyTier.DIAMOND
+        TrophyTier.PLATINUM in purchasedPremiumTiers -> return TrophyTier.PLATINUM
+    }
+
+    // Free tiers unlocked by coins
     return when {
-        score >= 1_000_000 -> TrophyTier.GOD
-        score >= 300_000 -> TrophyTier.DIAMOND
-        score >= 150_000 -> TrophyTier.PLATINUM
-        score >= 50_000 -> TrophyTier.GOLD
-        score >= 10_000 -> TrophyTier.SILVER
-        score >= 1_000 -> TrophyTier.BRONZE
+        coins >= 100_000 -> TrophyTier.GOLD
+        coins >= 50_000 -> TrophyTier.SILVER
+        coins >= 1_000 -> TrophyTier.BRONZE
         else -> TrophyTier.UNRANKED
     }
 }

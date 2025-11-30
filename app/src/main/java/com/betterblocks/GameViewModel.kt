@@ -15,6 +15,7 @@ import kotlin.random.Random
 import com.betterblocks.model.TrophyTier
 
 
+
 // --- Constants ---
 const val GRID_SIZE = 9
 const val BLOCKS_PER_ROUND = 3
@@ -35,12 +36,12 @@ private const val DEV_INITIAL_RAINBOW = 10 // 99 blocks for development
 private const val DEV_INITIAL_COLOR_WIPE = 15 // Start with 5 Color Wipes
 
 // Persistence Keys
-const val PREFS_NAME = "BetterBlocksPrefs"
+
 const val KEY_HIGH_SCORE = "high_score"
 const val KEY_COINS = "user_coins"
 const val KEY_RAINBOW_COUNT = "user_rainbow_count"
 const val KEY_COLOR_WIPE_COUNT = "user_color_wipe_count"
-const val KEY_SOUND_ENABLED = "sound_enabled"
+
 const val KEY_MUSIC_ENABLED = "music_enabled"
 const val KEY_SAVED_BOARD = "saved_board"
 const val KEY_SAVED_BLOCKS = "saved_blocks"
@@ -585,7 +586,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
          clearSelection: Boolean = false
      ) {
         val newScore = currentState.score + pointsToAdd
-        val newTrophy = getTrophyTierForScore(newScore)
+        val newTrophy = getTrophyTierForScore(newScore, emptySet())
+
         if (newTrophy != currentState.trophyTier) {
             saveTrophyTier(newTrophy)
 

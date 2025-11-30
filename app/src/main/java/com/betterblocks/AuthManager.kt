@@ -8,6 +8,7 @@ object AuthManager {
     private const val KEY_USER_ID = "firebase_user_id"
 
     suspend fun getOrCreateUserId(context: Context): String {
+
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
         val cached = prefs.getString(KEY_USER_ID, null)
