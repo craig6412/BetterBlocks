@@ -3,15 +3,21 @@ package com.betterblocks.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.betterblocks.GameSettings
@@ -162,6 +168,181 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
+
+
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // === DRAG & DROP OFFSET CONTROLS ===
+            Text(
+                text = "🎯 DRAG & DROP ALIGNMENT",
+                color = CoinGold,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Oswald,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+
+            DevSettingCard(title = "Visual Drag Offset Y: ${GameSettings.visualDragOffsetY.floatValue.toInt()} dp (How far ABOVE finger)") {
+                Slider(
+                    value = GameSettings.visualDragOffsetY.floatValue,
+                    onValueChange = { GameSettings.visualDragOffsetY.floatValue = it },
+                    valueRange = -200f..200f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "Visual Drag Offset X: ${GameSettings.visualDragOffsetX.floatValue.toInt()} dp (How far RIGHT of finger)") {
+                Slider(
+                    value = GameSettings.visualDragOffsetX.floatValue,
+                    onValueChange = { GameSettings.visualDragOffsetX.floatValue = it },
+                    valueRange = -200f..200f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "Matching Drag Offset Y: ${GameSettings.matchingDragOffsetY.floatValue.toInt()} dp (Ghost Y alignment)") {
+                Slider(
+                    value = GameSettings.matchingDragOffsetY.floatValue,
+                    onValueChange = { GameSettings.matchingDragOffsetY.floatValue = it },
+                    valueRange = -200f..200f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "Matching Drag Offset X: ${GameSettings.matchingDragOffsetX.floatValue.toInt()} dp (Ghost X alignment)") {
+                Slider(
+                    value = GameSettings.matchingDragOffsetX.floatValue,
+                    onValueChange = { GameSettings.matchingDragOffsetX.floatValue = it },
+                    valueRange = -200f..200f,
+                    colors = devSliderColors()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // === BLOCK PLACEMENT FINE-TUNING ===
+            Text(
+                text = "🎯 PLACEMENT CORRECTION (Ghost → Drop Fix)",
+                color = Color(0xFFFF5722), // Orange/Red for emphasis
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Oswald,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+
+            Text(
+                text = "Use these to fix misalignment when ghost is green but block won't place",
+                color = LightText.copy(alpha = 0.7f),
+                fontSize = 12.sp,
+                fontFamily = Oswald,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            DevSettingCard(title = "🔧 Placement Correction X: ${GameSettings.blockPlacementCorrectionX.floatValue.toInt()} dp") {
+                Slider(
+                    value = GameSettings.blockPlacementCorrectionX.floatValue,
+                    onValueChange = { GameSettings.blockPlacementCorrectionX.floatValue = it },
+                    valueRange = -12f..12f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "🔧 Placement Correction Y: ${GameSettings.blockPlacementCorrectionY.floatValue.toInt()} dp") {
+                Slider(
+                    value = GameSettings.blockPlacementCorrectionY.floatValue,
+                    onValueChange = { GameSettings.blockPlacementCorrectionY.floatValue = it },
+                    valueRange = -12f..12f,
+                    colors = devSliderColors()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // === INVENTORY TESTING CONTROLS ===
+            Text(
+                text = "🎁 INVENTORY TESTING",
+                color = CoinGold,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = Oswald,
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+
+            DevSettingCard(title = "Rainbow Wipe Count: ${GameSettings.testRainbowCount.value}") {
+                Slider(
+                    value = GameSettings.testRainbowCount.value.toFloat(),
+                    onValueChange = { GameSettings.testRainbowCount.value = it.toInt() },
+                    valueRange = 0f..1000000f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "Color Wipe Count: ${GameSettings.testColorWipeCount.value}") {
+                Slider(
+                    value = GameSettings.testColorWipeCount.value.toFloat(),
+                    onValueChange = { GameSettings.testColorWipeCount.value = it.toInt() },
+                    valueRange = 0f..1000000f,
+                    colors = devSliderColors()
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            DevSettingCard(title = "Coins: ${GameSettings.testCoins.value}") {
+                Slider(
+                    value = GameSettings.testCoins.value.toFloat(),
+                    onValueChange = { GameSettings.testCoins.value = it.toInt() },
+                    valueRange = 0f..1000000f,
+                    colors = devSliderColors()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // === SCORE TEXT FIELD ===
+            DevSettingCard(title = "Current Game Score") {
+                var scoreText by remember { mutableStateOf(GameSettings.testScore.value.toString()) }
+
+                OutlinedTextField(
+                    value = scoreText,
+                    onValueChange = { newText ->
+                        scoreText = newText
+                        // Parse and update score (only if valid number)
+                        val parsedScore = newText.toIntOrNull()
+                        if (parsedScore != null && parsedScore in 0..1000000) {
+                            GameSettings.testScore.value = parsedScore
+                        }
+                    },
+                    label = { Text("Enter Score (0-1,000,000)", color = LightText) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = CoinGold,
+                        unfocusedBorderColor = LightText,
+                        focusedLabelColor = CoinGold,
+                        unfocusedLabelColor = LightText,
+                        cursorColor = CoinGold,
+                        focusedTextColor = LightText,
+                        unfocusedTextColor = LightText
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "💡 Tip: This will update the current game score when you return to the game",
+                    color = LightText.copy(alpha = 0.7f),
+                    fontSize = 12.sp,
+                    fontFamily = Oswald
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
 
             }

@@ -1,10 +1,12 @@
 package com.betterblocks.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
@@ -33,6 +35,7 @@ import com.betterblocks.GameUiState
 import com.betterblocks.GameViewModel
 import com.betterblocks.BuildConfig
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.zIndex
 
 
 
@@ -43,37 +46,105 @@ val BannerBlueBottom = Color(0xFF1E3A71)
 
 
 @Composable
-fun PowerupHeader(uiState: GameUiState) {
+fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp) // Reduced padding significantly
+            .scale(0.85f), // Scale down to 85% of original size
+        shape = RoundedCornerShape(12.dp), // Slightly smaller corners
+        colors = CardDefaults.cardColors(
+            containerColor = DeepBlue.copy(alpha = 0.9f)
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 6.dp
+        ),
+        border = BorderStroke(1.5.dp, CoinGold.copy(alpha = 0.3f)) // Thinner border
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            DeepBlue.copy(alpha = 0.8f),
+                            DeepBlue.copy(alpha = 1f),
+                            DeepBlue.copy(alpha = 0.8f)
+                        )
+                    )
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp), // Reduced internal padding
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Coins
+            StatItem(
+                emoji = "💰",
+                value = uiState.coins.toString(),
+                backgroundColor = CoinGold.copy(alpha = 0.2f)
+            )
+
+            // Rainbow Wipes
+            StatItem(
+                emoji = "🌈",
+                value = uiState.rainbowBlockCount.toString(),
+                backgroundColor = SpecialPurple.copy(alpha = 0.2f)
+            )
+
+            // Color Wipes
+            Row(
+                modifier = Modifier
+                    .background(
+                        color = SuccessGreen.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp) // Smaller radius
+                    )
+                    .padding(horizontal = 10.dp, vertical = 6.dp), // Reduced padding
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_palette_colorwipe),
+                    contentDescription = "Color Wipe",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(22.dp) // Slightly smaller icon
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = uiState.colorWipeCount.toString(),
+                    color = Color.White,
+                    fontSize = 17.sp, // Reduced font size
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = Oswald
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun StatItem(emoji: String, value: String, backgroundColor: Color) {
     Row(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("💰", fontSize = 22.sp)
-            Spacer(Modifier.width(6.dp))
-            Text(uiState.coins.toString(), color = Color.White, fontSize = 18.sp)
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("🌈", fontSize = 22.sp)
-            Spacer(Modifier.width(6.dp))
-            Text(uiState.rainbowBlockCount.toString(), color = Color.White, fontSize = 18.sp)
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_palette_colorwipe),
-                contentDescription = "Color Wipe",
-                tint = Color.Unspecified,
-                modifier = Modifier.size(26.dp)
+            .background(
+                color = backgroundColor,
+                shape = RoundedCornerShape(8.dp) // Smaller radius
             )
-            Spacer(Modifier.width(6.dp))
-            Text(uiState.colorWipeCount.toString(), color = Color.White, fontSize = 18.sp)
-        }
+            .padding(horizontal = 10.dp, vertical = 6.dp), // Reduced padding
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 18.sp // Reduced from 24sp
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = value,
+            color = Color.White,
+            fontSize = 17.sp, // Reduced from 20sp
+            fontWeight = FontWeight.Bold,
+            fontFamily = Oswald
+        )
     }
 }
 
@@ -84,6 +155,7 @@ fun MainMenuScreen(
     onPlayClicked: () -> Unit,
     onShopClicked: () -> Unit,
     onHighScoresClicked: () -> Unit,
+    onStatsClicked: () -> Unit,
     onSettingsClicked: () -> Unit,
     onDeveloperClicked: () -> Unit,
     banner: @Composable (() -> Unit)? = null
@@ -93,6 +165,11 @@ fun MainMenuScreen(
 
     var showPopup by remember {
         mutableStateOf(!hasShownPowerUpPopup(context))
+    }
+
+    // Check daily reward on first composition
+    LaunchedEffect(Unit) {
+        viewModel.checkDailyReward()
     }
 
     Surface(
@@ -108,26 +185,40 @@ fun MainMenuScreen(
                     )
                 )
                 .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // PowerupHeader at top with proper spacing
+            Spacer(modifier = Modifier.height(4.dp))
 
-            PowerupHeader(uiState)
-
-            Spacer(modifier = Modifier.weight(0.8f))
-
-            Image(
-                painter = painterResource(id = R.drawable.banner),
-                contentDescription = "Better Blocks Game Title",
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .aspectRatio(3.2f)
-                    .scale(GameSettings.bannerScale.value),
-                contentScale = ContentScale.Fit
+            PowerupHeader(
+                uiState = uiState,
+                modifier = Modifier.padding(horizontal = 0.dp)
             )
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(12.dp)) // Space between header and banner
+
+            // Flexible space before banner
+            Spacer(modifier = Modifier.weight(0.6f))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .zIndex(50f)
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.banner),
+                    contentDescription = "Better Blocks Game Title",
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .aspectRatio(3.2f)
+                        .scale(GameSettings.bannerScale.value)
+                        .zIndex(50f),
+                    contentScale = ContentScale.Fit
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
 
             MenuButton(
                 text = "PLAY",
@@ -138,7 +229,7 @@ fun MainMenuScreen(
                 height = 80.dp
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             MenuButton(
                 text = "SHOP",
@@ -147,7 +238,7 @@ fun MainMenuScreen(
                 containerColor = DeepBlue
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             MenuButton(
                 text = "HIGH SCORES",
@@ -156,7 +247,16 @@ fun MainMenuScreen(
                 containerColor = DeepBlue
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            MenuButton(
+                text = "STATS",
+                icon = Icons.Default.Assessment,
+                onClick = onStatsClicked,
+                containerColor = DeepBlue
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             MenuButton(
                 text = "SETTINGS",
@@ -165,7 +265,7 @@ fun MainMenuScreen(
                 containerColor = DeepBlue
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             MenuButton(
                 text = "DEVELOPER",
@@ -175,14 +275,17 @@ fun MainMenuScreen(
                 height = 50.dp
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(0.8f))
 
             if (!LocalInspectionMode.current && BuildConfig.DEBUG) {
-
                 Text("Test Ad", color = Color.Gray, fontSize = 10.sp)
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
             banner?.invoke()
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "v1.0",
@@ -197,6 +300,17 @@ fun MainMenuScreen(
                         setPowerUpPopupShown(context)
                         showPopup = false
                     }
+                )
+            }
+
+            // Daily Reward Dialog
+            if (uiState.showDailyRewardDialog) {
+                DailyRewardDialog(
+                    day = uiState.dailyRewardDay,
+                    streak = uiState.dailyRewardStreak,
+                    coins = uiState.dailyRewardCoins,
+                    hasRainbowWipe = uiState.dailyRewardRainbow,
+                    onClaimReward = { viewModel.claimDailyReward() }
                 )
             }
         }
@@ -263,6 +377,7 @@ fun MainMenuScreenPreview() {
         onPlayClicked = {},
         onShopClicked = {},
         onHighScoresClicked = {},
+        onStatsClicked = {},
         onSettingsClicked = {},
         onDeveloperClicked = {}
     )

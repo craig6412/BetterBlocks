@@ -58,6 +58,9 @@ class MainActivity : ComponentActivity() {
                         onHighScoresClicked = {
                             startActivity(Intent(this, HighScoreActivity::class.java))
                         },
+                        onStatsClicked = {
+                            startActivity(Intent(this, StatsActivity::class.java))
+                        },
                         onSettingsClicked = {
                             startActivity(Intent(this, SettingsActivity::class.java))
                         },
@@ -70,5 +73,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh user stats when returning to main menu (e.g., from Shop)
+        gameViewModel.refreshUserStats()
     }
 }

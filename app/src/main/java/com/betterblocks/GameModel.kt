@@ -1,6 +1,7 @@
 package com.betterblocks
 
-import com.betterblocks.R
+
+import com.betterblocks.model.ScorePopupState
 import com.betterblocks.model.TrophyTier
 
 
@@ -81,7 +82,11 @@ data class GameUiState(
     val isGameOver: Boolean = false,
     val isLastChance: Boolean = false,
     val selectedBlock: Block? = null,
+    val rotation: Int = 0, // <-- ADDED: Current rotation for the selected block
     val clearingCells: Set<Coord> = emptySet(),
+    val effectCells: Set<Coord> = emptySet(), // Effect layer for animations
+    val isRainbowWipeActive: Boolean = false,
+    val isColorWipeAnimating: Boolean = false, // Flag to slow down color wipe animation
     val showHighScoreAnim: Boolean = false,
     val rainbowBlockCount: Int = 3,
     val colorWipeCount: Int = 3, // <-- ADDED: Color Wipe Inventory
@@ -91,62 +96,32 @@ data class GameUiState(
     val showZeroCoinsDialog: Boolean = false, // <-- ADDED: Zero Coins Dialog Fla
     val trophyTier: TrophyTier = TrophyTier.UNRANKED,
     val showTierPromotionDialog: Boolean = false,
-    val newlyUnlockedTier: TrophyTier? = null
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
+    val newlyUnlockedTier: TrophyTier? = null,
+    // NEW UI STATE FIELDS
+    val showRainbowEarnedDialog: Boolean = false,
+    val showPurchaseSuccessDialog: Boolean = false,
+    val purchaseCoinsAwarded: Int = 0,
+    val coinsEarnedThisUpdate: Int = 0,
+    val showShopPurchaseBubble: Boolean = false,
+    val shopPurchaseMessage: String = "",
+    // DAILY REWARD SYSTEM
+    val showDailyRewardDialog: Boolean = false,
+    val dailyRewardDay: Int = 0,
+    val dailyRewardStreak: Int = 0,
+    val dailyRewardCoins: Int = 0,
+    val dailyRewardRainbow: Boolean = false,
+    // GAME OVER SUMMARY
+    val showGameSummaryDialog: Boolean = false,
+    val linesClearedThisGame: Int = 0,
+    val coinsEarnedThisGame: Int = 0,
+    val scoreState: ScorePopupState = ScorePopupState(),
 
-        other as GameUiState
+    // NEW FIELDS (needed for pre-clear tint)
+    val previewClearIndices: List<Int> = emptyList() ,  // which rows/cols will clear
+    val previewIsRow: Boolean = true,                   // true=row, false=column
+    val moveNumber: Int = 0                            // increments per block placement, used for tint cycling
 
-        if (!board.contentDeepEquals(other.board)) return false
-        if (availableBlocks != other.availableBlocks) return false
-        if (score != other.score) return false
-        if (highScore != other.highScore) return false
-        if (coins != other.coins) return false
-        if (freeRotations != other.freeRotations) return false
-        if (lastRotatedBlockId != other.lastRotatedBlockId) return false
-        if (isGameOver != other.isGameOver) return false
-        if (isLastChance != other.isLastChance) return false
-        if (selectedBlock != other.selectedBlock) return false
-        if (clearingCells != other.clearingCells) return false
-        if (showHighScoreAnim != other.showHighScoreAnim) return false
-        if (rainbowBlockCount != other.rainbowBlockCount) return false
-        if (colorWipeCount != other.colorWipeCount) return false // <-- ADDED
-        if (specialMeterValue != other.specialMeterValue) return false
-        if (isSoundEnabled != other.isSoundEnabled) return false
-        if (isMusicEnabled != other.isMusicEnabled) return false
-        if (showZeroCoinsDialog != other.showZeroCoinsDialog) return false // <-- ADDED
-        if (showTierPromotionDialog != other.showTierPromotionDialog) return false // <-- ADDED
-        if (newlyUnlockedTier != other.newlyUnlockedTier) return false // <-- ADDED
-
-        return true
-    }
-
-    override fun hashCode(): Int {
-        var result = board.contentDeepHashCode()
-        result = 31 * result + availableBlocks.hashCode()
-        result = 31 * result + score
-        result = 31 * result + highScore
-        result = 31 * result + coins
-        result = 31 * result + freeRotations
-        result = 31 * result + (lastRotatedBlockId ?: 0)
-        result = 31 * result + isGameOver.hashCode()
-        result = 31 * result + isLastChance.hashCode()
-        result = 31 * result + (selectedBlock?.hashCode() ?: 0)
-        result = 31 * result + clearingCells.hashCode()
-        result = 31 * result + showHighScoreAnim.hashCode()
-        result = 31 * result + rainbowBlockCount
-        result = 31 * result + colorWipeCount // <-- ADDED
-        result = 31 * result + specialMeterValue
-        result = 31 * result + isSoundEnabled.hashCode()
-        result = 31 * result + isMusicEnabled.hashCode()
-        result = 31 * result + showZeroCoinsDialog.hashCode() // <-- ADDED
-        result = 31 * result + showTierPromotionDialog.hashCode() // <-- ADDED
-        result = 31 * result + (newlyUnlockedTier?.hashCode() ?: 0) // <-- ADDED
-        return result
-    }
-}
+)
 
 data class ClearResult(val newBoard: GameGrid, val totalClears: Int)
 
@@ -177,17 +152,17 @@ val BLOCK_MANAGER: List<Block> = listOf(
     // 4-Cell
     Block(5, "1x4 Bar", BLOCK_DRAWABLES[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))),
     Block(6, "Square", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))),
-    Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))),
-    Block(8, "J Tetromino", BLOCK_DRAWABLES[4], listOf(Coord(0, 1), Coord(1, 1), Coord(2, 1), Coord(2, 0))),
-    Block(9, "T Tetromino", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
-    Block(10, "S Tetromino", BLOCK_DRAWABLES[1], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
-    Block(11, "Z Tetromino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
+   // Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))),
+   // Block(8, "J Tetromino", BLOCK_DRAWABLES[4], listOf(Coord(0, 1), Coord(1, 1), Coord(2, 1), Coord(2, 0))),
+    //Block(9, "T Tetromino", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
+    //Block(10, "S Tetromino", BLOCK_DRAWABLES[1], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
+    //Block(11, "Z Tetromino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
     // 5-Cell
     Block(12, "1x5 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3), Coord(0, 4))),
-    Block(13, "L Pentomino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
+   // Block(13, "L Pentomino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
     Block(14, "Plus Pentomino", BLOCK_DRAWABLES[2], listOf(Coord(0, 1), Coord(1, 0), Coord(1, 1), Coord(1, 2), Coord(2, 1))),
     Block(15, "U Pentomino", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 2), Coord(1, 0), Coord(1, 1), Coord(1, 2))),
-    Block(16, "Wide T", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
+    //Block(16, "Wide T", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
     // 9-Cell
     Block(17, "3x3 Square", BLOCK_DRAWABLES[1], listOf(
         Coord(0, 0), Coord(0, 1), Coord(0, 2),
@@ -196,8 +171,55 @@ val BLOCK_MANAGER: List<Block> = listOf(
     )),
     // Misc
     Block(18, "Small L", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0))),
-    Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1)))
+
+    Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
+
+    //new blocks we are addding to mimick most style games like this.
+
+    Block(
+        21, "3x2 Rectangle", BLOCK_DRAWABLES[3],
+        listOf(
+            Coord(0,0), Coord(0,1),
+            Coord(1,0), Coord(1,1),
+            Coord(2,0), Coord(2,1)
+        )
+    ),
+    Block(
+        22, "2x4 Rectangle", BLOCK_DRAWABLES[1],
+        listOf(
+            Coord(0,0), Coord(0,1), Coord(0,2), Coord(0,3),
+            Coord(1,0), Coord(1,1), Coord(1,2), Coord(1,3)
+        )
+    ),
+            Block(
+            23, "4x2 Rectangle", BLOCK_DRAWABLES[4],
+    listOf(
+        Coord(0,0), Coord(0,1),
+        Coord(1,0), Coord(1,1),
+        Coord(2,0), Coord(2,1),
+        Coord(3,0), Coord(3,1)
+    )
+),
+    Block(
+        24, "2x2 Diagonal", BLOCK_DRAWABLES[6],
+        listOf(
+            Coord(0,0),
+            Coord(1,0), Coord(1,1)
+        )
+    ),
+
+    Block(
+        25, "2x2 Reverse Diagonal", BLOCK_DRAWABLES[5],
+        listOf(
+            Coord(0,1),
+            Coord(1,0), Coord(1,1)
+        )
+    )
+
+
+
 )
+
 fun getBlockById(id: Int): Block? {
     return BLOCK_MANAGER.firstOrNull { it.id == id }
 }

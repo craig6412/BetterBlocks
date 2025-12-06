@@ -63,10 +63,31 @@ object GameSettings {
 
     // Padding for the bottom bar row
 
+    // --- DRAG & DROP OFFSET CONTROLS (for Developer Tuning) ---
+    // Visual offsets: Where the dragged block appears relative to finger
+    // DEFAULT UPDATED: set visual drag Y to 80dp above the finger as requested
+    var visualDragOffsetY = mutableFloatStateOf(80f)  // dp - block appears 80dp above finger
+    var visualDragOffsetX = mutableFloatStateOf(0f)    // dp - block centered horizontally on finger
+
+    // Ghost/Drop matching offsets: Alignment between ghost and actual drop position
+    // Kept independent so ghost/drop calculation can be tuned separately from visual preview
+    var matchingDragOffsetY = mutableFloatStateOf(80f) // dp - ghost Y alignment
+    var matchingDragOffsetX = mutableFloatStateOf(0f)   // dp - ghost X alignment (centered)
+
+    // --- BLOCK PLACEMENT CORRECTION (Fine-tuning for exact placement) ---
+    // This applies a small correction to the drop position calculation to ensure
+    // blocks place exactly where the green ghost appears
+    var blockPlacementCorrectionX = mutableFloatStateOf(0f) // dp - ZEROED for clean baseline
+    var blockPlacementCorrectionY = mutableFloatStateOf(0f) // dp - ZEROED for clean baseline
+
+    // --- DRAGGED BLOCK SCALE ---
+    var draggedBlockScale = mutableFloatStateOf(0.7f) // Scale of the block preview while dragging
+
+    // --- INVENTORY CONTROLS (for Testing) ---
+    var testRainbowCount = mutableStateOf(0)     // 0 to 1,000,000
+    var testColorWipeCount = mutableStateOf(0)   // 0 to 1,000,000
+    var testCoins = mutableStateOf(0)            // 0 to 1,000,000
+    var testScore = mutableStateOf(0)            // 0 to 1,000,000 - Affects current game score
 }
 
         // Bottom bar padding between icons
-
-
-
-

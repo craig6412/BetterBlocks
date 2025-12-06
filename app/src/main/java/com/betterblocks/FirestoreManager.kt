@@ -3,6 +3,7 @@ package com.betterblocks
 import android.content.Context
 import android.util.Log
 import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.getPlayerTier
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.Query
@@ -62,6 +63,13 @@ object FirestoreManager {
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Exception in updateLeaderboard()", e)
         }
+    }
+
+    fun updateLeaderboardForCurrentPlayer(score: Int) {
+        val userId = prefs.getString(KEY_FIREBASE_USER_ID, null) ?: return
+        val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, 0)
+        val tier = getPlayerTier(score, lifetimeCoins, prefs)
+        updateLeaderboard(userId, score, tier)
     }
 
     // ----------------------------------------------------

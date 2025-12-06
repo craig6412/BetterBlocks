@@ -20,14 +20,20 @@ class SettingsActivity : ComponentActivity() {
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val initialSoundEnabled = prefs.getBoolean(KEY_SOUND_ENABLED, true)
+        val initialHapticEnabled = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
 
         setContent {
             MaterialTheme {
                 SettingsScreen(
                     initialSoundEnabled = initialSoundEnabled,
+                    initialHapticEnabled = initialHapticEnabled,
                     onToggleSound = {
                         val newValue = !prefs.getBoolean(KEY_SOUND_ENABLED, true)
                         prefs.edit().putBoolean(KEY_SOUND_ENABLED, newValue).apply()
+                    },
+                    onToggleHaptic = {
+                        val newValue = !prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
+                        prefs.edit().putBoolean(KEY_HAPTIC_ENABLED, newValue).apply()
                     },
                     onBack = { finish() }
                 )

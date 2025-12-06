@@ -31,7 +31,7 @@ class GameActivity : ComponentActivity() {
                         onSelectBlock = viewModel::selectBlock,
                         onRotateBlock = viewModel::rotateSelectedBlock,
                         onSelectRainbow = viewModel::selectRainbowBlock,
-                        onReset = { /* Do nothing */ },
+                        onReset = viewModel::restartGame,
                         onGoToMenu = {
                             finish() // Closes GameActivity -> Returns to MainMenu
                         },
@@ -42,8 +42,13 @@ class GameActivity : ComponentActivity() {
                         onToggleMusic = viewModel::toggleMusic,
                         onUseRainbowImmediately = viewModel::useRainbowWipeImmediately,
                         onColorWipeSpinResult = viewModel::onColorWipeSpinResult,
-                        onDismissTierPromotion = viewModel::dismissTierPromotion,
-                        onShareTier = { tier -> viewModel.shareTierAchievement(this, tier) }
+                                                onDismissTierPromotion = viewModel::dismissTierPromotion,
+                        onDismissRainbowEarned = viewModel::dismissRainbowEarnedDialog,
+                        onDismissPurchaseSuccess = viewModel::dismissPurchaseSuccessDialog,
+                        onClearCoinAnimation = viewModel::clearCoinEarnedAnimation,
+                        onDismissShopBubble = viewModel::dismissShopPurchaseBubble,
+                        // connect preview update callback
+                        onUpdatePreviewClear = viewModel::updatePreviewClear
                     )
                 }
             }

@@ -14,10 +14,13 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SettingsScreen(
     initialSoundEnabled: Boolean,
+    initialHapticEnabled: Boolean,
     onToggleSound: () -> Unit,
+    onToggleHaptic: () -> Unit,
     onBack: () -> Unit
 ) {
     var soundEnabled by remember { mutableStateOf(initialSoundEnabled) }
+    var hapticEnabled by remember { mutableStateOf(initialHapticEnabled) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -58,6 +61,30 @@ fun SettingsScreen(
                     onCheckedChange = {
                         soundEnabled = it
                         onToggleSound()
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // HAPTIC TOGGLE
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "Haptic Feedback",
+                    color = LightText,
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Switch(
+                    checked = hapticEnabled,
+                    onCheckedChange = {
+                        hapticEnabled = it
+                        onToggleHaptic()
                     }
                 )
             }

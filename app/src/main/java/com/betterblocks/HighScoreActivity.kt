@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import com.betterblocks.model.TrophyTier
-import com.betterblocks.model.getTrophyTierForScore
+import com.betterblocks.model.getPlayerTier
 import com.betterblocks.ui.*
 import com.betterblocks.ui.theme.BetterBlocksTheme
 import kotlinx.coroutines.launch
@@ -71,7 +71,6 @@ class HighScoreActivity : ComponentActivity() {
 // ---------------------------------------------------------
 
 const val KEY_PLAYER_NAME = "player_name"
-private const val KEY_FIREBASE_USER_ID = "firebase_user_id"
 private val PLAYER_NAME_REGEX = Regex("^[A-Za-z0-9 ]+")
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -84,6 +83,9 @@ fun HighscoreScreen(onBack: () -> Unit) {
     var playerName by remember { mutableStateOf(savedName ?: "") }
 
     val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, 0)
+    val bestScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+
+    val playerTier = getPlayerTier(bestScore, lifetimeCoins, prefs)
 
     // Data Loading Logic (Unchanged)
     val purchasedPremiumTierNames = prefs.getString(KEY_PREMIUM_TIERS, "") ?: ""
@@ -93,7 +95,6 @@ fun HighscoreScreen(onBack: () -> Unit) {
         .mapNotNull { runCatching { TrophyTier.valueOf(it) }.getOrNull() }
         .toSet()
 
-    val playerTier = getTrophyTierForScore(lifetimeCoins, purchasedPremiumTiers)
     val tiers = TrophyTier.values().toList()
 
     val saved = prefs.getString(KEY_SELECTED_TROPHY_TAB, playerTier.name)

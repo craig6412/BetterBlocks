@@ -6,6 +6,7 @@
     android:versionName="1.0.14">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -52,6 +53,12 @@
         <activity
             android:name=".HighScoreActivity"
             android:exported="false" />
+
+        <!-- Stats Activity -->
+        <activity
+            android:name=".StatsActivity"
+            android:exported="false"
+            android:label="Stats"/>
 
         <!-- 6. Developer Activity (Use this to fix the crash) -->
         <activity

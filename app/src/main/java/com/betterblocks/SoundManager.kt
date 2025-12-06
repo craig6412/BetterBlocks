@@ -4,6 +4,10 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
 
+/**
+ * ENHANCED SOUND MANAGER
+ * Now includes event deduplication to prevent duplicate SFX
+ */
 object SoundManager {
 
     private lateinit var soundPool: SoundPool
@@ -15,6 +19,10 @@ object SoundManager {
     private var wheelSpin = 0
 
     private var wheelStreamId = 0
+
+    // Event deduplication: Track last play time for each sound
+    private val lastPlayTimes = mutableMapOf<String, Long>()
+    private const val DEDUPE_WINDOW_MS = 150L  // Prevent same sound within 150ms
 
     fun init(context: Context) {
         val attrs = AudioAttributes.Builder()
@@ -34,20 +42,36 @@ object SoundManager {
         wheelSpin = soundPool.load(context, R.raw.color_wheel_spin, 1)
     }
 
+    /**
+     * Helper function: Play sound only if not recently played (deduplication)
+     */
+    private fun playWithDedupe(soundId: Int, eventKey: String, volume: Float = 1f) {
+        val now = System.currentTimeMillis()
+        val lastPlayTime = lastPlayTimes[eventKey] ?: 0L
+
+        if (now - lastPlayTime > DEDUPE_WINDOW_MS) {
+            soundPool.play(soundId, volume, volume, 1, 0, 1f)
+            lastPlayTimes[eventKey] = now
+        } else {
+            // Duplicate detected - skip this play
+            android.util.Log.d("SoundManager", "⚠️ Duplicate $eventKey blocked (within ${now - lastPlayTime}ms)")
+        }
+    }
+
     fun playBlockPlace() {
-        soundPool.play(blockPlace, 1f, 1f, 1, 0, 1f)
+        playWithDedupe(blockPlace, "block_place")
     }
 
     fun playBadPlacement() {
-        soundPool.play(blockBadPlace, 1f, 1f, 1, 0, 1f)
+        playWithDedupe(blockBadPlace, "bad_place")
     }
 
     fun playLineClear() {
-        soundPool.play(lineClear, 1f, 1f, 1, 0, 1f)
+        playWithDedupe(lineClear, "line_clear")
     }
 
     fun playRainbowClear() {
-        soundPool.play(rainbowClear, 1f, 1f, 1, 0, 1f)
+        playWithDedupe(rainbowClear, "rainbow_clear")
     }
 
     fun startWheelSpinLoop() {
@@ -59,5 +83,12 @@ object SoundManager {
             soundPool.stop(wheelStreamId)
             wheelStreamId = 0
         }
+    }
+
+    /**
+     * Manual reset for testing or edge cases
+     */
+    fun resetDedupeTimers() {
+        lastPlayTimes.clear()
     }
 }
