@@ -11,10 +11,12 @@ const val KEY_FIREBASE_USER_ID = "firebase_user_id"
 // Haptic Feedback
 const val KEY_HAPTIC_ENABLED = "haptic_enabled"
 
+// Theme preference: true = dark, false = light
+const val KEY_DARK_THEME = "dark_theme_enabled"
+
 // Daily Reward System
 const val KEY_DAILY_REWARD_DATE = "daily_reward_date"
 const val KEY_DAILY_STREAK = "daily_streak"
 
 // Season Timer
 const val KEY_SEASON_START_DATE = "season_start_date"
-

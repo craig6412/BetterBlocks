@@ -63,13 +63,17 @@ import kotlinx.coroutines.coroutineScope
 import kotlin.math.roundToInt
 
 // --- CONSTANTS & COLORS ---
-val DeepBlue = Color(0xFF282C6D)
-val DarkBackground = Color(0xFF1E214A)
+val DeepBlue = Color(0xFF05072C)
+val DarkBackground = Color(0xFF0B0E3A)
 val BoardBackground = Color(0xFF2B2F5D)
 val LightText = Color(0xFFFFFFFF)
-val CoinGold = Color(0xFFFFD700)
+val Pink_Jackie = Color(0xFFE91E63)
 val SpecialPurple = Color(0xFF9C27B0)
-val SuccessGreen = Color(0xFF4CAF50)
+val SuccessGreen = Color(0xFF0D6712)
+
+val GoldCoin = Color(0xFFCDDC39)
+
+
 
 val Oswald = FontFamily(Font(R.font.oswald_regular))
 
@@ -123,9 +127,9 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
             }
 
             Surface(
-                color = CoinGold.copy(alpha = 0.1f),
+                color = Pink_Jackie.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(50),
-                border = BorderStroke(1.dp, CoinGold),
+                border = BorderStroke(1.dp, Pink_Jackie),
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
                 Row(
@@ -135,7 +139,7 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
                     Icon(
                         imageVector = Icons.Filled.MonetizationOn,
                         contentDescription = "Coins",
-                        tint = CoinGold,
+                        tint = Pink_Jackie,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -160,7 +164,7 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             ScoreDisplay(score = uiState.score, label = "CURRENT", modifier = Modifier.weight(1f))
-            ScoreDisplay(score = uiState.highScore, label = "HIGH SCORE", showTrophy = true, trophyTint = CoinGold, modifier = Modifier.weight(1f))
+            ScoreDisplay(score = uiState.highScore, label = "HIGH SCORE", showTrophy = true, trophyTint = Pink_Jackie, modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.width(36.dp)) // Balancing spacer
         }
     }
@@ -221,13 +225,13 @@ fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(Color.Black.copy(alpha = 0.5f))
-                .border(1.dp, CoinGold.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                .border(1.dp, Pink_Jackie.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(animatedProgress)
-                    .background(CoinGold.copy(alpha = 0.8f))
+                    .background(Pink_Jackie.copy(alpha = 0.8f))
                     .clip(RoundedCornerShape(4.dp))
             )
         }
@@ -245,7 +249,16 @@ fun BlockPreviewCard(
     modifier: Modifier = Modifier
 ) {
     // Capture the absolute screen position of the card to use as the drag anchor.
-    var cardOffsetInRoot by remember { mutableStateOf(Offset.Zero) }
+    // Key the remembered state by block.id so Compose won't reuse the same state for different blocks
+    var cardOffsetInRoot by remember(block.id) { mutableStateOf(Offset.Zero) }
+
+    // Ensure drag callbacks and block reference always see the latest values,
+    // even if the pointerInput lambda itself isn't recreated.
+    val currentBlock = rememberUpdatedState(block)
+    val currentOnClick = rememberUpdatedState(onClick)
+    val currentOnDragStart = rememberUpdatedState(onDragStart)
+    val currentOnDrag = rememberUpdatedState(onDrag)
+    val currentOnDragEnd = rememberUpdatedState(onDragEnd)
 
     Card(
         shape = RoundedCornerShape(8.dp),
@@ -255,23 +268,30 @@ fun BlockPreviewCard(
            .onGloballyPositioned { layoutCoordinates ->
                 cardOffsetInRoot = layoutCoordinates.localToWindow(Offset.Zero)
             }
-            // Use the block as a key to reset the gesture detector if the model changes
-           .pointerInput(block) {
+            // Apply visual/layout modifiers first, then attach the gesture detector using a stable key
+           .then(Modifier.pointerInput(block.id) {
                 detectDragOrClick(
                     onDragStart = {
                         // Start the drag anchored at the Card's position, not the touch position.
                         // This prevents the block from "jumping" to the finger center instantly.
-                        onDragStart(block, cardOffsetInRoot)
+                        currentOnDragStart.value(currentBlock.value, cardOffsetInRoot)
                     },
                     onDrag = { _, dragAmount ->
                         // Pass the delta to the parent
-                        onDrag(dragAmount)
+                        currentOnDrag.value(dragAmount)
                     },
-                    onDragEnd = onDragEnd,
-                    onDragCancel = onDragEnd, // Treat cancel as a reset
-                    onClick = onClick
+                    onDragEnd = {
+                        currentOnDragEnd.value()
+                    },
+                    onDragCancel = {
+                        // Treat cancel as a reset
+                        currentOnDragEnd.value()
+                    },
+                    onClick = {
+                        currentOnClick.value()
+                    }
                 )
-            }
+            })
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             // Selected visual: blue border + subtle glow behind the card
@@ -432,7 +452,7 @@ fun ColorWipeButton(
     ) {
         // Count Badge
         Surface(
-            color = CoinGold,
+            color = Pink_Jackie,
             shape = RoundedCornerShape(50),
             modifier = Modifier.zIndex(2f)
         ) {
@@ -524,7 +544,7 @@ fun ColorWheelDialog(
         Card(
             colors = CardDefaults.cardColors(containerColor = DeepBlue),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(2.dp, CoinGold)
+            border = BorderStroke(2.dp, Pink_Jackie)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -579,7 +599,7 @@ fun ColorWheelDialog(
                     // The "Center Pivot" Object
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         border = BorderStroke(2.dp, Color.White),
                         modifier = Modifier.size(40.dp),
                         shadowElevation = 8.dp
@@ -623,7 +643,7 @@ fun ColorWheelDialog(
                 } else {
                     Text(
                         "SPINNING...",
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         fontSize = 18.sp,
                         fontFamily = Oswald,
                         fontWeight = FontWeight.Bold
@@ -647,7 +667,7 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
     ) {
         // Badge ABOVE button
         Surface(
-            color = CoinGold,
+            color = Pink_Jackie,
             shape = RoundedCornerShape(50),
             modifier = Modifier.zIndex(2f)
         ) {
@@ -712,7 +732,7 @@ fun SpecialBlockButton(
     ) {
         // Count Badge
         Surface(
-            color = CoinGold,
+            color = Pink_Jackie,
             shape = RoundedCornerShape(50),
             modifier = Modifier.zIndex(2f)
         ) {
@@ -734,7 +754,7 @@ fun SpecialBlockButton(
                 .scale(GameSettings.bottomBarIconScale.value)
 
                 .clip(RoundedCornerShape(16.dp))
-                .background(if (isSelected) CoinGold else SpecialPurple)
+                .background(if (isSelected) Pink_Jackie else SpecialPurple)
                 .border(
                     3.dp,
                     if (isSelected) Color.White else Color.White.copy(0.3f),
@@ -939,7 +959,7 @@ fun LastChanceDialog(
             ) {
                 Text(
                     "LAST CHANCE!",
-                    color = CoinGold,
+                    color = Pink_Jackie,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = Oswald
@@ -1033,13 +1053,13 @@ fun GameOverDialog(
                     Icon(
                         Icons.Filled.EmojiEvents,
                         contentDescription = "High Score",
-                        tint = CoinGold,
+                        tint = Pink_Jackie,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Best: $highScore",
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = Oswald
@@ -1077,6 +1097,26 @@ fun GameOverDialog(
     }
 }
 
+/**
+ * Computes an offset that, when applied to a touch point, visually centers the given block
+ * under the users finger regardless of its rotation (bounding box shape).
+ *
+ * @param block The block whose bounding box is used.
+ * @param cellSizePx Size of a single grid cell in pixels.
+ * @return Offset that can be added to the finger position so the blocks center aligns there.
+ */
+fun calculateDragOffset(block: Block, cellSizePx: Float): Offset {
+    // Blocks bounding box dimensions in pixels
+    val widthPx = block.boundingBoxWidth * cellSizePx
+    val heightPx = block.boundingBoxHeight * cellSizePx
+
+    // We want the blocks center to be at the finger; Compose translation is from top-left,
+    // so we shift left/up by half the width/height.
+    return Offset(
+        x = -widthPx / 2f,
+        y = -heightPx / 2f
+    )
+}
 
 // -------------------------------------------------------------
 // --- HELPER FUNCTIONS

@@ -10,6 +10,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.betterblocks.ads.AdManager
 import com.betterblocks.ui.GameScreen
 import com.betterblocks.ui.theme.BetterBlocksTheme
 
@@ -25,16 +26,26 @@ class GameActivity : ComponentActivity() {
                     val viewModel: GameViewModel = viewModel()
                     val uiState by viewModel.uiState.collectAsState()
 
+                    // React to game over transitions and attempt to show interstitials from the Activity
+                    androidx.compose.runtime.LaunchedEffect(uiState.isGameOver) {
+                        if (uiState.isGameOver) {
+                            // Try to show an interstitial on game over (AdManager handles load/show and counters)
+                            AdManager.tryShowInterstitial(this@GameActivity)
+                        }
+                    }
+
                     GameScreen(
                         uiState = uiState,
-                        onGridCellClicked = viewModel::onGridCellClicked,
-                        onSelectBlock = viewModel::selectBlock,
-                        onRotateBlock = viewModel::rotateSelectedBlock,
-                        onSelectRainbow = viewModel::selectRainbowBlock,
-                        onReset = viewModel::restartGame,
-                        onGoToMenu = {
-                            finish() // Closes GameActivity -> Returns to MainMenu
+                        onGridCellClicked = { row, col ->
+                            viewModel.placeBlock(row, col)
                         },
+                        onSelectBlock = { block ->
+                            viewModel.selectBlock(block)
+                        },
+                        onRotateBlock = viewModel::rotateSelectedBlock,
+                        onSelectRainbow = { viewModel.selectRainbowBlock() },
+                        onReset = viewModel::restartGame,
+                        onGoToMenu = { finish() },
                         // --- NEW REQUIRED PARAMETERS ---
                         onLastChanceUsed = viewModel::onLastChanceUsed,
                         onLastChanceDeclined = viewModel::onLastChanceDeclined,
@@ -42,13 +53,11 @@ class GameActivity : ComponentActivity() {
                         onToggleMusic = viewModel::toggleMusic,
                         onUseRainbowImmediately = viewModel::useRainbowWipeImmediately,
                         onColorWipeSpinResult = viewModel::onColorWipeSpinResult,
-                                                onDismissTierPromotion = viewModel::dismissTierPromotion,
+                        onDismissTierPromotion = { viewModel.dismissTierPromotion() },
                         onDismissRainbowEarned = viewModel::dismissRainbowEarnedDialog,
                         onDismissPurchaseSuccess = viewModel::dismissPurchaseSuccessDialog,
                         onClearCoinAnimation = viewModel::clearCoinEarnedAnimation,
-                        onDismissShopBubble = viewModel::dismissShopPurchaseBubble,
-                        // connect preview update callback
-                        onUpdatePreviewClear = viewModel::updatePreviewClear
+                        onDismissShopBubble = viewModel::dismissShopPurchaseBubble
                     )
                 }
             }

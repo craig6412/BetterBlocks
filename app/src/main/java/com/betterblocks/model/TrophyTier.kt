@@ -10,7 +10,7 @@ enum class TrophyTier {
     GOLD,
     PLATINUM,
     DIAMOND,
-    GOD;
+    ELITE;
 
     companion object {
         fun fromOrdinalSafe(ordinal: Int): TrophyTier = values().getOrNull(ordinal) ?: UNRANKED
@@ -23,12 +23,12 @@ const val SILVER_SCORE = 50_000
 const val GOLD_SCORE = 100_000
 const val PLATINUM_SCORE = 250_000
 const val DIAMOND_SCORE = 500_000
-const val GOD_SCORE = 1_000_000
+const val ELITE_SCORE = 1_000_000
 
 // Premium Tier Unlock Costs (in coins)
 const val PLATINUM_COINS = 15_625
 const val DIAMOND_COINS = 62_500
-const val GOD_COINS = 250_000
+const val ELITE_COINS = 250_000
 
 /**
  * Determines the player's unlocked tier based on score and lifetime coins.
@@ -36,8 +36,8 @@ const val GOD_COINS = 250_000
  * RULES:
  * 1. Coins and score are treated as the same "overall progression value"
  * 2. Player gets placed into a tier when they reach the score threshold OR purchase with coins
- * 3. Platinum, Diamond, and God must be unlocked IN ORDER (no skipping)
- * 4. God tier requires BOTH score >= 1,000,000 AND 250,000 coin purchase (OR just the purchase)
+ * 3. Platinum, Diamond, and Elite must be unlocked IN ORDER (no skipping)
+ * 4. Elite tier requires BOTH score >= 1,000,000 AND 250,000 coin purchase (OR just the purchase)
  */
 fun determineUnlockedTier(
     bestScore: Int,
@@ -62,9 +62,9 @@ fun determineUnlockedTier(
         tier = TrophyTier.DIAMOND
     }
 
-    // GOD: Must have DIAMOND first, then reach score or pay coins
-    if (tier >= TrophyTier.DIAMOND && (bestScore >= GOD_SCORE || lifetimeCoins >= GOD_COINS)) {
-        tier = TrophyTier.GOD
+    // Elite: Must have DIAMOND first, then reach score or pay coins
+    if (tier >= TrophyTier.DIAMOND && (bestScore >= ELITE_SCORE || lifetimeCoins >= ELITE_COINS)) {
+        tier = TrophyTier.ELITE
     }
 
     return tier

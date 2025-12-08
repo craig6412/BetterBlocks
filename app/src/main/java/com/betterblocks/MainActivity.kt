@@ -32,7 +32,12 @@ class MainActivity : ComponentActivity() {
         FirestoreManager.init(this)
 
         AdManager.initialize(this)
+        // Preload an interstitial ad on startup so it's ready at game-over time
+        AdManager.preloadInterstitial(this)
         SoundManager.init(this)
+
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val darkTheme = prefs.getBoolean(KEY_DARK_THEME, false)
 
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
@@ -40,7 +45,7 @@ class MainActivity : ComponentActivity() {
         // Theme
 
         setContent {
-            BetterBlocksTheme {
+            BetterBlocksTheme(darkTheme = darkTheme) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = DarkBackground

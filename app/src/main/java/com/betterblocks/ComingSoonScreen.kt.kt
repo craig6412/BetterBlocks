@@ -53,13 +53,13 @@ fun ComingSoonScreen(title: String, onBack: () -> Unit) {
             Icon(
                 imageVector = Icons.Filled.Construction,
                 contentDescription = null,
-                tint = CoinGold,
+                tint = Pink_Jackie,
                 modifier = Modifier.size(80.dp)
             )
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "COMING SOON",
-                color = CoinGold,
+                color = Pink_Jackie,
                 fontSize = 32.sp,
                 fontFamily = Oswald,
                 fontWeight = FontWeight.ExtraBold

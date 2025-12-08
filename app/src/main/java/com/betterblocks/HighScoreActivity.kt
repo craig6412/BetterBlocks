@@ -309,7 +309,7 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                     text = "${formatter.format(lifetimeCoins)} Coins",
                     fontFamily = Oswald,
                     fontSize = 16.sp,
-                    color = CoinGold // Assuming CoinGold exists, else use Color(0xFFFFD700)
+                    color = Pink_Jackie // Assuming Pink_Jackie exists, else use Color(0xFFFFD700)
                 )
             }
         }
@@ -594,7 +594,7 @@ fun trophyForIndex(index: Int): TrophyTier = when (index) {
     3 -> TrophyTier.GOLD
     4 -> TrophyTier.PLATINUM
     5 -> TrophyTier.DIAMOND
-    6 -> TrophyTier.GOD
+    6 -> TrophyTier.ELITE
     else -> TrophyTier.UNRANKED
 }
 
@@ -604,8 +604,8 @@ fun trophyColorForTier(tier: TrophyTier): Color = when (tier) {
     TrophyTier.UNRANKED -> LightText
     TrophyTier.BRONZE -> Color(0xFFCD7F32)
     TrophyTier.SILVER -> Color(0xFFC0C0C0)
-    TrophyTier.GOLD -> CoinGold
+    TrophyTier.GOLD -> Pink_Jackie
     TrophyTier.PLATINUM -> Color(0xFFE5E4E2)
     TrophyTier.DIAMOND -> Color(0xFF0FF0FC)
-    TrophyTier.GOD -> Color(0xFFFFD700)
+    TrophyTier.ELITE -> Color(0xFFFFD700)
 }

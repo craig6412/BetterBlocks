@@ -66,7 +66,7 @@ object GameSettings {
     // --- DRAG & DROP OFFSET CONTROLS (for Developer Tuning) ---
     // Visual offsets: Where the dragged block appears relative to finger
     // DEFAULT UPDATED: set visual drag Y to 80dp above the finger as requested
-    var visualDragOffsetY = mutableFloatStateOf(80f)  // dp - block appears 80dp above finger
+    var visualDragOffsetY = mutableFloatStateOf(0f)  // dp - block appears 80dp above finger
     var visualDragOffsetX = mutableFloatStateOf(0f)    // dp - block centered horizontally on finger
 
     // Ghost/Drop matching offsets: Alignment between ghost and actual drop position
@@ -81,7 +81,8 @@ object GameSettings {
     var blockPlacementCorrectionY = mutableFloatStateOf(0f) // dp - ZEROED for clean baseline
 
     // --- DRAGGED BLOCK SCALE ---
-    var draggedBlockScale = mutableFloatStateOf(0.7f) // Scale of the block preview while dragging
+    // 1.0f = same size as placed blocks on the game grid
+    var draggedBlockScale = mutableFloatStateOf(1.0f) // Scale of the block preview while dragging
 
     // --- INVENTORY CONTROLS (for Testing) ---
     var testRainbowCount = mutableStateOf(0)     // 0 to 1,000,000

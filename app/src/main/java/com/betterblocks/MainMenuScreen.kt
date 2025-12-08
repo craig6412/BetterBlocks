@@ -3,6 +3,8 @@ package com.betterblocks.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -34,15 +37,21 @@ import com.betterblocks.GameSettings
 import com.betterblocks.GameUiState
 import com.betterblocks.GameViewModel
 import com.betterblocks.BuildConfig
-import androidx.compose.ui.platform.LocalInspectionMode
+import android.app.Activity
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.betterblocks.ads.AdManager
 import androidx.compose.ui.zIndex
+import androidx.compose.material.ripple.rememberRipple
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 
 
 
 // Gradient colors for background
-val BannerBlueTop = Color(0xFF2A5092)
-val BannerBlueBottom = Color(0xFF1E3A71)
+val BannerBlueTop = Color(0xFF011133)
+val BannerBlueBottom = Color(0xFF02287A)
 
 
 @Composable
@@ -59,7 +68,7 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
         elevation = CardDefaults.cardElevation(
             defaultElevation = 6.dp
         ),
-        border = BorderStroke(1.5.dp, CoinGold.copy(alpha = 0.3f)) // Thinner border
+        border = BorderStroke(1.5.dp, Pink_Jackie.copy(alpha = 0.3f)) // Thinner border
     ) {
         Row(
             modifier = Modifier
@@ -81,7 +90,7 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
             StatItem(
                 emoji = "💰",
                 value = uiState.coins.toString(),
-                backgroundColor = CoinGold.copy(alpha = 0.2f)
+                backgroundColor = Pink_Jackie.copy(alpha = 0.2f)
             )
 
             // Rainbow Wipes
@@ -176,146 +185,191 @@ fun MainMenuScreen(
         modifier = Modifier.fillMaxSize(),
         color = Color.Transparent
     ) {
-        Column(
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(BannerBlueTop, BannerBlueBottom)
-                    )
-                )
-                .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // PowerupHeader at top with proper spacing
-            Spacer(modifier = Modifier.height(4.dp))
-
-            PowerupHeader(
-                uiState = uiState,
-                modifier = Modifier.padding(horizontal = 0.dp)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp)) // Space between header and banner
-
-            // Flexible space before banner
-            Spacer(modifier = Modifier.weight(0.6f))
-
-            Box(
+            // Main content column
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .zIndex(50f)
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(BannerBlueTop, BannerBlueBottom)
+                        )
+                    )
+                    .padding(WindowInsets.systemBars.asPaddingValues())
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.banner),
-                    contentDescription = "Better Blocks Game Title",
+                // PowerupHeader at top with proper spacing
+                Spacer(modifier = Modifier.height(4.dp))
+
+                PowerupHeader(
+                    uiState = uiState,
                     modifier = Modifier
-                        .fillMaxWidth(0.9f)
-                        .aspectRatio(3.2f)
-                        .scale(GameSettings.bannerScale.value)
-                        .zIndex(50f),
-                    contentScale = ContentScale.Fit
+                        .padding(horizontal = 0.dp)
+                        .offset(
+                            x = 0.dp,
+                            y = (-10).dp   // move header up by 10.dp
+                        )
                 )
+
+                Spacer(modifier = Modifier.height(12.dp)) // Space between header and banner
+
+                // Flexible space before banner
+                Spacer(modifier = Modifier.weight(0.6f))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .zIndex(50f)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.banner),
+                        contentDescription = "Better Blocks Game Title",
+                        modifier = Modifier
+                            .fillMaxWidth(0.9f)
+                            .aspectRatio(3.2f)
+                            .scale(GameSettings.bannerScale.value)
+                            .zIndex(50f),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                MenuButton(
+                    text = "PLAY",
+                    icon = Icons.Default.PlayArrow,
+                    onClick = onPlayClicked,
+                    containerColor = Color(0xFFD01F5B),
+                    contentColor = Color.White,
+                    height = 80.dp
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                MenuButton(
+                    text = "SHOP",
+                    icon = Icons.Default.ShoppingCart,
+                    onClick = onShopClicked,
+                    containerColor = DeepBlue,
+                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                MenuButton(
+                    text = "HIGH SCORES",
+                    icon = Icons.Default.EmojiEvents,
+                    onClick = onHighScoresClicked,
+                    containerColor = DeepBlue,
+                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                MenuButton(
+                    text = "STATS",
+                    icon = Icons.Default.Assessment,
+                    onClick = onStatsClicked,
+                    containerColor = DeepBlue,
+                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                MenuButton(
+                    text = "SETTINGS",
+                    icon = Icons.Default.Settings,
+                    onClick = onSettingsClicked,
+                    containerColor = DeepBlue,
+                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                MenuButton(
+                    text = "DEVELOPER",
+                    icon = Icons.Default.Build,
+                    onClick = onDeveloperClicked,
+                    containerColor = Color(0xFF607D8B),
+                    height = 50.dp
+                )
+
+                Spacer(modifier = Modifier.weight(0.8f))
+
+                if (!LocalInspectionMode.current && BuildConfig.DEBUG) {
+                    Text("Test Ad", color = Color.Gray, fontSize = 10.sp)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                banner?.invoke()
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "v1.0",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    fontFamily = Oswald
+                )
+
+                if (showPopup) {
+                    PowerUpsPopup(
+                        onDismiss = {
+                            setPowerUpPopupShown(context)
+                            showPopup = false
+                        }
+                    )
+                }
+
+                // Daily Reward Dialog
+                if (uiState.showDailyRewardDialog) {
+                    DailyRewardDialog(
+                        day = uiState.dailyRewardDay,
+                        streak = uiState.dailyRewardStreak,
+                        coins = uiState.dailyRewardCoins,
+                        hasRainbowWipe = uiState.dailyRewardRainbow,
+                        onClaimReward = { viewModel.claimDailyReward() }
+                    )
+                }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            MenuButton(
-                text = "PLAY",
-                icon = Icons.Default.PlayArrow,
-                onClick = onPlayClicked,
-                containerColor = Color(0xFF4CAF50),
-                contentColor = Color.White,
-                height = 80.dp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            MenuButton(
-                text = "SHOP",
-                icon = Icons.Default.ShoppingCart,
-                onClick = onShopClicked,
-                containerColor = DeepBlue
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            MenuButton(
-                text = "HIGH SCORES",
-                icon = Icons.Default.EmojiEvents,
-                onClick = onHighScoresClicked,
-                containerColor = DeepBlue
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            MenuButton(
-                text = "STATS",
-                icon = Icons.Default.Assessment,
-                onClick = onStatsClicked,
-                containerColor = DeepBlue
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            MenuButton(
-                text = "SETTINGS",
-                icon = Icons.Default.Settings,
-                onClick = onSettingsClicked,
-                containerColor = DeepBlue
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            MenuButton(
-                text = "DEVELOPER",
-                icon = Icons.Default.Build,
-                onClick = onDeveloperClicked,
-                containerColor = Color(0xFF607D8B),
-                height = 50.dp
-            )
-
-            Spacer(modifier = Modifier.weight(0.8f))
-
-            if (!LocalInspectionMode.current && BuildConfig.DEBUG) {
-                Text("Test Ad", color = Color.Gray, fontSize = 10.sp)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            banner?.invoke()
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "v1.0",
-                color = Color.Gray,
-                fontSize = 12.sp,
-                fontFamily = Oswald
-            )
-
-            if (showPopup) {
-                PowerUpsPopup(
-                    onDismiss = {
-                        setPowerUpPopupShown(context)
-                        showPopup = false
+            // Free Coins floating overlay (absolute top-right over everything)
+            Image(
+                painter = painterResource(id = R.drawable.free_coins),
+                contentDescription = "Free Coins",
+                modifier = Modifier
+                    .size(75.dp)
+                    .offset(
+                        x = (300).dp,  // tweak X
+                        y = (100).dp    // tweak Y
+                    )
+                    .zIndex(1000f)
+                    .clickable(
+                        indication = LocalIndication.current,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        val activity = context as? Activity
+                        if (AdManager.isRewardedLoaded.value && activity != null) {
+                            AdManager.showDoubleRewarded(
+                                activity,
+                                onCompletedBoth = { viewModel.addCoins(50) },
+                                onFailed = { AdManager.preloadDoubleRewarded(context) }
+                            )
+                        } else {
+                            AdManager.preloadDoubleRewarded(context)
+                        }
                     }
-                )
-            }
-
-            // Daily Reward Dialog
-            if (uiState.showDailyRewardDialog) {
-                DailyRewardDialog(
-                    day = uiState.dailyRewardDay,
-                    streak = uiState.dailyRewardStreak,
-                    coins = uiState.dailyRewardCoins,
-                    hasRainbowWipe = uiState.dailyRewardRainbow,
-                    onClaimReward = { viewModel.claimDailyReward() }
-                )
-            }
+            )
         }
     }
 }
+
 
 
 // ----------------------
@@ -328,7 +382,8 @@ fun MenuButton(
     onClick: () -> Unit,
     containerColor: Color,
     contentColor: Color = LightText,
-    height: Dp = 60.dp
+    height: Dp = 60.dp,
+    border: BorderStroke? = null // New optional border parameter
 ) {
     Button(
         onClick = onClick,
@@ -343,7 +398,8 @@ fun MenuButton(
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = 8.dp,
             pressedElevation = 2.dp
-        )
+        ),
+        border = border // Apply the border if provided
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

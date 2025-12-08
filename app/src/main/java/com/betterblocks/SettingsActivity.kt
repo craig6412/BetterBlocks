@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.betterblocks.PREFS_NAME
 import com.betterblocks.KEY_SOUND_ENABLED
+import com.betterblocks.ui.theme.BetterBlocksTheme
 
 
 class SettingsActivity : ComponentActivity() {
@@ -21,12 +22,14 @@ class SettingsActivity : ComponentActivity() {
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val initialSoundEnabled = prefs.getBoolean(KEY_SOUND_ENABLED, true)
         val initialHapticEnabled = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
+        val initialDarkTheme = prefs.getBoolean(KEY_DARK_THEME, false)
 
         setContent {
             MaterialTheme {
                 SettingsScreen(
                     initialSoundEnabled = initialSoundEnabled,
                     initialHapticEnabled = initialHapticEnabled,
+                    initialDarkTheme = initialDarkTheme,
                     onToggleSound = {
                         val newValue = !prefs.getBoolean(KEY_SOUND_ENABLED, true)
                         prefs.edit().putBoolean(KEY_SOUND_ENABLED, newValue).apply()
@@ -34,6 +37,12 @@ class SettingsActivity : ComponentActivity() {
                     onToggleHaptic = {
                         val newValue = !prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
                         prefs.edit().putBoolean(KEY_HAPTIC_ENABLED, newValue).apply()
+                    },
+                    onToggleTheme = {
+                        val newValue = !prefs.getBoolean(KEY_DARK_THEME, false)
+                        prefs.edit().putBoolean(KEY_DARK_THEME, newValue).apply()
+                        // Recreate activity to apply the theme change immediately
+                        recreate()
                     },
                     onBack = { finish() }
                 )

@@ -176,7 +176,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
             // === DRAG & DROP OFFSET CONTROLS ===
             Text(
                 text = "🎯 DRAG & DROP ALIGNMENT",
-                color = CoinGold,
+                color = Pink_Jackie,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
@@ -266,7 +266,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
             // === INVENTORY TESTING CONTROLS ===
             Text(
                 text = "🎁 INVENTORY TESTING",
-                color = CoinGold,
+                color = Pink_Jackie,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
@@ -321,11 +321,11 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     label = { Text("Enter Score (0-1,000,000)", color = LightText) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CoinGold,
+                        focusedBorderColor = Pink_Jackie,
                         unfocusedBorderColor = LightText,
-                        focusedLabelColor = CoinGold,
+                        focusedLabelColor = Pink_Jackie,
                         unfocusedLabelColor = LightText,
-                        cursorColor = CoinGold,
+                        cursorColor = Pink_Jackie,
                         focusedTextColor = LightText,
                         unfocusedTextColor = LightText
                     ),
@@ -379,7 +379,7 @@ fun DevSettingCard(title: String, content: @Composable () -> Unit) {
 
 @Composable
 fun devSliderColors() = SliderDefaults.colors(
-    thumbColor = CoinGold,
-    activeTrackColor = CoinGold,
+    thumbColor = Pink_Jackie,
+    activeTrackColor = Pink_Jackie,
     inactiveTrackColor = Color.Gray
 )

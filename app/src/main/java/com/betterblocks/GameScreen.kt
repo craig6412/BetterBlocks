@@ -37,9 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -52,58 +50,26 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.betterblocks.BLOCK_MANAGER
 import com.betterblocks.Block
 import com.betterblocks.GameSettings
 import com.betterblocks.GameUiState
-import com.betterblocks.GameViewModel
-import com.betterblocks.GRID_SIZE
+import com.betterblocks.InteractionType
 import com.betterblocks.R
-import com.betterblocks.getRotatedBlock
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.trophyColorForTier
-import com.betterblocks.ui.AvailableBlocks
-
-
-// NOTE: Drag offsets now controlled via GameSettings for developer tuning
-
-/**
- * Calculates the grid row/col for a block based on its center point.
- *
- * @param blockCenterPoint The center coordinate of the dragged block visual.
- * @param gridTopLeft The top-left coordinate of the game grid.
- * @param gridSizePx The total size of the grid in pixels.
- * @param gridSize The number of cells in one dimension of the grid.
- * @return A Pair(row, col) if the center is within the grid, otherwise null.
- */
-private fun calculateGridPosition(
-    blockCenterPoint: Offset,
-    gridTopLeft: Offset,
-    gridSizePx: Float,
-    gridSize: Int
-): Pair<Int, Int>? {
-    val relativePos = blockCenterPoint - gridTopLeft
-
-    if (relativePos.x < 0 || relativePos.x > gridSizePx || relativePos.y < 0 || relativePos.y > gridSizePx) {
-        return null
-    }
-
-    val cellSizePx = gridSizePx / gridSize
-    val col = (relativePos.x / cellSizePx).toInt().coerceIn(0, gridSize - 1)
-    val row = (relativePos.y / cellSizePx).toInt().coerceIn(0, gridSize - 1)
-
-    return Pair(row, col)
-}
 
 
 // --- DRAG STATE ---
 data class DragState(
     val isDragging: Boolean = false,
     val draggedBlock: Block? = null,
-    val rawPosition: Offset = Offset.Zero, // Raw touch coordinates
-    val snappedTarget: GridCoordinate? = null // The crucial addition
+    val fingerPosition: Offset = Offset.Zero  // Raw finger position in root coordinates
 )
+
+// Drag offset constants used to position the dragged preview relative to the finger
+private val DRAG_OFFSET_Y: Dp = 100.dp
+private val DRAG_OFFSET_X: Dp = 20.dp
 
 @Composable
 fun GameScreen(
@@ -122,12 +88,11 @@ fun GameScreen(
     onUseRainbowImmediately: () -> Unit,
     onColorWipeSpinResult: (Int) -> Unit = {},
     onDismissTierPromotion: () -> Unit = {},
+    onShareTier: (TrophyTier) -> Unit = {},
     onDismissRainbowEarned: () -> Unit = {},
     onDismissPurchaseSuccess: () -> Unit = {},
     onClearCoinAnimation: () -> Unit = {},
-    onDismissShopBubble: () -> Unit = {},
-    // Called by UI during ghost drag to update which rows/cols would clear
-    onUpdatePreviewClear: (rowsOrCols: List<Int>, isRow: Boolean) -> Unit = { _, _ -> }
+    onDismissShopBubble: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var dragState by remember { mutableStateOf(DragState()) }
@@ -138,86 +103,36 @@ fun GameScreen(
     var rootTopLeft by remember { mutableStateOf(Offset.Zero) }
 
     val density = LocalDensity.current
+    val dragOffsetYPx = with(density) { DRAG_OFFSET_Y.toPx() }
+    val dragOffsetXPx = with(density) { DRAG_OFFSET_X.toPx() }
 
-    // Visual offsets for rendering the dragged block (from GameSettings)
-    val visualDragOffsetYPx = with(density) { GameSettings.visualDragOffsetY.floatValue.dp.toPx() }
-    val visualDragOffsetXPx = with(density) { GameSettings.visualDragOffsetX.floatValue.dp.toPx() }
+    val ghostPosition =
+        remember(dragState.fingerPosition, gridTopLeft, gridSizePx, dragState.draggedBlock) {
+            if (!dragState.isDragging || gridSizePx == 0f || dragState.draggedBlock == null) null
+            else {
+                // Offset the ghost position to align perfectly under the preview block
+                // Preview is 150dp above finger, ghost should align with it (100dp up, 20dp right)
+                val ghostOffsetY = with(density) { 100.dp.toPx() }
+                val ghostOffsetX = with(density) { 20.dp.toPx() }
+                val adjustedFingerPos = dragState.fingerPosition.copy(
+                    x = dragState.fingerPosition.x + ghostOffsetX,
+                    y = dragState.fingerPosition.y - ghostOffsetY
+                )
 
-    // Matching offsets used for ghost/drop calculations (independent from visual preview)
-    val matchingDragOffsetYPx = with(density) { GameSettings.matchingDragOffsetY.floatValue.dp.toPx() }
-    val matchingDragOffsetXPx = with(density) { GameSettings.matchingDragOffsetX.floatValue.dp.toPx() }
-
-    // Placement correction applied AFTER matching offset to fine-tune final placement
-    val placementCorrectionXPx = with(density) { GameSettings.blockPlacementCorrectionX.floatValue.dp.toPx() }
-    val placementCorrectionYPx = with(density) { GameSettings.blockPlacementCorrectionY.floatValue.dp.toPx() }
-
-    val ghostPosition = remember(dragState.snappedTarget) {
-        dragState.snappedTarget?.let {
-            Pair(it.row, it.col)
-        }
-    }
-
-    val isGhostValid = remember(ghostPosition) {
-        ghostPosition != null
-    }
-
-    // Compute preview clear lines during drag and call back to ViewModel via onUpdatePreviewClear
-    LaunchedEffect(ghostPosition, dragState.isDragging, dragState.draggedBlock, uiState.board) {
-        if (!dragState.isDragging || dragState.draggedBlock == null) {
-            onUpdatePreviewClear(emptyList(), true)
-            return@LaunchedEffect
-        }
-
-        val gp = ghostPosition
-        val block = dragState.draggedBlock
-        if (gp == null || block == null) {
-            onUpdatePreviewClear(emptyList(), true)
-            return@LaunchedEffect
-        }
-
-        // Clone board
-        val temp = uiState.board.map { it.clone() }.toTypedArray()
-
-        // Try to place; if invalid placement, clear preview
-        var outOfBounds = false
-        for (coord in block.shape) {
-            val r = gp.first + coord.row
-            val c = gp.second + coord.col
-            if (r !in 0 until GRID_SIZE || c !in 0 until GRID_SIZE) {
-                outOfBounds = true
-                break
+                calculateGridPosition(
+                    dragPos = adjustedFingerPos,
+                    gridTopLeft = gridTopLeft,
+                    gridSizePx = gridSizePx,
+                    gridSize = 9,
+                    visualOffsetX = 0f,
+                    visualOffsetY = 0f
+                )
             }
-            if (temp[r][c] != null && !block.isSpecial) {
-                outOfBounds = true
-                break
-            }
-            temp[r][c] = block.colorResId
         }
 
-        if (outOfBounds) {
-            onUpdatePreviewClear(emptyList(), true)
-            return@LaunchedEffect
-        }
-
-        val fullRows = mutableListOf<Int>()
-        for (r in 0 until GRID_SIZE) {
-            if (temp[r].all { it != null }) fullRows.add(r)
-        }
-
-        val fullCols = mutableListOf<Int>()
-        for (c in 0 until GRID_SIZE) {
-            var allFilled = true
-            for (r in 0 until GRID_SIZE) {
-                if (temp[r][c] == null) { allFilled = false; break }
-            }
-            if (allFilled) fullCols.add(c)
-        }
-
-        when {
-            fullRows.isNotEmpty() -> onUpdatePreviewClear(fullRows, true)
-            fullCols.isNotEmpty() -> onUpdatePreviewClear(fullCols, false)
-            else -> onUpdatePreviewClear(emptyList(), true)
-        }
+    val isGhostValid = remember(ghostPosition, dragState.draggedBlock, uiState.board) {
+        if (ghostPosition == null || dragState.draggedBlock == null) false
+        else isValidPlacement(uiState.board, dragState.draggedBlock!!, ghostPosition)
     }
 
     Surface(
@@ -238,6 +153,7 @@ fun GameScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Header expects onReset and onMenuClicked in your current definition
                 Header(
                     uiState = uiState,
                     onMenuClicked = { showMenuDialog = true }
@@ -261,7 +177,7 @@ fun GameScreen(
                                 .aspectRatio(1f)
                                 .fillMaxWidth()
                                 .offset(
-                                    x = GameSettings.gridOffsetX.floatValue.dp,
+                                    x = GameSettings.gridOffsetX.value.dp,
                                     y = (-25).dp
                                 )
                                 .onGloballyPositioned { coordinates ->
@@ -271,7 +187,7 @@ fun GameScreen(
                         ) {
                             com.betterblocks.animation.AnimatedGameBoard(
                                 board = uiState.board,
-                                gridSize = GRID_SIZE,
+                                gridSize = 9,
                                 cellDp = cellDp,
                                 ghostBlock = if (dragState.isDragging) dragState.draggedBlock else null,
                                 ghostOrigin = ghostPosition,
@@ -288,66 +204,67 @@ fun GameScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(GameSettings.availableBlocksRowHeight.floatValue.dp)
+                                .height(GameSettings.availableBlocksRowHeight.value.dp)
                                 .padding(horizontal = SCREEN_HORIZONTAL_PADDING),
 
                             contentAlignment = Alignment.Center
                         ) {
                             AvailableBlocks(
                                 uiState = uiState,
-                                onSelectBlock = onSelectBlock,
-                                onDragStart = { block: Block, previewCardOffset: Offset ->
-                                    Log.d("🚀 START", "Drag starting: ${block.name}")
-                                    onSelectBlock(block)
-                                    // FIX: Use the selected block from uiState, which has the correct rotation
-                                    val currentBlock = uiState.selectedBlock ?: block
-                                    val rotatedBlock = getRotatedBlock(currentBlock, uiState.rotation)
+                                onBlockInteraction = { block, interactionType ->
+                                    when (interactionType) {
+                                        InteractionType.TAP -> onSelectBlock(block)
+                                        InteractionType.DRAG_START -> onSelectBlock(block)
+                                    }
+                                },
+                                onDragStart = { block, previewCardOffset ->
+                                    Log.d("DRAG", "START block=${block.name} at window pos=$previewCardOffset")
+
+                                    // Compute drag offset so the block is centered under the finger regardless of rotation
+                                    val cellSizePx = with(density) { cellDp.toPx() }
+                                    val dragOffset = calculateDragOffset(block, cellSizePx)
+
                                     dragState = DragState(
                                         isDragging = true,
-                                        draggedBlock = rotatedBlock,
-                                        rawPosition = previewCardOffset
+                                        draggedBlock = block,
+                                        // Store finger position already adjusted so overlay/ghost can use it directly
+                                        fingerPosition = previewCardOffset + dragOffset
                                     )
                                 },
-                                onDrag = { dragAmount: Offset ->
-                                    val newRawPosition = dragState.rawPosition + dragAmount
-                                    // FIX: Ensure we use the rotated block for placement validation
-                                    val block = dragState.draggedBlock
-                                    var newSnappedTarget: GridCoordinate? = null
-
-                                    if (block != null && gridSizePx > 0) {
-                                        val adjustedDragPos = newRawPosition.copy(
-                                            x = newRawPosition.x + matchingDragOffsetXPx + placementCorrectionXPx,
-                                            // matching Y is applied as negative to position the block ABOVE the finger
-                                            y = newRawPosition.y - matchingDragOffsetYPx + placementCorrectionYPx
-                                        )
-
-                                        val calculatedPos = calculateGridPosition(
-                                            blockCenterPoint = adjustedDragPos,
-                                            gridTopLeft = gridTopLeft,
-                                            gridSizePx = gridSizePx,
-                                            gridSize = GRID_SIZE
-                                        )
-
-                                        if (calculatedPos != null && isValidPlacement(uiState.board, block, calculatedPos)) {
-                                            newSnappedTarget = GridCoordinate(calculatedPos.first, calculatedPos.second)
-                                        }
-                                    }
-
+                                onDrag = { dragAmount ->
+                                    // Update finger position as user drags
+                                    val newFingerPos = dragState.fingerPosition + dragAmount
                                     dragState = dragState.copy(
-                                        rawPosition = newRawPosition,
-                                        snappedTarget = newSnappedTarget
+                                        fingerPosition = newFingerPos
                                     )
                                 },
                                 onDragEnd = {
-                                    val target = dragState.snappedTarget
-                                    // FIX: Use the rotated block from the drag state
-                                    val block = dragState.draggedBlock
-                                    if (target != null && block != null) {
-                                        Log.d("🔍 DROP", "✅ Placing block at $target")
-                                        // The onGridCellClicked will use the ViewModel's state, which should be correct
-                                        onGridCellClicked(target.row, target.col)
+                                    Log.d("DRAG", "END at finger pos=${dragState.fingerPosition}")
+
+                                    // Offset drop position to match ghost/preview alignment (100dp up, 20dp right)
+                                    val ghostOffsetY = with(density) { 100.dp.toPx() }
+                                    val ghostOffsetX = with(density) { 20.dp.toPx() }
+                                    val adjustedFingerPos = dragState.fingerPosition.copy(
+                                        x = dragState.fingerPosition.x + ghostOffsetX,
+                                        y = dragState.fingerPosition.y - ghostOffsetY
+                                    )
+
+                                    val dropTarget = calculateGridPosition(
+                                        dragPos = adjustedFingerPos,
+                                        gridTopLeft = gridTopLeft,
+                                        gridSizePx = gridSizePx,
+                                        gridSize = 9,
+                                        visualOffsetX = 0f,
+                                        visualOffsetY = 0f
+                                    )
+
+                                    Log.d("DRAG", " dropTarget=$dropTarget")
+
+                                    if (dropTarget != null && dragState.draggedBlock != null) {
+                                        Log.d("DRAG", " VALID drop → placing ${dragState.draggedBlock!!.name}")
+                                        onGridCellClicked(dropTarget.first, dropTarget.second)
                                     } else {
-                                        Log.e("🔍 DROP", "❌ Drop failed. No valid target.")
+                                        Log.d("DRAG", " INVALID drop → ignoring")
                                     }
                                     dragState = DragState()
                                 }
@@ -370,49 +287,39 @@ fun GameScreen(
                         onUseRainbowImmediately = onUseRainbowImmediately,
                         onColorWipeClick = { showColorWheelDialog = true },
                         onDragStart = { block, previewCardOffset ->
-                             onSelectRainbow()
-                             // FIX: Use the rotated block for drag state
-                             val rotatedBlock = getRotatedBlock(block, uiState.rotation)
+                            val cellSizePx = with(density) { cellDp.toPx() }
+                            val dragOffset = calculateDragOffset(block, cellSizePx)
                             dragState = DragState(
                                 isDragging = true,
-                                draggedBlock = rotatedBlock,
-                                rawPosition = previewCardOffset
+                                draggedBlock = block,
+                                fingerPosition = previewCardOffset + dragOffset
                             )
                         },
                         onDrag = { dragAmount ->
-                            val newRawPosition = dragState.rawPosition + dragAmount
-                            // FIX: Use the rotated block from drag state
-                            val block = dragState.draggedBlock
-                            var newSnappedTarget: GridCoordinate? = null
-
-                            if (block != null && gridSizePx > 0) {
-                                val adjustedDragPos = newRawPosition.copy(
-                                    x = newRawPosition.x + matchingDragOffsetXPx + placementCorrectionXPx,
-                                    y = newRawPosition.y - matchingDragOffsetYPx + placementCorrectionYPx
-                                )
-                                val calculatedPos = calculateGridPosition(
-                                    blockCenterPoint = adjustedDragPos,
-                                    gridTopLeft = gridTopLeft,
-                                    gridSizePx = gridSizePx,
-                                    gridSize = GRID_SIZE
-                                )
-                                if (calculatedPos != null && isValidPlacement(uiState.board, block, calculatedPos)) {
-                                    newSnappedTarget = GridCoordinate(calculatedPos.first, calculatedPos.second)
-                                }
-                            }
+                            val newFingerPos = dragState.fingerPosition + dragAmount
                             dragState = dragState.copy(
-                                rawPosition = newRawPosition,
-                                snappedTarget = newSnappedTarget
+                                fingerPosition = newFingerPos
                             )
                         },
                         onDragEnd = {
-                            val target = dragState.snappedTarget
-                             // FIX: Use the rotated block from drag state
-                             val block = dragState.draggedBlock
-                            if (target != null && block != null) {
-                                onGridCellClicked(target.row, target.col)
-                            } else {
-                                Log.e("🔍 DROP [BottomBar]", "❌ NOT placing - conditions not met")
+                            // Offset drop position to match ghost/preview alignment (100dp up, 20dp right)
+                            val ghostOffsetY = with(density) { DRAG_OFFSET_Y.toPx() }
+                            val ghostOffsetX = with(density) { DRAG_OFFSET_X.toPx() }
+                            val adjustedFingerPos = dragState.fingerPosition.copy(
+                                x = dragState.fingerPosition.x + ghostOffsetX,
+                                y = dragState.fingerPosition.y - ghostOffsetY
+                            )
+
+                            val dropTarget = calculateGridPosition(
+                                dragPos = adjustedFingerPos,
+                                gridTopLeft = gridTopLeft,
+                                gridSizePx = gridSizePx,
+                                gridSize = 9,
+                                visualOffsetX = 0f,
+                                visualOffsetY = 0f
+                            )
+                            if (dropTarget != null && dragState.draggedBlock != null) {
+                                onGridCellClicked(dropTarget.first, dropTarget.second)
                             }
                             dragState = DragState()
                         }
@@ -429,7 +336,7 @@ fun GameScreen(
                             exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
                         ) {
                             Card(
-                                colors = CardDefaults.cardColors(containerColor = CoinGold),
+                                colors = CardDefaults.cardColors(containerColor = Pink_Jackie),
                                 elevation = CardDefaults.cardElevation(8.dp),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
@@ -458,28 +365,37 @@ fun GameScreen(
                 }
             }
 
-            if (dragState.isDragging && dragState.draggedBlock!= null) {
-    Box(
-        modifier = Modifier
-            // OPTIMIZATION: Use graphicsLayer instead of offset.
-            //.offset() triggers a Layout Pass (expensive).
-            //.graphicsLayer triggers only a Draw Pass (cheap, GPU accelerated).
-            // This is essential for 120Hz smoothness and fixing the "Speed" issue.
-           .graphicsLayer {
-                // Visual preview uses visual offsets (block appears above finger)
-                translationX = dragState.rawPosition.x + visualDragOffsetXPx
-                translationY = dragState.rawPosition.y - visualDragOffsetYPx
-                scaleX = GameSettings.draggedBlockScale.floatValue
-                scaleY = GameSettings.draggedBlockScale.floatValue
+            // --- Drag Overlay ---
+            // Dragged block appears 100dp above the user's finger for natural placement feel
+            if (dragState.isDragging && dragState.draggedBlock != null) {
+                val block = dragState.draggedBlock!!
+                val previewCellSize = cellDp
+
+                // Convert finger position from window to root coordinates
+                val rootFingerPos = dragState.fingerPosition - rootTopLeft
+
+                // Because dragState.fingerPosition is already the block center, just apply any fine-tuning
+                val blockX = rootFingerPos.x + dragOffsetXPx
+                val blockY = rootFingerPos.y - dragOffsetYPx
+
+                Box(
+                    modifier = Modifier
+                        .graphicsLayer {
+                            translationX = blockX
+                            translationY = blockY
+                        }
+                        .zIndex(999f)
+                        .scale(1.0f)
+                ) {
+                    // Important: use the same composable and spacing as the real board
+                    BlockGrid(
+                        block = block,
+                        cellSize = previewCellSize,
+
+                        )
+
+                }
             }
-           .zIndex(10f) // Ensure it renders on top of everything
-    ) {
-        BlockGrid(
-            block = dragState.draggedBlock!!,
-            cellSize = cellDp
-        )
-    }
-}
 
             if (uiState.isLastChance) {
                 LastChanceDialog(
@@ -641,6 +557,7 @@ fun GameScreenPreview() {
             onUseRainbowImmediately = {},
             onColorWipeSpinResult = {},
             onDismissTierPromotion = {},
+            onShareTier = {},
             onDismissRainbowEarned = {},
             onDismissPurchaseSuccess = {},
             onClearCoinAnimation = {},
@@ -675,7 +592,7 @@ fun TierPromotionDialog(
         },
         confirmButton = {
             TextButton(onClick = onShare) {
-                Text("Share", color = CoinGold, fontFamily = Oswald)
+                Text("Share", color = Pink_Jackie, fontFamily = Oswald)
             }
         },
         dismissButton = {

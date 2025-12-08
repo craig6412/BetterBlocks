@@ -118,7 +118,7 @@ fun GameOverSummaryDialog(
                             fontFamily = Oswald,
                             fontSize = 36.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isNewHighScore) CoinGold else LightText,
+                            color = if (isNewHighScore) Pink_Jackie else LightText,
                             textAlign = TextAlign.Center
                         )
 
@@ -128,7 +128,7 @@ fun GameOverSummaryDialog(
                                 fontFamily = Oswald,
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = CoinGold,
+                                color = Pink_Jackie,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -161,7 +161,7 @@ fun GameOverSummaryDialog(
                                 StatRow(
                                     label = "High Score",
                                     value = highScore.toString(),
-                                    color = CoinGold,
+                                    color = Pink_Jackie,
                                     highlight = false
                                 )
 
@@ -183,7 +183,7 @@ fun GameOverSummaryDialog(
                                 StatRow(
                                     label = "Coins Earned",
                                     value = coinsEarned.toString(),
-                                    color = CoinGold,
+                                    color = Pink_Jackie,
                                     highlight = false,
                                     icon = "💰"
                                 )

@@ -15,12 +15,15 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(
     initialSoundEnabled: Boolean,
     initialHapticEnabled: Boolean,
+    initialDarkTheme: Boolean,
     onToggleSound: () -> Unit,
     onToggleHaptic: () -> Unit,
+    onToggleTheme: () -> Unit,
     onBack: () -> Unit
 ) {
     var soundEnabled by remember { mutableStateOf(initialSoundEnabled) }
     var hapticEnabled by remember { mutableStateOf(initialHapticEnabled) }
+    var darkTheme by remember { mutableStateOf(initialDarkTheme) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -42,6 +45,29 @@ fun SettingsScreen(
             )
 
             Spacer(modifier = Modifier.height(30.dp))
+
+            // THEME TOGGLE
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (darkTheme) "Dark Theme" else "Light Theme",
+                    color = LightText,
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Switch(
+                    checked = darkTheme,
+                    onCheckedChange = {
+                        darkTheme = it
+                        onToggleTheme()
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
 
             // SOUND TOGGLE
             Row(

@@ -406,7 +406,7 @@ fun AnimatedGameBoard(
     val density = LocalDensity.current
     val cellSizePx = with(density) { cellDp.toPx() }
 
-    // ⭐ NEW ULTRA ANIMATOR - now driven by the effect layer
+    // ⭐ ULTRA ANIMATOR – now driven by the clearingCells state from GameUiState
     // Apply slower speed when color wipe is active
     val animationSpeed = if (uiState.isColorWipeAnimating) {
         com.betterblocks.COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER
@@ -415,8 +415,8 @@ fun AnimatedGameBoard(
     }
 
     val lineClearAnimState = rememberLineClearAnimationState(
-        clearingCells = effectCells,
-        isFullBoardClear = effectCells.size == gridSize * gridSize,
+        clearingCells = uiState.clearingCells,
+        isFullBoardClear = uiState.isRainbowWipeActive,
         gridSize = gridSize,
         animationSpeedMultiplier = animationSpeed
     )

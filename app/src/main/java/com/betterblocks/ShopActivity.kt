@@ -36,6 +36,9 @@ import com.betterblocks.ui.theme.BetterBlocksTheme
 import java.util.*
 import java.util.concurrent.TimeUnit
 
+
+
+
 class ShopActivity : ComponentActivity() {
 
     private lateinit var billingManager: BillingManager
@@ -184,7 +187,7 @@ class ShopActivity : ComponentActivity() {
     }
 
     /**
-     * Handle purchasing trophy tiers (Platinum, Diamond, God)
+     * Handle purchasing trophy tiers (Platinum, Diamond, Elite)
      * NOTE: Coin purchases can SKIP tiers (don't need sequential unlock)
      * Sequential unlock only applies to score-based progression
      */
@@ -202,7 +205,7 @@ class ShopActivity : ComponentActivity() {
         }
 
         // COIN PURCHASES CAN SKIP TIERS - No sequential requirement!
-        // You can buy God tier directly if you have 250,000 coins
+        // You can buy Elite tier directly if you have 250,000 coins
 
         if (currentCoins >= cost) {
             // Deduct coins
@@ -300,7 +303,7 @@ fun ShopScreen(
             coinAmount = 400000,
             price = "$400.00",
             imageResId = R.drawable.shop_coins_mega,
-            badge = "GOD MODE"
+            badge = "Elite MODE"
         )
     )
 
@@ -341,11 +344,11 @@ fun ShopScreen(
         ))
     }
 
-    if (currentTier.ordinal < TrophyTier.GOD.ordinal) {
+    if (currentTier.ordinal < TrophyTier.ELITE.ordinal) {
         trophyItems.add(TrophyShopItem(
-            tier = TrophyTier.GOD,
+            tier = TrophyTier.ELITE,
             cost = 250000,
-            description = "Unlock God Trophy Tier"
+            description = "Unlock Elite Trophy Tier"
         ))
     }
 
@@ -383,7 +386,7 @@ fun ShopScreen(
                     Spacer(Modifier.width(4.dp))
                     Text(
                         String.format("%,d", currentCoins),
-                        color = CoinGold,
+                        color = GoldCoin,
                         fontFamily = Oswald,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -441,10 +444,10 @@ fun ShopScreen(
 fun CompactCoinCard(item: ShopItem, onPurchase: (String) -> Unit, modifier: Modifier = Modifier) {
     Card(
         onClick = { onPurchase(item.id) },
-        shape = RoundedCornerShape(12.dp), // Slightly more rounded
-        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(0.7f)), // More opaque
-        border = if (item.badge != null) BorderStroke(2.dp, CoinGold.copy(0.7f)) else BorderStroke(1.dp, DeepBlue.copy(0.3f)), // Gold border for premium packs
-        elevation = CardDefaults.cardElevation(6.dp), // Add elevation
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(0.7f)),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
+        elevation = CardDefaults.cardElevation(6.dp),
         modifier = modifier.height(115.dp)
     ) {
         Column(
@@ -465,7 +468,7 @@ fun CompactCoinCard(item: ShopItem, onPurchase: (String) -> Unit, modifier: Modi
             // Coin Amount - bigger and bolder
             Text(
                 String.format("%,d", item.coinAmount),
-                color = CoinGold,
+                color = GoldCoin,
                 fontSize = 16.sp, // Increased from 15sp
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = Oswald
@@ -494,10 +497,10 @@ fun CompactPowerUpCard(
     Card(
         onClick = { if (canAfford) onPurchase(item.id, item.cost) },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(0.7f)), // More opaque
-        border = BorderStroke(2.dp, if (canAfford) SuccessGreen.copy(0.6f) else Color.Gray.copy(0.4f)), // Thicker border
-        elevation = CardDefaults.cardElevation(6.dp), // Add elevation
-        modifier = modifier.height(110.dp) // Slightly taller
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(0.7f)),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
+        elevation = CardDefaults.cardElevation(6.dp),
+        modifier = modifier.height(110.dp)
     ) {
         Column(
             Modifier.fillMaxSize().padding(12.dp), // More padding
@@ -520,7 +523,7 @@ fun CompactPowerUpCard(
             // Price - more prominent
             Text(
                 "${String.format("%,d", item.cost)} 💰",
-                color = if (canAfford) CoinGold else Color.Gray,
+                color = if (canAfford) Pink_Jackie else Color.Gray,
                 fontSize = 14.sp, // Increased from 13sp
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = Oswald
@@ -541,9 +544,9 @@ fun CompactTrophyCard(
     Card(
         onClick = { if (canAfford) onPurchase(item.tier, item.cost) },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(0.8f)), // More opaque
-        border = BorderStroke(2.dp, if (canAfford) trophyColor.copy(0.7f) else Color.Gray.copy(0.4f)), // Thicker border
-        elevation = CardDefaults.cardElevation(8.dp), // More elevation for premium feel
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(0.8f)),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
+        elevation = CardDefaults.cardElevation(8.dp),
         modifier = Modifier.fillMaxWidth().height(55.dp) // Slightly taller
     ) {
         Row(
@@ -678,7 +681,7 @@ fun TrophyTiersPage(
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "All Trophies Unlocked!",
-                    color = CoinGold,
+                    color = Pink_Jackie,
                     fontFamily = Oswald,
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
@@ -724,7 +727,7 @@ fun LargeCoinPackCard(
         colors = CardDefaults.cardColors(
             containerColor = if (hasBadge) DeepBlue.copy(alpha = 0.9f) else DeepBlue.copy(alpha = 0.6f)
         ),
-        border = if (hasBadge) BorderStroke(2.dp, CoinGold.copy(alpha = 0.6f)) else BorderStroke(1.dp, DeepBlue),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(8.dp),
         modifier = modifier.height(180.dp)
     ) {
@@ -759,7 +762,7 @@ fun LargeCoinPackCard(
             // Coin Amount
             Text(
                 text = String.format("%,d", item.coinAmount),
-                color = CoinGold,
+                color = Pink_Jackie,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald
@@ -794,10 +797,8 @@ fun LargePowerUpCard(
     Card(
         onClick = { if (canAfford) onPurchase() },
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.8f)
-        ),
-        border = BorderStroke(2.dp, if (canAfford) SuccessGreen.copy(alpha = 0.6f) else Color.Gray.copy(alpha = 0.3f)),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.8f)),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(8.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -844,7 +845,7 @@ fun LargePowerUpCard(
 
             // Price
             Surface(
-                color = if (canAfford) CoinGold else Color.Gray,
+                color = if (canAfford) Pink_Jackie else Color.Gray,
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text(
@@ -872,10 +873,8 @@ fun LargeTrophyCard(
     Card(
         onClick = { if (canAfford) onPurchase() },
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.85f)
-        ),
-        border = BorderStroke(2.dp, if (canAfford) trophyColor.copy(alpha = 0.7f) else Color.Gray.copy(alpha = 0.3f)),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.85f)),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(10.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -938,20 +937,7 @@ fun LargeTrophyCard(
     }
 }
 
-// --- COMPACT COMPOSABLE COMPONENTS ---
-
-@Composable
-fun CompactSectionHeader(title: String) {
-    Text(
-        text = title,
-        color = LightText,
-        fontFamily = Oswald,
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.fillMaxWidth(),
-        textAlign = TextAlign.Center
-    )
-}
+// Compact secondary components
 
 @Composable
 fun CompactCoinPackCard(
@@ -967,7 +953,7 @@ fun CompactCoinPackCard(
         colors = CardDefaults.cardColors(
             containerColor = if (hasBadge) DeepBlue.copy(alpha = 0.9f) else DeepBlue.copy(alpha = 0.6f)
         ),
-        border = if (hasBadge) BorderStroke(1.5.dp, CoinGold.copy(alpha = 0.5f)) else null,
+        border = BorderStroke(1.5.dp, Pink_Jackie.copy(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(6.dp),
         modifier = modifier.height(100.dp)
     ) {
@@ -999,7 +985,7 @@ fun CompactCoinPackCard(
 
             Text(
                 text = String.format("%,d", item.coinAmount),
-                color = CoinGold,
+                color = Pink_Jackie,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald
@@ -1034,12 +1020,10 @@ fun CompactPowerUpCard(
     Card(
         onClick = { if (canAfford) onPurchase() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.7f)
-        ),
-        border = BorderStroke(1.5.dp, if (canAfford) SuccessGreen.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.3f)),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.7f)),
+        border = BorderStroke(1.5.dp, Pink_Jackie.copy(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(4.dp),
-        modifier = modifier.height(110.dp) // Increased from 100dp to 110dp
+        modifier = modifier.height(110.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1064,7 +1048,7 @@ fun CompactPowerUpCard(
             )
 
             Surface(
-                color = if (canAfford) CoinGold else Color.Gray,
+                color = if (canAfford) Pink_Jackie else Color.Gray,
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
@@ -1093,14 +1077,10 @@ fun CompactTrophyCard(
     Card(
         onClick = { if (canAfford) onPurchase() },
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.8f)
-        ),
-        border = BorderStroke(1.5.dp, if (canAfford) trophyColor.copy(alpha = 0.6f) else Color.Gray.copy(alpha = 0.3f)),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.8f)),
+        border = BorderStroke(1.5.dp, Pink_Jackie.copy(alpha = 0.9f)),
         elevation = CardDefaults.cardElevation(6.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(70.dp)
+        modifier = Modifier.fillMaxWidth().height(70.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1157,29 +1137,7 @@ fun CompactTrophyCard(
     }
 }
 
-// Keep existing large card components for fallback
-@Composable
-fun SectionHeader(title: String, description: String) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = title,
-            color = LightText,
-            fontFamily = Oswald,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = description,
-            color = LightText.copy(alpha = 0.7f),
-            fontFamily = Oswald,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
+// --- LEGACY FULL-SIZE CARDS ---
 
 @Composable
 fun PowerUpCard(
@@ -1191,19 +1149,12 @@ fun PowerUpCard(
     val scale = remember { Animatable(1f) }
 
     Card(
-        onClick = {
-            if (canAfford) onPurchase()
-        },
+        onClick = { if (canAfford) onPurchase() },
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(2.dp, if (canAfford) SuccessGreen else Color.Gray.copy(alpha = 0.3f)),
-        colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.6f)
-        ),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.6f)),
         elevation = CardDefaults.cardElevation(6.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(90.dp)
-            .scale(scale.value)
+        modifier = Modifier.fillMaxWidth().height(90.dp).scale(scale.value)
     ) {
         Row(
             modifier = Modifier
@@ -1242,7 +1193,7 @@ fun PowerUpCard(
 
             // Price Button
             Surface(
-                color = if (canAfford) CoinGold else Color.Gray,
+                color = if (canAfford) Pink_Jackie else Color.Gray,
                 shape = RoundedCornerShape(50),
                 modifier = Modifier.wrapContentSize()
             ) {
@@ -1269,18 +1220,12 @@ fun TrophyPurchaseCard(
     val trophyColor = trophyColorForTier(item.tier)
 
     Card(
-        onClick = {
-            if (canAfford) onPurchase()
-        },
+        onClick = { if (canAfford) onPurchase() },
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(2.dp, if (canAfford) trophyColor else Color.Gray.copy(alpha = 0.3f)),
-        colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.8f)
-        ),
+        border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f)),
+        colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.8f)),
         elevation = CardDefaults.cardElevation(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(100.dp)
+        modifier = Modifier.fillMaxWidth().height(100.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1405,7 +1350,7 @@ fun SeasonTimer() {
 @Composable
 fun ShopItemCard(item: ShopItem, onPurchase: () -> Unit) {
     val isSpecial = item.badge != null
-    val border = if (isSpecial) BorderStroke(2.dp, CoinGold) else BorderStroke(1.dp, DeepBlue)
+    val border = BorderStroke(2.dp, Pink_Jackie.copy(alpha = 0.9f))
     val background = if (isSpecial) DeepBlue.copy(alpha = 0.8f) else DeepBlue.copy(alpha = 0.4f)
 
     Card(
@@ -1465,7 +1410,7 @@ fun ShopItemCard(item: ShopItem, onPurchase: () -> Unit) {
 
             // Price Button
             Surface(
-                color = if (isSpecial) CoinGold else SuccessGreen,
+                color = if (isSpecial) Pink_Jackie else SuccessGreen,
                 shape = RoundedCornerShape(50),
                 modifier = Modifier.wrapContentSize()
             ) {

@@ -25,12 +25,17 @@ android {
                 "proguard-rules.pro"
             )
             buildConfigField("String", "BANNER_AD_UNIT_ID", "\"ca-app-pub-1555261975639574/3521751106\"")
-            buildConfigField("String", "REWARDED_AD_UNIT_ID", "\"ca-app-pub-1555261975639574/7839435910\"")
+            // NEW: Use the dedicated Free Coins Rewarded Ad Unit
+            buildConfigField("String", "REWARDED_AD_UNIT_ID", "\"ca-app-pub-1555261975639574/7944945337\"")
+            // INTERSTITIAL kept separate; use the new dedicated interstitial unit provided
+            buildConfigField("String", "INTERSTITIAL_AD_UNIT_ID", "\"ca-app-pub-1555261975639574/4085591370\"")
         }
         debug {
             // DEBUG keeps defaults; BuildConfig.DEBUG stays true
             buildConfigField("String", "BANNER_AD_UNIT_ID", "\"ca-app-pub-3940256099942544/6300978111\"")
+            // Use Google test IDs for debug builds
             buildConfigField("String", "REWARDED_AD_UNIT_ID", "\"ca-app-pub-3940256099942544/5224354917\"")
+            buildConfigField("String", "INTERSTITIAL_AD_UNIT_ID", "\"ca-app-pub-3940256099942544/1033173712\"")
         }
     }
 
@@ -106,6 +111,7 @@ dependencies {
 
 // Firebase Auth (optional for identifying users)
     implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.ads.mediation:unity:4.9.2.0")
 
 
     // --- View-system libraries required by existing XML layouts ---

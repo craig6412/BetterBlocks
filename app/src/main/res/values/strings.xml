@@ -2,7 +2,8 @@
     <string name="app_name">Better Blocks</string>
     <string name="admob_app_id">ca-app-pub-1555261975639574~5692511072</string>
     <string name="admob_banner_release_id">ca-app-pub-1555261975639574/3521751106</string>
-    <string name="admob_rewarded_release_id">ca-app-pub-1555261975639574/7839435910</string>
+    <!-- NEW: Free Coins Rewarded Ad Unit -->
+    <string name="admob_rewarded_release_id">ca-app-pub-1555261975639574/7944945337</string>
     <string name="admob_banner_test_id">ca-app-pub-3940256099942544/6300978111</string>
     <string name="admob_rewarded_test_id">ca-app-pub-3940256099942544/5224354917</string>
 </resources>

@@ -346,7 +346,7 @@ fun DailyRewardProgressCard(
                     )
                     Text(
                         text = "$currentStreak ${if (currentStreak == 1) "day" else "days"}",
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         fontFamily = Oswald,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -421,7 +421,7 @@ fun SeasonInfoCard(daysRemaining: Long, hoursRemaining: Long) {
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = DeepBlue.copy(alpha = 0.7f)),
         elevation = CardDefaults.cardElevation(6.dp),
-        border = BorderStroke(1.dp, CoinGold.copy(alpha = 0.5f))
+        border = BorderStroke(1.dp, Pink_Jackie.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier
@@ -455,7 +455,7 @@ fun SeasonInfoCard(daysRemaining: Long, hoursRemaining: Long) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = daysRemaining.toString(),
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         fontFamily = Oswald,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold
@@ -478,7 +478,7 @@ fun SeasonInfoCard(daysRemaining: Long, hoursRemaining: Long) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = hoursRemaining.toString(),
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         fontFamily = Oswald,
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold
@@ -555,7 +555,7 @@ fun InventoryItem(icon: String, label: String, count: Int) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = count.toString(),
-            color = CoinGold,
+            color = Pink_Jackie,
             fontFamily = Oswald,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold

@@ -403,7 +403,7 @@ fun PurchaseSuccessDialog(
                                 text = "You received ${String.format("%,d", coinsAwarded)} coins!",
                                 fontFamily = Oswald,
                                 fontSize = 18.sp,
-                                color = CoinGold,
+                                color = Pink_Jackie,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -414,7 +414,7 @@ fun PurchaseSuccessDialog(
                     Button(
                         onClick = onDismiss,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CoinGold
+                            containerColor = Pink_Jackie
                         ),
                         shape = RoundedCornerShape(18.dp)
                     ) {
@@ -550,7 +550,7 @@ fun FloatingCoinReward(
                 fontFamily = Oswald,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = CoinGold,
+                color = Pink_Jackie,
                 modifier = Modifier
                     .background(
                         color = DarkBackground.copy(alpha = 0.8f),

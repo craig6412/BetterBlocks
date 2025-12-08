@@ -112,7 +112,7 @@ fun DailyRewardDialog(
                         fontFamily = Oswald,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CoinGold,
+                        color = Pink_Jackie,
                         textAlign = TextAlign.Center
                     )
 
@@ -137,7 +137,7 @@ fun DailyRewardDialog(
                                 modifier = Modifier
                                     .size(100.dp * glowScale)
                                     .background(
-                                        color = CoinGold.copy(alpha = glowAlpha),
+                                        color = Pink_Jackie.copy(alpha = glowAlpha),
                                         shape = androidx.compose.foundation.shape.CircleShape
                                     )
                             )
@@ -190,7 +190,7 @@ fun DailyRewardDialog(
                                 fontFamily = Oswald,
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = CoinGold
+                                color = Pink_Jackie
                             )
                         }
 
