@@ -436,11 +436,12 @@ fun AnimatedGameBoard(
     Box(
         modifier = Modifier
             .size(totalBoardSize)
+            .offset(y = 10.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(BoardBackground)
             .border(
                 width = 3.dp,
-                color = Color.White.copy(alpha = 0.15f),
+                color = Color(0xFF9C27B0), // Blue
                 shape = RoundedCornerShape(8.dp)
             )
     ) {

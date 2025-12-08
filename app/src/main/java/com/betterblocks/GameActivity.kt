@@ -1,6 +1,7 @@
 package com.betterblocks
 
 import android.os.Bundle
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.betterblocks.ads.AdManager
 import com.betterblocks.ui.GameScreen
@@ -17,6 +20,12 @@ import com.betterblocks.ui.theme.BetterBlocksTheme
 class GameActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Set navigation bar color and icon style
+        window.decorView.post {
+            window.navigationBarColor = 0xFF0F0C15.toInt() // Midnight Void
+            WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = false // Light icons
+        }
+
         setContent {
             BetterBlocksTheme {
                 Surface(

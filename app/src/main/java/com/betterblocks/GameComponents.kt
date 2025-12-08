@@ -214,7 +214,7 @@ fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
         Text(
             text = "SPECIAL CHARGE",
             color = LightText.copy(alpha = 0.9f),
-            fontSize = 10.sp,
+            fontSize = 14.sp,
             fontFamily = Oswald,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 2.dp)
