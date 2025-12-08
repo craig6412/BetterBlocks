@@ -63,15 +63,15 @@ import kotlinx.coroutines.coroutineScope
 import kotlin.math.roundToInt
 
 // --- CONSTANTS & COLORS ---
-val DeepBlue = Color(0xFF05072C)
-val DarkBackground = Color(0xFF0B0E3A)
-val BoardBackground = Color(0xFF0A031A)
-val LightText = Color(0xFFFFFFFF)
-val Pink_Jackie = Color(0xFFA21EE9)
-val SpecialPurple = Color(0xFF9C27B0)
-val SuccessGreen = Color(0xFF0D6712)
+val DeepBlue = Color(0xFF261157)           // Main Background: Midnight Void
+val DarkBackground = Color(0xFF08060B)     // Game Grid / Empty Slots: Abyssal Purple
+val BoardBackground = Color(0xFF08060B)    // Match grid background to Abyssal Purple
+val LightText = Color(0xFFF2E7FE)          // All Text/Labels: Ice White
+val Pink_Jackie = Color(0xFFD500F9)        // Special Charge / accent: Neon Cyber-Violet
+val SpecialPurple = Color(0xFF311B92)      // Power-up Buttons: Deep Indigo
+val SuccessGreen = Color(0xFF2C78B7)       // Keep semantics but align to text color for now
 
-val GoldCoin = Color(0xFFCDDC39)
+val GoldCoin = Color(0xFFF2E7FE)           // Coins text/icons now Ice White for contrast
 
 
 
@@ -224,13 +224,14 @@ fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
                 .fillMaxWidth(0.8f)
                 .height(8.dp)
                 .clip(RoundedCornerShape(4.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
+                .background(Color(0xFF2A0E45)) // Charge Bar (Empty Track): Dark Track
                 .border(1.dp, Pink_Jackie.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(animatedProgress)
+                    .background(Color(0xFFD500F9)) // Special Charge Bar (Active): Neon Cyber-Violet
                     .clip(RoundedCornerShape(4.dp))
             )
         }
@@ -257,8 +258,17 @@ fun BlockPreviewCard(
     val currentOnDrag = rememberUpdatedState(onDrag)
     val currentOnDragEnd = rememberUpdatedState(onDragEnd)
 
+    val cardShape = RoundedCornerShape(8.dp)
+
+    // Border color: lavender normally, turquoise blue when selected
+    val previewBorderColor = if (isSelected) {
+        Color(0xFF00E5FF) // turquoise blue when selected
+    } else {
+        Color(0xFF7F5AF0) // lavender when not selected
+    }
+
     Card(
-        shape = RoundedCornerShape(8.dp),
+        shape = cardShape,
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = modifier
             .size(80.dp)
@@ -279,15 +289,19 @@ fun BlockPreviewCard(
                 )
             })
     ) {
-        // Outer frame: semi-transparent colored box with selection color
+        // Piece preview container: glass background + conditional border color
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer { alpha = 0.6f } // 60% opacity only for the frame
                 .background(
-                    color = if (isSelected) Color(0xFF3B82F6) else Pink_Jackie,
-                    shape = RoundedCornerShape(8.dp)
+                    color = Color(0x264A148C),      // Piece Container: low-opacity purple glass
+                    shape = cardShape
+                )
+                .border(
+                    width = 2.dp,
+                    color = previewBorderColor,
+                    shape = cardShape
                 )
                 .padding(6.dp)
         ) {
@@ -298,7 +312,7 @@ fun BlockPreviewCard(
                 modifier = Modifier.graphicsLayer(
                     scaleX = 0.9f,
                     scaleY = 0.9f,
-                    alpha = 1f // ensure block image itself is not transparent
+                    alpha = 1f
                 )
             )
         }
@@ -417,12 +431,9 @@ fun ColorWipeButton(
     count: Int,
     onClick: () -> Unit
 ) {
-    // Static button: Always visible even if count is 0
-
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Count Badge
         Surface(
             color = Pink_Jackie,
             shape = RoundedCornerShape(50),
@@ -440,28 +451,26 @@ fun ColorWipeButton(
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Button
         Box(
             modifier = Modifier
                 .size(GameSettings.bottomBarButtonSize.value.dp)
                 .scale(GameSettings.bottomBarIconScale.value)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF7A2DF5)) // Purple BG
+                .background(Color(0x4D4A148C)) // Piece Container / Holder: Purple Glass (30% opacity)
                 .border(
                     width = 3.dp,
-                    color = Color.White.copy(alpha = 0.35f),
+                    color = Color(0x407F5AF0),   // Grid Lines / accent: Faint Lavender (25% opacity)
                     shape = RoundedCornerShape(16.dp)
                 )
                 .safeClickable { onClick() },
             contentAlignment = Alignment.Center
         ) {
 
-            // ⬇️ The new palette icon from drawable
             Image(
                 painter = painterResource(id = R.drawable.ic_palette_colorwipe),
                 contentDescription = "Color Wipe",
                 modifier = Modifier
-                    .fillMaxSize(0.75f)      // scale inside button
+                    .fillMaxSize(0.75f)
                     .aspectRatio(1f),
                 contentScale = ContentScale.Fit
             )
@@ -637,7 +646,6 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Badge ABOVE button
         Surface(
             color = Pink_Jackie,
             shape = RoundedCornerShape(50),
@@ -655,16 +663,15 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // The actual rotation button
         Box(
             modifier = Modifier
                 .size(GameSettings.bottomBarButtonSize.value.dp)
                 .scale(GameSettings.bottomBarIconScale.value)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFE91E63))
+                .background(Color(0xFF311B92)) // Power-up Buttons: Deep Indigo
                 .border(
                     width = 3.dp,
-                    color = Color.White.copy(alpha = 0.35f),
+                    color = Color(0x407F5AF0),   // Faint Lavender edge
                     shape = RoundedCornerShape(16.dp)
                 )
                 .safeClickable { if (isRotationEnabled) onRotateBlock() },

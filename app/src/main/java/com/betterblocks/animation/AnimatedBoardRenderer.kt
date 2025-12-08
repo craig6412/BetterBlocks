@@ -35,11 +35,10 @@ import androidx.compose.ui.graphics.drawscope.translate
 import kotlin.math.cos
 import kotlin.math.sin
 
+// Core palette for Cyber-Void theme
+private val GridPurple = Color(0xFF08060B)             // Game Grid / Empty Slots: Abyssal Purple
+private val GridLineColor = Color(0x407F5AF0)         // Grid Lines: Faint Lavender (25% opacity)
 
-
-
-
-private val GridPurple = Color(0xFF9C27B0)
 // --------------------------------------------------------------------------
 // EPIC LIGHTNING SWEEP OVERLAY - Multi-layered energy wave effect
 // --------------------------------------------------------------------------
@@ -403,7 +402,8 @@ fun AnimatedGameBoard(
     isGhostValid: Boolean = false,
     onCellClick: (row: Int, col: Int) -> Unit,
     uiState: GameUiState,
-    effectCells: Set<Coord>
+    effectCells: Set<Coord>,
+    onClearAnimationFinished: () -> Unit
 ) {
     Log.d("BoardRender", "Using ULTRA animation system (clearing=${effectCells.size})")
 
@@ -423,7 +423,8 @@ fun AnimatedGameBoard(
         clearingCells = uiState.clearingCells,
         isFullBoardClear = uiState.isRainbowWipeActive,
         gridSize = gridSize,
-        animationSpeedMultiplier = animationSpeed
+        animationSpeedMultiplier = animationSpeed,
+        onAnimationComplete = onClearAnimationFinished
     )
 
 // Detect rows/columns that WILL clear if placed now
@@ -497,7 +498,7 @@ fun AnimatedGameBoard(
         // LAYER 1.5 — GRID LINES (drawn over tiles)
         Canvas(modifier = Modifier.fillMaxSize()) {
             val strokeWidth = 2.dp.toPx()
-            val lineColor = GridPurple.copy(alpha = 0.20f)
+            val lineColor = GridLineColor
 
             val cellPx = cellDp.toPx()
             val boardPx = cellPx * gridSize
