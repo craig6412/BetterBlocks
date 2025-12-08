@@ -35,6 +35,11 @@ import androidx.compose.ui.graphics.drawscope.translate
 import kotlin.math.cos
 import kotlin.math.sin
 
+
+
+
+
+private val GridPurple = Color(0xFF9C27B0)
 // --------------------------------------------------------------------------
 // EPIC LIGHTNING SWEEP OVERLAY - Multi-layered energy wave effect
 // --------------------------------------------------------------------------
@@ -485,6 +490,37 @@ fun AnimatedGameBoard(
                     tintColor = previewTintColor.copy(alpha = 0.65f),
                     isPreviewTinted = isPreviewTinted,
                     onCellClick = { onCellClick(r, c) }
+                )
+            }
+        }
+
+        // LAYER 1.5 — GRID LINES (drawn over tiles)
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = 2.dp.toPx()
+            val lineColor = GridPurple.copy(alpha = 0.20f)
+
+            val cellPx = cellDp.toPx()
+            val boardPx = cellPx * gridSize
+
+            // Vertical grid lines
+            for (c in 1 until gridSize) {
+                val x = c * cellPx
+                drawLine(
+                    color = lineColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x, boardPx),
+                    strokeWidth = strokeWidth
+                )
+            }
+
+            // Horizontal grid lines
+            for (r in 1 until gridSize) {
+                val y = r * cellPx
+                drawLine(
+                    color = lineColor,
+                    start = Offset(0f, y),
+                    end = Offset(boardPx, y),
+                    strokeWidth = strokeWidth
                 )
             }
         }

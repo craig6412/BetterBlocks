@@ -65,9 +65,9 @@ import kotlin.math.roundToInt
 // --- CONSTANTS & COLORS ---
 val DeepBlue = Color(0xFF05072C)
 val DarkBackground = Color(0xFF0B0E3A)
-val BoardBackground = Color(0xFF2B2F5D)
+val BoardBackground = Color(0xFF0A031A)
 val LightText = Color(0xFFFFFFFF)
-val Pink_Jackie = Color(0xFFE91E63)
+val Pink_Jackie = Color(0xFFA21EE9)
 val SpecialPurple = Color(0xFF9C27B0)
 val SuccessGreen = Color(0xFF0D6712)
 
@@ -231,7 +231,6 @@ fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(animatedProgress)
-                    .background(Pink_Jackie.copy(alpha = 0.8f))
                     .clip(RoundedCornerShape(4.dp))
             )
         }
@@ -249,11 +248,9 @@ fun BlockPreviewCard(
     modifier: Modifier = Modifier
 ) {
     // Capture the absolute screen position of the card to use as the drag anchor.
-    // Key the remembered state by block.id so Compose won't reuse the same state for different blocks
     var cardOffsetInRoot by remember(block.id) { mutableStateOf(Offset.Zero) }
 
-    // Ensure drag callbacks and block reference always see the latest values,
-    // even if the pointerInput lambda itself isn't recreated.
+    // Always-up-to-date references for lambdas and block
     val currentBlock = rememberUpdatedState(block)
     val currentOnClick = rememberUpdatedState(onClick)
     val currentOnDragStart = rememberUpdatedState(onDragStart)
@@ -264,71 +261,46 @@ fun BlockPreviewCard(
         shape = RoundedCornerShape(8.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         modifier = modifier
-           .size(80.dp)
-           .onGloballyPositioned { layoutCoordinates ->
+            .size(80.dp)
+            .onGloballyPositioned { layoutCoordinates ->
                 cardOffsetInRoot = layoutCoordinates.localToWindow(Offset.Zero)
             }
-            // Apply visual/layout modifiers first, then attach the gesture detector using a stable key
-           .then(Modifier.pointerInput(block.id) {
+            .then(Modifier.pointerInput(block.id) {
                 detectDragOrClick(
                     onDragStart = {
-                        // Start the drag anchored at the Card's position, not the touch position.
-                        // This prevents the block from "jumping" to the finger center instantly.
                         currentOnDragStart.value(currentBlock.value, cardOffsetInRoot)
                     },
                     onDrag = { _, dragAmount ->
-                        // Pass the delta to the parent
                         currentOnDrag.value(dragAmount)
                     },
-                    onDragEnd = {
-                        currentOnDragEnd.value()
-                    },
-                    onDragCancel = {
-                        // Treat cancel as a reset
-                        currentOnDragEnd.value()
-                    },
-                    onClick = {
-                        currentOnClick.value()
-                    }
+                    onDragEnd = { currentOnDragEnd.value() },
+                    onDragCancel = { currentOnDragEnd.value() },
+                    onClick = { currentOnClick.value() }
                 )
             })
     ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            // Selected visual: blue border + subtle glow behind the card
-            if (isSelected) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .padding(4.dp)
-                        .zIndex(0f)
-                        .graphicsLayer { alpha = 0.95f }
-                ) {
-                    // Soft blurred glow layer
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .blur(8.dp)
-                            .background(Color(0xFF3B82F6).copy(alpha = 0.15f))
-                    )
-                }
-            }
-
-            // Foreground card content
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .matchParentSize()
-                    .then(
-                        if (isSelected) Modifier.border(BorderStroke(2.dp, Color(0xFF3B82F6)), RoundedCornerShape(8.dp))
-                        else Modifier
-                    )
-            ) {
-                BlockGrid(
-                    block = block,
-                    cellSize = 12.dp,
-                    modifier = Modifier.graphicsLayer(scaleX = 0.9f, scaleY = 0.9f)
+        // Outer frame: semi-transparent colored box with selection color
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = 0.6f } // 60% opacity only for the frame
+                .background(
+                    color = if (isSelected) Color(0xFF3B82F6) else Pink_Jackie,
+                    shape = RoundedCornerShape(8.dp)
                 )
-            }
+                .padding(6.dp)
+        ) {
+            // Inner block grid: fully opaque
+            BlockGrid(
+                block = block,
+                cellSize = 12.dp,
+                modifier = Modifier.graphicsLayer(
+                    scaleX = 0.9f,
+                    scaleY = 0.9f,
+                    alpha = 1f // ensure block image itself is not transparent
+                )
+            )
         }
     }
 }
@@ -689,7 +661,7 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
                 .size(GameSettings.bottomBarButtonSize.value.dp)
                 .scale(GameSettings.bottomBarIconScale.value)
                 .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFF4C4E5A))
+                .background(Color(0xFFE91E63))
                 .border(
                     width = 3.dp,
                     color = Color.White.copy(alpha = 0.35f),
