@@ -274,7 +274,8 @@ fun GameOverSummaryDialog(
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = "Play Again",
-                                    tint = LightText
+                                    tint = Color.Black
+
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(

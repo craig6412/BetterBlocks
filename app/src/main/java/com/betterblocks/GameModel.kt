@@ -223,3 +223,21 @@ val BLOCK_MANAGER: List<Block> = listOf(
 fun getBlockById(id: Int): Block? {
     return BLOCK_MANAGER.firstOrNull { it.id == id }
 }
+
+// Centralized animation timing so LineClearAnimator and GameViewModel stay in sync
+object GameAnimationDurations {
+    // Base sweep duration from LineClearAnimator
+    const val LINE_CLEAR_MS: Long = com.betterblocks.animation.LineClearAnimator.SWEEP_DURATION.toLong()
+
+    // Particle fade matches LineClearAnimator as well
+    const val LINE_CLEAR_PARTICLE_FADE_MS: Long = com.betterblocks.animation.LineClearAnimator.PARTICLE_FADE_DURATION.toLong()
+
+    // Total duration for a full line-clear cycle (sweep + particles)
+    val LINE_CLEAR_TOTAL_MS: Long = LINE_CLEAR_MS + LINE_CLEAR_PARTICLE_FADE_MS
+
+    // Color wipe uses the same shape but slowed using the global multiplier
+    val COLOR_WIPE_TOTAL_MS: Long = (LINE_CLEAR_TOTAL_MS * COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER).toLong()
+
+    // Full-board rainbow wipe: slightly extended for more dramatic burst
+    val RAINBOW_WIPE_TOTAL_MS: Long = (LINE_CLEAR_TOTAL_MS * 1.1f).toLong()
+}

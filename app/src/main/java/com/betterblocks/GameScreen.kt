@@ -92,7 +92,8 @@ fun GameScreen(
     onDismissRainbowEarned: () -> Unit = {},
     onDismissPurchaseSuccess: () -> Unit = {},
     onClearCoinAnimation: () -> Unit = {},
-    onDismissShopBubble: () -> Unit = {}
+    onDismissShopBubble: () -> Unit = {},
+    onClearAnimationFinished: () -> Unit
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var dragState by remember { mutableStateOf(DragState()) }
@@ -194,7 +195,8 @@ fun GameScreen(
                                 isGhostValid = isGhostValid,
                                 onCellClick = onGridCellClicked,
                                 uiState = uiState,
-                                effectCells = uiState.effectCells
+                                effectCells = uiState.effectCells,
+                                onClearAnimationFinished = onClearAnimationFinished
                             )
                         }
 
@@ -404,8 +406,9 @@ fun GameScreen(
                 )
             }
 
-            // Game Over Summary Dialog - New Enhanced Version
-            if (uiState.showGameSummaryDialog) {
+            // Game Over Summary Dialog - Enhanced version with share button.
+            // Show this when the game is over and we're not in a last-chance state.
+            if (uiState.isGameOver && !uiState.isLastChance) {
                 GameOverSummaryDialog(
                     finalScore = uiState.score,
                     highScore = uiState.highScore,
@@ -418,14 +421,6 @@ fun GameScreen(
                     onShare = {
                         shareGameResults(context, uiState.score, uiState.trophyTier)
                     }
-                )
-            } else if (uiState.isGameOver && !uiState.isLastChance) {
-                // Fallback to old dialog if summary not shown
-                GameOverDialog(
-                    score = uiState.score,
-                    highScore = uiState.highScore,
-                    onRestart = onReset,
-                    onMenu = onGoToMenu
                 )
             }
 
@@ -561,7 +556,8 @@ fun GameScreenPreview() {
             onDismissRainbowEarned = {},
             onDismissPurchaseSuccess = {},
             onClearCoinAnimation = {},
-            onDismissShopBubble = {}
+            onDismissShopBubble = {},
+            onClearAnimationFinished = {}
         )
     }
 }

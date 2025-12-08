@@ -444,76 +444,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
                 // Clear effect layer and color wipe flag after state update
                 _uiState.update { it.copy(effectCells = emptySet(), isColorWipeAnimating = false) }
+
+                // After a board change, re-check for possible moves / game over
+                checkGameOverOrLastChance()
             }
         }
     }
 
-    fun onLastChanceUsed() {
-        val currentState = _uiState.value
-        if (currentState.rainbowBlockCount <= 0) return
-        val newCount = currentState.rainbowBlockCount - 1
-        val updatedState = currentState.copy(
-            isLastChance = false,
-            selectedBlock = RAINBOW_BLOCK,
-            rainbowBlockCount = newCount
-        )
-        persistGameSnapshot(
-            board = updatedState.board,
-            blocks = updatedState.availableBlocks,
-            coins = updatedState.coins,
-            rainbowCount = updatedState.rainbowBlockCount,
-            colorWipeCount = updatedState.colorWipeCount,
-            score = updatedState.score,
-            meterValue = updatedState.specialMeterValue,
-            freeRotations = updatedState.freeRotations,
-            lastRotatedBlockId = updatedState.lastRotatedBlockId,
-            selectedBlockId = updatedState.selectedBlock?.id,
-            isGameOver = updatedState.isGameOver,
-            isLastChance = updatedState.isLastChance
-        )
-        _uiState.update { updatedState }
-    }
-
-    fun onLastChanceDeclined() {
-        val currentState = _uiState.value
-        val updatedState =
-            currentState.copy(isLastChance = false, isGameOver = true, selectedBlock = null)
-        persistGameSnapshot(
-            board = updatedState.board,
-            blocks = updatedState.availableBlocks,
-            coins = updatedState.coins,
-            rainbowCount = updatedState.rainbowBlockCount,
-            colorWipeCount = updatedState.colorWipeCount,
-            score = updatedState.score,
-            meterValue = updatedState.specialMeterValue,
-            freeRotations = updatedState.freeRotations,
-            lastRotatedBlockId = updatedState.lastRotatedBlockId,
-            selectedBlockId = null,
-            isGameOver = updatedState.isGameOver,
-            isLastChance = updatedState.isLastChance
-        )
-        _uiState.update { updatedState }
-    }
-
-    fun useRainbowWipeImmediately() {
-        val currentState = _uiState.value
-        if (currentState.isGameOver || currentState.isLastChance || currentState.rainbowBlockCount <= 0) return
-
-        viewModelScope.launch {
-            val newRainbowCount = currentState.rainbowBlockCount - 1
-            saveRainbowCount(newRainbowCount)
-            _uiState.update { it.copy(selectedBlock = null, rainbowBlockCount = newRainbowCount) }
-            saveSelectedBlockId(null)
-
-            // NEW: full-board rainbow wipe using line clear animation
-            handleFullBoardRainbowWipe(currentState.copy(rainbowBlockCount = newRainbowCount))
-        }
-    }
-
-    /**
-     * Full-board Rainbow Wipe: mark all occupied cells as clearing, run animation, then clear board.
-     */
     private fun handleFullBoardRainbowWipe(state: GameUiState) {
+        // Compute occupied cells from the snapshot 'state' only
         val occupiedCells = mutableSetOf<Coord>()
         for (r in 0 until GRID_SIZE) {
             for (c in 0 until GRID_SIZE) {
@@ -524,41 +463,73 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // No occupied cells, nothing to animate or clear
-        if (occupiedCells.isEmpty()) {
-            return
-        }
+        if (occupiedCells.isEmpty()) return
 
-        viewModelScope.launch {
-            // 1) Expose clearing cells for the LineClearAnimator / Rainbow wipe visuals
+        // FIXED: Set animation flags but keep board intact during animation
+        // The board will be cleared by onClearAnimationFinished when animation completes
+        _uiState.update {
+            it.copy(
+                clearingCells = occupiedCells,
+                isRainbowWipeActive = true,
+                isLastChance = false,
+                selectedBlock = null
+            )
+        }
+    }
+
+    /**
+     * Called by the UI when a line-clear or rainbow-wipe animation has completed.
+     * This clears the board, resets animation flags, and generates new blocks if needed.
+     */
+    fun onClearAnimationFinished() {
+        val currentState = _uiState.value
+
+        // If we were doing a rainbow wipe, clear the board now
+        if (currentState.isRainbowWipeActive && currentState.clearingCells.isNotEmpty()) {
+            val clearedBoard: GameGrid = Array(GRID_SIZE) { Array<Int?>(GRID_SIZE) { null } }
+            val newBlocks = generateNewBlocks()
+            val points = currentState.clearingCells.size * 50
+
             _uiState.update {
                 it.copy(
-                    clearingCells = occupiedCells,
-                    isRainbowWipeActive = true
+                    board = clearedBoard,
+                    availableBlocks = newBlocks,
+                    score = it.score + points,
+                    clearingCells = emptySet(),
+                    isRainbowWipeActive = false,
+                    isColorWipeAnimating = false,
+                    selectedBlock = null
                 )
             }
 
-            // 2) Wait for the line clear animation duration
-            delay(ANIMATION_DURATION_MS)
-
-            // 3) Actually clear the board and reset animation flags
-            val clearedBoard = Array(GRID_SIZE) { Array<Int?>(GRID_SIZE) { null } }
-            val points = occupiedCells.size * 50
-
-            updateScoreAndState(
-                currentState = _uiState.value,
-                newAvailableBlocks = _uiState.value.availableBlocks,
-                finalBlocks = _uiState.value.availableBlocks,
-                pointsToAdd = points,
-                newBoard = clearedBoard,
-                clearSelection = true
+            val updated = _uiState.value
+            persistGameSnapshot(
+                board = updated.board,
+                blocks = updated.availableBlocks,
+                coins = updated.coins,
+                rainbowCount = updated.rainbowBlockCount,
+                colorWipeCount = updated.colorWipeCount,
+                score = updated.score,
+                meterValue = updated.specialMeterValue,
+                freeRotations = updated.freeRotations,
+                lastRotatedBlockId = updated.lastRotatedBlockId,
+                selectedBlockId = null,
+                isGameOver = false,
+                isLastChance = false
             )
 
+            // After clearing, check for game over
+            checkGameOverOrLastChance()
+        } else {
+            // For normal line clears, just reset the flags
             _uiState.update {
                 it.copy(
                     clearingCells = emptySet(),
-                    isRainbowWipeActive = false
+                    isRainbowWipeActive = false,
+                    isColorWipeAnimating = false
                 )
             }
+            checkGameOverOrLastChance()
         }
     }
 
@@ -661,6 +632,62 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val newCoins = _uiState.value.coins + amount
         saveCoins(newCoins)
         _uiState.update { it.copy(coins = newCoins) }
+    }
+
+    /**
+     * DEV-ONLY: Apply all relevant overrides from GameSettings into live game state.
+     * This is called when returning from DeveloperActivity so both inventory (coins,
+     * score, wipes) and tuning values (offsets, padding, scales) take effect.
+     */
+    fun applyDeveloperOverrides() {
+        // Inventory knobs
+        val devCoins = GameSettings.testCoins.value
+        val devScore = GameSettings.testScore.value
+        val devRainbow = GameSettings.testRainbowCount.value
+        val devColorWipe = GameSettings.testColorWipeCount.value
+
+        _uiState.update { current ->
+            current.copy(
+                coins = devCoins,
+                score = devScore,
+                rainbowBlockCount = devRainbow,
+                colorWipeCount = devColorWipe
+            )
+        }
+
+        // Persist inventory so they behave like normal game values
+        saveCoins(devCoins)
+        saveRainbowCount(devRainbow)
+        saveColorWipeCount(devColorWipe)
+        prefs.edit().putInt(KEY_SAVED_SCORE, devScore).apply()
+
+        // Layout / visual tuning knobs from GameSettings are read directly
+        // by Composables (e.g., GameComponents, AnimatedGameBoard) via
+        // mutableState in GameSettings, so no extra wiring is needed here.
+    }
+
+    // DEV-ONLY: Apply values from GameSettings test knobs into the live game state.
+    // This lets DeveloperActivity adjust coins / score / inventory for quick testing.
+    fun applyDeveloperInventoryOverrides() {
+        val devCoins = GameSettings.testCoins.value
+        val devScore = GameSettings.testScore.value
+        val devRainbow = GameSettings.testRainbowCount.value
+        val devColorWipe = GameSettings.testColorWipeCount.value
+
+        _uiState.update { current ->
+            current.copy(
+                coins = devCoins,
+                score = devScore,
+                rainbowBlockCount = devRainbow,
+                colorWipeCount = devColorWipe
+            )
+        }
+
+        // Persist these so they survive process death like normal game state
+        saveCoins(devCoins)
+        saveRainbowCount(devRainbow)
+        saveColorWipeCount(devColorWipe)
+        prefs.edit().putInt(KEY_SAVED_SCORE, devScore).apply()
     }
 
     // Public API for rotation button
@@ -822,5 +849,130 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isGameOver = updated.isGameOver,
             isLastChance = updated.isLastChance
         )
+
+        // After a normal placement, check for game over / last chance
+        checkGameOverOrLastChance()
+    }
+
+    // --- GAME OVER / MOVE AVAILABILITY LOGIC ---
+
+    /** Returns true if there is at least one legal placement for any non-special block. */
+    private fun hasAnyValidMove(state: GameUiState): Boolean {
+        val board = state.board
+
+        for (block in state.availableBlocks) {
+            if (block.isSpecial) continue
+
+            for (row in 0 until GRID_SIZE) {
+                for (col in 0 until GRID_SIZE) {
+                    var fits = true
+                    for (offset in block.shape) {
+                        val r = row + offset.row
+                        val c = col + offset.col
+                        if (r !in 0 until GRID_SIZE || c !in 0 until GRID_SIZE || board[r][c] != null) {
+                            fits = false
+                            break
+                        }
+                    }
+                    if (fits) return true
+                }
+            }
+        }
+        return false
+    }
+
+    /**
+     * Check for game over after a move or board-clear action.
+     * If there are no valid moves left:
+     *  - If player has rainbow wipes, trigger last-chance flow (isLastChance = true).
+     *  - Otherwise hard-set isGameOver = true.
+     */
+    private fun checkGameOverOrLastChance() {
+        val state = _uiState.value
+        if (state.isGameOver || state.isLastChance) return
+
+        val anyMove = hasAnyValidMove(state)
+        if (anyMove) return
+
+        val updated = if (state.rainbowBlockCount > 0) {
+            // Player gets a last chance using a rainbow wipe
+            state.copy(isLastChance = true, selectedBlock = null)
+        } else {
+            // No moves and no rainbow wipes → game over
+            state.copy(isGameOver = true, selectedBlock = null)
+        }
+
+        _uiState.value = updated
+        persistGameSnapshot(
+            board = updated.board,
+            blocks = updated.availableBlocks,
+            coins = updated.coins,
+            rainbowCount = updated.rainbowBlockCount,
+            colorWipeCount = updated.colorWipeCount,
+            score = updated.score,
+            meterValue = updated.specialMeterValue,
+            freeRotations = updated.freeRotations,
+            lastRotatedBlockId = updated.lastRotatedBlockId,
+            selectedBlockId = updated.selectedBlock?.id,
+            isGameOver = updated.isGameOver,
+            isLastChance = updated.isLastChance
+        )
+    }
+
+    fun onLastChanceUsed() {
+        val currentState = _uiState.value
+        if (!currentState.isLastChance || currentState.rainbowBlockCount <= 0) return
+
+        // Consume one rainbow and clear last-chance flag
+        val newCount = currentState.rainbowBlockCount - 1
+        saveRainbowCount(newCount)
+        val updated = currentState.copy(
+            isLastChance = false,
+            rainbowBlockCount = newCount,
+            selectedBlock = null
+        )
+        _uiState.value = updated
+
+        // Perform a full-board rainbow wipe using existing handler
+        handleFullBoardRainbowWipe(updated)
+    }
+
+    fun onLastChanceDeclined() {
+        val currentState = _uiState.value
+        if (!currentState.isLastChance) return
+
+        val updated = currentState.copy(
+            isLastChance = false,
+            isGameOver = true,
+            selectedBlock = null
+        )
+        _uiState.value = updated
+        persistGameSnapshot(
+            board = updated.board,
+            blocks = updated.availableBlocks,
+            coins = updated.coins,
+            rainbowCount = updated.rainbowBlockCount,
+            colorWipeCount = updated.colorWipeCount,
+            score = updated.score,
+            meterValue = updated.specialMeterValue,
+            freeRotations = updated.freeRotations,
+            lastRotatedBlockId = updated.lastRotatedBlockId,
+            selectedBlockId = updated.selectedBlock?.id,
+            isGameOver = updated.isGameOver,
+            isLastChance = updated.isLastChance
+        )
+    }
+
+    /** Direct entry from UI to trigger a full-board rainbow wipe (not last-chance flow). */
+    fun useRainbowWipeImmediately() {
+        val currentState = _uiState.value
+        if (currentState.isGameOver || currentState.isLastChance || currentState.rainbowBlockCount <= 0) return
+
+        val newCount = currentState.rainbowBlockCount - 1
+        saveRainbowCount(newCount)
+        val updated = currentState.copy(rainbowBlockCount = newCount, selectedBlock = null)
+        _uiState.value = updated
+
+        handleFullBoardRainbowWipe(updated)
     }
 }

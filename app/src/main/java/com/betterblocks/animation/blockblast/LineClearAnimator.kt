@@ -13,6 +13,10 @@ import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
 
+// Global duration scale for line clear animations.
+// 1.0f = current speed, >1.0f = slower animation, <1.0f = faster.
+var LINE_CLEAR_DURATION_SCALE: Float = 0.5f
+
 class BlockBlastLineClearState {
     // Per-tile pop/flash states
     val tileStates: SnapshotStateMap<Coord, TilePopState> = mutableStateMapOf()
@@ -94,8 +98,9 @@ class TilePopState {
 
     fun tick(deltaMs: Float) {
         if (!running) return
-        elapsedMs += deltaMs
-        flashElapsed += deltaMs
+        val scaledDelta = deltaMs * (1f / LINE_CLEAR_DURATION_SCALE.coerceAtLeast(0.1f))
+        elapsedMs += scaledDelta
+        flashElapsed += scaledDelta
         if (elapsedMs >= 180f && flashAlpha <= 0f) {
             running = false
         }
@@ -133,13 +138,20 @@ class ParticleState private constructor(
     }
 
     fun tick(deltaMs: Float) {
-        ageMs += deltaMs
+        // Apply the same global duration scaling as tile pop so particles
+        // slow down / speed up together with the line clear animation.
+        val scaledDelta = deltaMs * (1f / LINE_CLEAR_DURATION_SCALE.coerceAtLeast(0.1f))
+
+        ageMs += scaledDelta
         if (ageMs >= lifeMs) return
+
         val drag = 0.88f
         val gravity = 820f
-        positionX += velX * (deltaMs / 1000f)
-        positionY += velY * (deltaMs / 1000f)
-        velY += gravity * (deltaMs / 1000f)
+        val dtSeconds = scaledDelta / 1000f
+
+        positionX += velX * dtSeconds
+        positionY += velY * dtSeconds
+        velY += gravity * dtSeconds
         velX *= drag
         velY *= drag
     }

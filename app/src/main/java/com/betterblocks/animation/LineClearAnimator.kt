@@ -493,7 +493,8 @@ fun rememberLineClearAnimationState(
     clearingCells: Set<Coord>,
     isFullBoardClear: Boolean,
     gridSize: Int,
-    animationSpeedMultiplier: Float
+    animationSpeedMultiplier: Float,
+    onAnimationComplete: () -> Unit
 ): LineClearAnimationState {
     val animator = remember { LineClearAnimator() }
     var animState by remember { mutableStateOf(LineClearAnimationState()) }
@@ -502,21 +503,29 @@ fun rememberLineClearAnimationState(
     LaunchedEffect(
         clearingCells.hashCode(),
         clearingCells.size,
-        isFullBoardClear
+        isFullBoardClear,
+        animationSpeedMultiplier
     ) {
         if (clearingCells.isEmpty()) {
             animState = LineClearAnimationState()
             return@LaunchedEffect
         }
-        Log.d("ULTRA-ANIM", "Starting ULTRA line-clear animation for ${clearingCells.size} cells")
+        Log.d(
+            "ULTRA-ANIM",
+            "Starting ULTRA line-clear animation for ${clearingCells.size} cells (fullBoard=$isFullBoardClear, speedMult=$animationSpeedMultiplier)"
+        )
         scope.launch {
             animator.runAnimation(
                 clearingCells = clearingCells,
                 isFullBoardClear = isFullBoardClear,
-                gridSize = gridSize
+                gridSize = gridSize,
+                animationSpeedMultiplier = animationSpeedMultiplier
             ) { state ->
                 animState = state
             }
+            // Animation finished, notify the ViewModel
+            Log.d("ULTRA-ANIM", "Animation complete, calling onAnimationComplete()")
+            onAnimationComplete()
         }
     }
 

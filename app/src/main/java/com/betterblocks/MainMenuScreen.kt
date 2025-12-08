@@ -60,7 +60,7 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp) // Reduced padding significantly
-            .scale(0.85f), // Scale down to 85% of original size
+            .scale(0.65f), // Scale down to 85% of original size
         shape = RoundedCornerShape(12.dp), // Slightly smaller corners
         colors = CardDefaults.cardColors(
             containerColor = DeepBlue.copy(alpha = 0.9f)

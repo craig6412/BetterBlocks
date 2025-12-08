@@ -277,7 +277,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 Slider(
                     value = GameSettings.testRainbowCount.value.toFloat(),
                     onValueChange = { GameSettings.testRainbowCount.value = it.toInt() },
-                    valueRange = 0f..1000000f,
+                    valueRange = 0f..100f, // 0–100 for easier dev control
                     colors = devSliderColors()
                 )
             }
@@ -287,7 +287,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 Slider(
                     value = GameSettings.testColorWipeCount.value.toFloat(),
                     onValueChange = { GameSettings.testColorWipeCount.value = it.toInt() },
-                    valueRange = 0f..1000000f,
+                    valueRange = 0f..100f, // 0–100
                     colors = devSliderColors()
                 )
             }
@@ -297,7 +297,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 Slider(
                     value = GameSettings.testCoins.value.toFloat(),
                     onValueChange = { GameSettings.testCoins.value = it.toInt() },
-                    valueRange = 0f..1000000f,
+                    valueRange = 0f..100f, // 0–100
                     colors = devSliderColors()
                 )
             }

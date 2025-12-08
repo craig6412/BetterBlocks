@@ -57,7 +57,8 @@ class GameActivity : ComponentActivity() {
                         onDismissRainbowEarned = viewModel::dismissRainbowEarnedDialog,
                         onDismissPurchaseSuccess = viewModel::dismissPurchaseSuccessDialog,
                         onClearCoinAnimation = viewModel::clearCoinEarnedAnimation,
-                        onDismissShopBubble = viewModel::dismissShopPurchaseBubble
+                        onDismissShopBubble = viewModel::dismissShopPurchaseBubble,
+                        onClearAnimationFinished = viewModel::onClearAnimationFinished
                     )
                 }
             }
