@@ -17,8 +17,18 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("C:\\Users\\Admin\\AndroidStudioProjects\\BetterBlocks\\app\\release\\BetterBlocks_Releasekey_v2.jks")
+            storePassword = "Life4ever"
+            keyAlias = "key0"
+            keyPassword = "Life4ever"
+        }
+    }
+
     buildTypes {
-        release {
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
