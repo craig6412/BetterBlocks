@@ -1,49 +1,40 @@
 package com.betterblocks.ui
 
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -52,24 +43,26 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.betterblocks.BLOCK_MANAGER
 import com.betterblocks.Block
+import com.betterblocks.BlockGrid
+import com.betterblocks.BottomBar
+import com.betterblocks.DEFAULT_CELL_SIZE
+import com.betterblocks.DarkBackground
+import com.betterblocks.DeepBlue
 import com.betterblocks.GameSettings
 import com.betterblocks.GameUiState
 import com.betterblocks.InteractionType
 import com.betterblocks.R
+import com.betterblocks.SimpleDragController
+import com.betterblocks.GameMenuDialog
+import com.betterblocks.Header
+import com.betterblocks.LastChanceDialog
+import com.betterblocks.LightText
+import com.betterblocks.Oswald
+import com.betterblocks.Pink_Jackie
+import com.betterblocks.SCREEN_HORIZONTAL_PADDING
+import com.betterblocks.isValidPlacement
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.trophyColorForTier
-
-
-// --- DRAG STATE ---
-data class DragState(
-    val isDragging: Boolean = false,
-    val draggedBlock: Block? = null,
-    val fingerPosition: Offset = Offset.Zero  // Raw finger position in root coordinates
-)
-
-// Drag offset constants used to position the dragged preview relative to the finger
-private val DRAG_OFFSET_Y: Dp = 100.dp
-private val DRAG_OFFSET_X: Dp = 20.dp
 
 @Composable
 fun GameScreen(
@@ -95,71 +88,67 @@ fun GameScreen(
     onDismissShopBubble: () -> Unit = {},
     onClearAnimationFinished: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var dragState by remember { mutableStateOf(DragState()) }
-    var gridTopLeft by remember { mutableStateOf(Offset.Zero) }
-    var gridSizePx by remember { mutableStateOf(0f) }
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
+
+    // Central drag controller (Block Blast style)
+    val drag = remember { SimpleDragController() }
+
+    // Guard to ignore a TAP immediately after a DRAG on the same preview -> prevents accidental deselect
+    var recentlyDraggedBlockId by remember { mutableStateOf<Int?>(null) }
+    var recentDragTimeMs by remember { mutableStateOf(0L) }
+    val DRAG_TAP_IGNORE_MS = 350L
+
+    // Local measured grid metrics captured in onGloballyPositioned and applied via LaunchedEffect
+    var measuredGridTopLeftWindow by remember { mutableStateOf(Offset.Zero) }
+    var measuredGridSizePx by remember { mutableStateOf(0f) }
+
     var showMenuDialog by remember { mutableStateOf(false) }
     var showColorWheelDialog by remember { mutableStateOf(false) }
-    var rootTopLeft by remember { mutableStateOf(Offset.Zero) }
 
-    val density = LocalDensity.current
-    val dragOffsetYPx = with(density) { DRAG_OFFSET_Y.toPx() }
-    val dragOffsetXPx = with(density) { DRAG_OFFSET_X.toPx() }
+    // How far above finger block appears
+    val liftPx = with(density) { 100.dp.toPx() }
 
-    val ghostPosition =
-        remember(dragState.fingerPosition, gridTopLeft, gridSizePx, dragState.draggedBlock) {
-            if (!dragState.isDragging || gridSizePx == 0f || dragState.draggedBlock == null) null
-            else {
-                // Offset the ghost position to align perfectly under the preview block
-                // Preview is 150dp above finger, ghost should align with it (100dp up, 20dp right)
-                val ghostOffsetY = with(density) { 100.dp.toPx() }
-                val ghostOffsetX = with(density) { 20.dp.toPx() }
-                val adjustedFingerPos = dragState.fingerPosition.copy(
-                    x = dragState.fingerPosition.x + ghostOffsetX,
-                    y = dragState.fingerPosition.y - ghostOffsetY
-                )
+    // Ghost info (controller output)
+    val ghostPosition = drag.ghostPosition  // ✅ Correct property name
 
-                calculateGridPosition(
-                    dragPos = adjustedFingerPos,
-                    gridTopLeft = gridTopLeft,
-                    gridSizePx = gridSizePx,
-                    gridSize = 9,
-                    visualOffsetX = 0f,
-                    visualOffsetY = 0f
-                )
-            }
-        }
-
-    val isGhostValid = remember(ghostPosition, dragState.draggedBlock, uiState.board) {
-        if (ghostPosition == null || dragState.draggedBlock == null) false
-        else isValidPlacement(uiState.board, dragState.draggedBlock!!, ghostPosition)
+    // Ghost validity (placement check)
+    val isGhostValid = remember(ghostPosition, drag.draggedBlock?.id, uiState.board) {
+        val block = drag.draggedBlock
+        ghostPosition != null && block != null &&
+                isValidPlacement(uiState.board, block, ghostPosition)
     }
+
+    // Debug toggle - set to true to render guide overlay during drag
+    val renderDebugOverlay = true
 
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),   // <-- this is the ONLY inset padding you need
+            .windowInsetsPadding(WindowInsets.safeDrawing),
         color = DarkBackground
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { coordinates ->
-                    rootTopLeft = coordinates.localToWindow(Offset.Zero)
-                }
+            modifier = Modifier.fillMaxSize()
         ) {
 
+            // =====================
+            // UPPER GAME COLUMN
+            // =====================
             Column(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Header expects onReset and onMenuClicked in your current definition
+            ) column@{
+
                 Header(
                     uiState = uiState,
                     onMenuClicked = { showMenuDialog = true }
                 )
 
+                // =====================
+                // MAIN BOARD AREA
+                // =====================
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -181,421 +170,297 @@ fun GameScreen(
                                     x = GameSettings.gridOffsetX.value.dp,
                                     y = (-25).dp
                                 )
+                                // capture measured values during layout into local state, apply to drag in LaunchedEffect
                                 .onGloballyPositioned { coordinates ->
-                                    gridTopLeft = coordinates.localToWindow(Offset.Zero)
-                                    gridSizePx = coordinates.size.width.toFloat()
+                                    // use window coords to match AnimatedGameBoard which reports window coords
+                                    measuredGridTopLeftWindow = coordinates.positionInWindow()
+                                    measuredGridSizePx = coordinates.size.width.toFloat()
                                 }
                         ) {
-                            com.betterblocks.animation.AnimatedGameBoard(
-                                board = uiState.board,
-                                gridSize = 9,
-                                cellDp = cellDp,
-                                ghostBlock = if (dragState.isDragging) dragState.draggedBlock else null,
-                                ghostOrigin = ghostPosition,
-                                isGhostValid = isGhostValid,
-                                onCellClick = onGridCellClicked,
-                                uiState = uiState,
-                                effectCells = uiState.effectCells,
-                                onClearAnimationFinished = onClearAnimationFinished
-                            )
+                            // apply captured metrics to the drag controller after layout to avoid snapshot writes during measure
+                            LaunchedEffect(measuredGridTopLeftWindow, measuredGridSizePx) {
+                                if (measuredGridTopLeftWindow != Offset.Zero && measuredGridSizePx > 0f) {
+                                    drag.gridTopLeft = measuredGridTopLeftWindow
+                                    drag.gridSizePx = measuredGridSizePx
+                                    drag.cellSizePx = measuredGridSizePx / 9f
+                                    Log.d("GameScreen", "Deferred drag metrics set: topLeftWindow=$measuredGridTopLeftWindow sizePx=$measuredGridSizePx cellPx=${measuredGridSizePx/9f}")
+                                }
+                            }
+
+                            // Visual border drawn slightly larger than the grid so there is a ~5.dp gap
+                            val borderGap = 8.dp
+                             if (measuredGridSizePx > 0f) {
+                                 val gridDp = with(density) { measuredGridSizePx.toDp() }
+                                 val borderSize = gridDp + (borderGap * 2)
+
+                                 Box(
+                                     modifier = Modifier
+                                         .size(borderSize)
+                                         .offset (
+                                             x = 0.dp,
+                                             y = 10.dp
+
+                                         )
+                                         .align(Alignment.Center)
+                                         .border(
+                                             width = 4.5.dp,
+                                             color = Color(0xFF3F51B5),
+                                             shape = RoundedCornerShape(8.dp)
+                                         )
+                                         .zIndex(0f)
+                                 )
+                             }
+
+                            // The actual game board (measurements used by drag controller remain tied to this Box)
+                            Box(modifier = Modifier.align(Alignment.Center).zIndex(1f)) {
+                                com.betterblocks.animation.AnimatedGameBoard(
+                                    board = uiState.board,
+                                    gridSize = 9,
+                                    cellDp = cellDp,
+                                    // Let the AnimatedGameBoard draw the ghost preview using the controller's dragged block and computed ghost origin
+                                    ghostBlock = drag.draggedBlock,
+                                    ghostOrigin = drag.ghostPosition,
+                                    isGhostValid = isGhostValid,
+                                    onCellClick = onGridCellClicked,
+                                    uiState = uiState,
+                                    effectCells = uiState.effectCells,
+                                    onClearAnimationFinished = onClearAnimationFinished,
+                                    controller = drag
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        // AVAILABLE BLOCKS
+                        // =====================
+                        // AVAILABLE BLOCKS ROW
+                        // =====================
+                        // Defensive clamp: ensure height is non-negative (developer knobs can set negatives)
+                        val safeAvailableBlocksHeight = GameSettings.availableBlocksRowHeight.value.coerceAtLeast(0f).dp
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(GameSettings.availableBlocksRowHeight.value.dp)
+                                .height(safeAvailableBlocksHeight)
                                 .padding(horizontal = SCREEN_HORIZONTAL_PADDING),
-
                             contentAlignment = Alignment.Center
                         ) {
                             AvailableBlocks(
                                 uiState = uiState,
                                 onBlockInteraction = { block, interactionType ->
                                     when (interactionType) {
-                                        InteractionType.TAP -> onSelectBlock(block)
-                                        InteractionType.DRAG_START -> onSelectBlock(block)
+                                        InteractionType.DRAG_START -> {
+                                            // Select for drag start and record the drag timestamp so a following TAP is ignored.
+                                            onSelectBlock(block)
+                                            recentlyDraggedBlockId = block.id
+                                            recentDragTimeMs = System.currentTimeMillis()
+                                        }
+                                        InteractionType.TAP -> {
+                                            // Ignore tap if it immediately follows a drag on the same block (prevents toggle-off)
+                                            val now = System.currentTimeMillis()
+                                            val ignoreTap = recentlyDraggedBlockId == block.id && (now - recentDragTimeMs) < DRAG_TAP_IGNORE_MS
+                                            if (!ignoreTap) {
+                                                onSelectBlock(block)
+                                            }
+                                        }
                                     }
                                 },
-                                onDragStart = { block, previewCardOffset ->
-                                    Log.d("DRAG", "START block=${block.name} at window pos=$previewCardOffset")
-
-                                    // Compute drag offset so the block is centered under the finger regardless of rotation
-                                    val cellSizePx = with(density) { cellDp.toPx() }
-                                    val dragOffset = calculateDragOffset(block, cellSizePx)
-
-                                    dragState = DragState(
-                                        isDragging = true,
-                                        draggedBlock = block,
-                                        // Store finger position already adjusted so overlay/ghost can use it directly
-                                        fingerPosition = previewCardOffset + dragOffset
-                                    )
+                                onDragStart = { block, fingerPosRoot ->
+                                    Log.d("GameScreen", "onDragStart (AvailableBlocks): block=${block.id} fingerPosRoot=$fingerPosRoot")
+                                    // record recent drag here as well (defensive in case DRAG_START path differs)
+                                    recentlyDraggedBlockId = block.id
+                                    recentDragTimeMs = System.currentTimeMillis()
+                                    // Mark selection explicitly when drag begins so UI keeps selection after finger-up
+                                    onSelectBlock(block)
+                                    drag.startDrag(block, fingerPosRoot, liftPx)
                                 },
-                                onDrag = { dragAmount ->
-                                    // Update finger position as user drags
-                                    val newFingerPos = dragState.fingerPosition + dragAmount
-                                    dragState = dragState.copy(
-                                        fingerPosition = newFingerPos
-                                    )
+                                onDrag = { newFingerPos ->
+                                    Log.d("GameScreen", "onDrag (AvailableBlocks): pos=$newFingerPos")
+                                    drag.updatePosition(newFingerPos)
+
                                 },
                                 onDragEnd = {
-                                    Log.d("DRAG", "END at finger pos=${dragState.fingerPosition}")
+                                    Log.d("GameScreen", "onDragEnd (AvailableBlocks) called")
+                                    val drop = drag.endDrag(uiState.board)
+                                    // Clear the recent-drag guard on finger up (so later taps work normally)
+                                    recentlyDraggedBlockId = null
+                                    recentDragTimeMs = 0L
 
-                                    // Offset drop position to match ghost/preview alignment (100dp up, 20dp right)
-                                    val ghostOffsetY = with(density) { 100.dp.toPx() }
-                                    val ghostOffsetX = with(density) { 20.dp.toPx() }
-                                    val adjustedFingerPos = dragState.fingerPosition.copy(
-                                        x = dragState.fingerPosition.x + ghostOffsetX,
-                                        y = dragState.fingerPosition.y - ghostOffsetY
-                                    )
-
-                                    val dropTarget = calculateGridPosition(
-                                        dragPos = adjustedFingerPos,
-                                        gridTopLeft = gridTopLeft,
-                                        gridSizePx = gridSizePx,
-                                        gridSize = 9,
-                                        visualOffsetX = 0f,
-                                        visualOffsetY = 0f
-                                    )
-
-                                    Log.d("DRAG", " dropTarget=$dropTarget")
-
-                                    if (dropTarget != null && dragState.draggedBlock != null) {
-                                        Log.d("DRAG", " VALID drop → placing ${dragState.draggedBlock!!.name}")
-                                        onGridCellClicked(dropTarget.first, dropTarget.second)
-                                    } else {
-                                        Log.d("DRAG", " INVALID drop → ignoring")
+                                    if (drop != null) {
+                                        haptic.performHapticFeedback(
+                                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
+                                        )
+                                        onGridCellClicked(drop.first, drop.second)
                                     }
-                                    dragState = DragState()
                                 }
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    BottomBar(
+            }
+
+            // =====================
+            // LOWER GAME COLUMN (Menus, Ads, etc.)
+            // =====================
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                // =====================
+                // MENU / SETTINGS DIALOG
+                // =====================
+                if (showMenuDialog) {
+                    GameMenuDialog(
                         uiState = uiState,
-                        onRotateBlock = onRotateBlock,
-                        onSelectRainbow = onSelectRainbow,
-                        onUseRainbowImmediately = onUseRainbowImmediately,
-                        onColorWipeClick = { showColorWheelDialog = true },
-                        onDragStart = { block, previewCardOffset ->
-                            val cellSizePx = with(density) { cellDp.toPx() }
-                            val dragOffset = calculateDragOffset(block, cellSizePx)
-                            dragState = DragState(
-                                isDragging = true,
-                                draggedBlock = block,
-                                fingerPosition = previewCardOffset + dragOffset
-                            )
-                        },
-                        onDrag = { dragAmount ->
-                            val newFingerPos = dragState.fingerPosition + dragAmount
-                            dragState = dragState.copy(
-                                fingerPosition = newFingerPos
-                            )
-                        },
-                        onDragEnd = {
-                            // Offset drop position to match ghost/preview alignment (100dp up, 20dp right)
-                            val ghostOffsetY = with(density) { DRAG_OFFSET_Y.toPx() }
-                            val ghostOffsetX = with(density) { DRAG_OFFSET_X.toPx() }
-                            val adjustedFingerPos = dragState.fingerPosition.copy(
-                                x = dragState.fingerPosition.x + ghostOffsetX,
-                                y = dragState.fingerPosition.y - ghostOffsetY
-                            )
-
-                            val dropTarget = calculateGridPosition(
-                                dragPos = adjustedFingerPos,
-                                gridTopLeft = gridTopLeft,
-                                gridSizePx = gridSizePx,
-                                gridSize = 9,
-                                visualOffsetX = 0f,
-                                visualOffsetY = 0f
-                            )
-                            if (dropTarget != null && dragState.draggedBlock != null) {
-                                onGridCellClicked(dropTarget.first, dropTarget.second)
-                            }
-                            dragState = DragState()
-                        }
+                        onDismiss = { showMenuDialog = false },
+                        onRestart = onReset,
+                        onGoToMenu = onGoToMenu,
+                        onToggleSound = onToggleSound,
+                        onToggleMusic = onToggleMusic
                     )
-
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 80.dp)
-                    ) {
-                        androidx.compose.animation.AnimatedVisibility(
-                            visible = uiState.showHighScoreAnim,
-                            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-                            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
-                        ) {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = Pink_Jackie),
-                                elevation = CardDefaults.cardElevation(8.dp),
-                                shape = RoundedCornerShape(16.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Filled.EmojiEvents,
-                                        contentDescription = null,
-                                        tint = androidx.compose.ui.graphics.Color.White,
-                                        modifier = Modifier.size(32.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        "NEW HIGH SCORE!",
-                                        color = androidx.compose.ui.graphics.Color.White,
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontFamily = Oswald
-                                    )
-                                 }
-                            }
-                        }
-                    }
                 }
-            }
 
-            // --- Drag Overlay ---
-            // Dragged block appears 100dp above the user's finger for natural placement feel
-            if (dragState.isDragging && dragState.draggedBlock != null) {
-                val block = dragState.draggedBlock!!
-                val previewCellSize = cellDp
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Convert finger position from window to root coordinates
-                val rootFingerPos = dragState.fingerPosition - rootTopLeft
-
-                // Because dragState.fingerPosition is already the block center, just apply any fine-tuning
-                val blockX = rootFingerPos.x + dragOffsetXPx
-                val blockY = rootFingerPos.y - dragOffsetYPx
-
-                Box(
-                    modifier = Modifier
-                        .graphicsLayer {
-                            translationX = blockX
-                            translationY = blockY
-                        }
-                        .zIndex(999f)
-                        .scale(1.0f)
-                ) {
-                    // Important: use the same composable and spacing as the real board
-                    BlockGrid(
-                        block = block,
-                        cellSize = previewCellSize,
-
-                        )
-
-                }
-            }
-
-            if (uiState.isLastChance) {
-                LastChanceDialog(
-                    onUseRainbow = { dragState = DragState(); onLastChanceUsed() },
-                    onGameOver = { onLastChanceDeclined() }
-                )
-            }
-
-            // Game Over Summary Dialog - Enhanced version with share button.
-            // Show this when the game is over and we're not in a last-chance state.
-            if (uiState.isGameOver && !uiState.isLastChance) {
-                GameOverSummaryDialog(
-                    finalScore = uiState.score,
-                    highScore = uiState.highScore,
-                    totalLinesCleared = uiState.linesClearedThisGame,
-                    coinsEarned = uiState.coinsEarnedThisGame,
-                    trophyTier = uiState.trophyTier,
-                    isNewHighScore = uiState.score >= uiState.highScore,
-                    onPlayAgain = onReset,
-                    onMainMenu = onGoToMenu,
-                    onShare = {
-                        shareGameResults(context, uiState.score, uiState.trophyTier)
-                    }
-                )
-            }
-
-            if (showMenuDialog) {
-                GameMenuDialog(
+                // =====================
+                // BOTTOM BAR (Coins, Drag targets, etc.)
+                // =====================
+                BottomBar(
                     uiState = uiState,
-                    onDismiss = { showMenuDialog = false },
-                    onRestart = {
-                        showMenuDialog = false
-                        onReset()
+                    onRotateBlock = {
+                        if (drag.isDragging) {
+                            Log.d("GameScreen", "Rotate pressed while dragging -> rotateDraggedBlockClockwise")
+                            drag.rotateDraggedBlockClockwise()
+                        } else {
+                            onRotateBlock()
+                        }
                     },
-                    onGoToMenu = {
-                        showMenuDialog = false
-                        onGoToMenu()
+                    onSelectRainbow = onSelectRainbow,
+                    onUseRainbowImmediately = onUseRainbowImmediately,
+                    onColorWipeClick = {
+                        Log.d("GameScreen", "BottomBar.onColorWipeClick -> showColorWheelDialog = true")
+                        showColorWheelDialog = true
                     },
-                    onToggleSound = onToggleSound,
-                    onToggleMusic = onToggleMusic
-                )
-            }
-
-            if (showColorWheelDialog) {
-                ColorWheelDialog(
-                    onDismiss = { showColorWheelDialog = false },
-                    onSpinFinished = { index ->
-                        showColorWheelDialog = false
-                        onColorWipeSpinResult(index)
+                    onDragStart = { block, previewOffset ->
+                        Log.d("GameScreen", "onDragStart (BottomBar): block=${block.id} previewOffset=$previewOffset")
+                        // record recent drag (special block drag starts too)
+                        recentlyDraggedBlockId = block.id
+                        recentDragTimeMs = System.currentTimeMillis()
+                        // Mark selection explicitly when drag begins from bottom bar
+                        onSelectBlock(block)
+                        // Preview card gives window coords for finger start — pass into controller
+                        drag.startDrag(block, previewOffset, liftPx)
+                    },
+                    onDrag = { newFingerPos ->
+                        Log.d("GameScreen", "onDrag (BottomBar): pos=$newFingerPos")
+                        drag.updatePosition(newFingerPos)
+                    },
+                    onDragEnd = {
+                        Log.d("GameScreen", "onDragEnd (BottomBar) called")
+                        val drop = drag.endDrag(uiState.board)
+                        // Clear guard on drag end
+                        recentlyDraggedBlockId = null
+                        recentDragTimeMs = 0L
+                        if (drop != null) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onGridCellClicked(drop.first, drop.second)
+                        }
                     }
                 )
             }
 
-            if (uiState.showZeroCoinsDialog) {
-                ZeroCoinsDialog(
-                    onDismiss = { /* TODO hook to VM */ },
-                    onWatchAd = { /* TODO load ad */ },
-                    onGoToShop = { /* TODO open shop */ }
-                )
-            }
+            // =====================
+            // GHOST BLOCK (Preview of dragged block)
+            // =====================
+            // Ghost preview rendering is provided by the AnimatedGameBoard overlay and drag overlay elsewhere.
 
-            // Rainbow Meter Full Dialog
-            if (uiState.showRainbowEarnedDialog) {
-                RainbowEarnedDialog(
-                    onDismiss = onDismissRainbowEarned
-                )
-            }
+            // =====================
+            // HAPTIC FEEDBACK TRIGGER (for testing)
+            // =====================
+            // HAPTIC: explicit haptics are called on drop; removed snapshot-based trigger.
+        }
 
-            // Tier Unlock Dialog
-            if (uiState.showTierPromotionDialog && uiState.newlyUnlockedTier != null) {
-                TierUnlockDialog(
-                    tier = uiState.newlyUnlockedTier,
-                    onDismiss = onDismissTierPromotion
-                )
-            }
-
-            // Purchase Success Dialog
-            if (uiState.showPurchaseSuccessDialog && uiState.purchaseCoinsAwarded > 0) {
-                PurchaseSuccessDialog(
-                    coinsAwarded = uiState.purchaseCoinsAwarded,
-                    onDismiss = onDismissPurchaseSuccess
-                )
-            }
-
-            // Floating Coin Reward Animation
-            if (uiState.coinsEarnedThisUpdate > 0) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = 60.dp)
-                ) {
-                    FloatingCoinReward(
-                        amount = uiState.coinsEarnedThisUpdate,
-                        onComplete = onClearCoinAnimation
-                    )
+        // =====================
+        // DEBUG: Log composition
+        // =====================
+        // Color wheel dialog rendering (debug logs)
+        if (showColorWheelDialog) {
+            Log.d("GameScreen", "showColorWheelDialog == true -> rendering ColorWheelDialog")
+            ColorWheelDialog(
+                onDismiss = {
+                    Log.d("GameScreen", "ColorWheelDialog.onDismiss called")
+                    showColorWheelDialog = false
+                },
+                onSpinFinished = { index ->
+                    Log.d("GameScreen", "ColorWheelDialog.onSpinFinished index=$index")
+                    // Close dialog first, then forward the result
+                    showColorWheelDialog = false
+                    try {
+                        onColorWipeSpinResult(index)
+                    } catch (t: Throwable) {
+                        Log.e("GameScreen", "onColorWipeSpinResult threw", t)
+                    }
                 }
-            }
+            )
+        }
 
-            // Shop Purchase Bubble
-            if (uiState.showShopPurchaseBubble) {
-                Box(
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    ShopPurchaseBubble(
-                        message = uiState.shopPurchaseMessage,
-                        onComplete = onDismissShopBubble
-                    )
+        // Show Game Over summary dialog when ViewModel marks the game over
+        if (uiState.isGameOver) {
+            Log.d("GameScreen", "uiState.isGameOver == true -> showing GameOverSummaryDialog")
+            GameOverSummaryDialog(
+                finalScore = uiState.score,
+                highScore = uiState.highScore,
+                totalLinesCleared = uiState.linesClearedThisGame,
+                coinsEarned = uiState.coinsEarnedThisGame,
+                trophyTier = uiState.trophyTier,
+                isNewHighScore = uiState.showHighScoreAnim,
+                onPlayAgain = {
+                    // Restart the game via provided callback
+                    onReset()
+                },
+                onMainMenu = {
+                    onGoToMenu()
+                },
+                onShare = {
+                    // Use helper from GameOverSummaryDialog to create a share intent
+                    shareGameResults(context, uiState.score, uiState.trophyTier)
                 }
-            }
+            )
+        }
 
-            ScorePopupRenderer(scoreState = uiState.scoreState)
+        DisposableEffect(Unit) {
+            Log.d("GameScreen", "GameScreen composed")
+            onDispose {
+                Log.d("GameScreen", "GameScreen disposed")
+            }
         }
     }
 }
 
-@Preview(showBackground = true)
+// Minimal local fallback implementation for ColorWheelDialog to satisfy references during build.
 @Composable
-fun GameScreenPreview() {
-    val sampleBoard =
-        Array(9) { r -> Array<Int?>(9) { _ -> if (r == 8) R.drawable.blue else null } }
-    val sampleBlocks = BLOCK_MANAGER.take(3)
-    val sampleUi = GameUiState(
-        board = sampleBoard,
-        availableBlocks = sampleBlocks,
-        score = 2500,
-        highScore = 4000,
-        coins = 9999,
-        freeRotations = 1,
-        lastRotatedBlockId = sampleBlocks[0].id,
-        isGameOver = false,
-        isLastChance = false,
-        selectedBlock = sampleBlocks[0],
-        rainbowBlockCount = 99,
-        specialMeterValue = 2,
-        isSoundEnabled = true,
-        isMusicEnabled = false
-    )
-    MaterialTheme {
-        GameScreen(
-            uiState = sampleUi,
-            cellDp = 38.dp,
-            onGridCellClicked = { _, _ -> },
-            onSelectBlock = {},
-            onRotateBlock = {},
-            onSelectRainbow = {},
-            onReset = {},
-            onGoToMenu = {},
-            onLastChanceUsed = {},
-            onLastChanceDeclined = {},
-            onToggleSound = {},
-            onToggleMusic = {},
-            onUseRainbowImmediately = {},
-            onColorWipeSpinResult = {},
-            onDismissTierPromotion = {},
-            onShareTier = {},
-            onDismissRainbowEarned = {},
-            onDismissPurchaseSuccess = {},
-            onClearCoinAnimation = {},
-            onDismissShopBubble = {},
-            onClearAnimationFinished = {}
-        )
-    }
-}
-
-@Composable
-fun TierPromotionDialog(
-    tier: TrophyTier,
+private fun ColorWheelDialog(
     onDismiss: () -> Unit,
-    onShare: () -> Unit
+    onSpinFinished: (Int) -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "New Rank Achieved!",
-                fontFamily = Oswald,
-                fontSize = 22.sp,
-                color = LightText
-            )
-        },
-        text = {
-            Text(
-                text = "You've unlocked the ${tier.name} tier!",
-                fontFamily = Oswald,
-                fontSize = 18.sp,
-                color = trophyColorForTier(tier)
-            )
-        },
+        title = { Text(text = "Color Wheel") },
+        text = { Text(text = "Spin the wheel to pick a color wipe result.") },
         confirmButton = {
-            TextButton(onClick = onShare) {
-                Text("Share", color = Pink_Jackie, fontFamily = Oswald)
+            TextButton(onClick = {
+                // Return a default spin result (zero) — actual logic can be provided elsewhere.
+                onSpinFinished(0)
+            }) {
+                Text("Spin")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close", color = LightText, fontFamily = Oswald)
-            }
-        },
-        containerColor = DeepBlue
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
     )
 }

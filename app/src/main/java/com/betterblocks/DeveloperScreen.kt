@@ -1,6 +1,5 @@
 package com.betterblocks.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,7 +19,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.betterblocks.DarkBackground
+import com.betterblocks.DeepBlue
 import com.betterblocks.GameSettings
+import com.betterblocks.LightText
+import com.betterblocks.Oswald
+import com.betterblocks.Pink_Jackie
 
 @Composable
 fun DeveloperScreen(onBackClicked: () -> Unit) {

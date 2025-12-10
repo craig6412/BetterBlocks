@@ -1,6 +1,7 @@
-package com.betterblocks.ui
+package com.betterblocks
 
-
+import android.R.attr.shape
+import com.betterblocks.ui.detectSimpleDragOrTap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -11,7 +12,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.Arrangement
@@ -48,26 +48,22 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
-import com.betterblocks.*
-import com.betterblocks.R
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.ColorFilter.Companion.tint
 import android.util.Log
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.coroutineScope
-
-
-import kotlin.math.roundToInt
+import androidx.compose.ui.layout.positionInWindow
+import kotlinx.coroutines.delay
 
 // --- CONSTANTS & COLORS ---
-val DeepBlue = Color(0xFF261157)           // Main Background: Midnight Void
+val DeepBlue = Color(0xFF0B0123)           // Main Background: Midnight Void
 val DarkBackground = Color(0xFF08060B)     // Game Grid / Empty Slots: Abyssal Purple
 val BoardBackground = Color(0xFF08060B)    // Match grid background to Abyssal Purple
 val LightText = Color(0xFFF2E7FE)          // All Text/Labels: Ice White
-val Pink_Jackie = Color(0xFFD500F9)        // Special Charge / accent: Neon Cyber-Violet
+val Pink_Jackie = Color(0xFF673AB7)        // Special Charge / accent: Neon Cyber-Violet
 val SpecialPurple = Color(0xFF311B92)      // Power-up Buttons: Deep Indigo
 val SuccessGreen = Color(0xFF2C78B7)       // Keep semantics but align to text color for now
 
@@ -100,24 +96,30 @@ var PREVIEW_CORNER_RADIUS: Dp = 4.dp
 
 @Composable
 fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
+    // Ensure header padding is non-negative to avoid crash if developer knobs set a negative value
+    val safeHeaderPaddingDp = GameSettings.headerVerticalPadding.floatValue.coerceAtLeast(0f).dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
             .background(DeepBlue)
             .padding(
-                top = GameSettings.headerVerticalPadding.floatValue.dp,
-                bottom = GameSettings.headerVerticalPadding.floatValue.dp,
+                top = safeHeaderPaddingDp,
+                bottom = safeHeaderPaddingDp,
                 start = 16.dp,
                 end = 16.dp
             ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top Row: Menu Button | Spacer | Coins
-        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp)) {
+        Box(modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 2.dp)) {
             IconButton(
                 onClick = onMenuClicked,
-                modifier = Modifier.size(36.dp).align(Alignment.CenterStart)
+                modifier = Modifier
+                    .size(36.dp)
+                    .align(Alignment.CenterStart)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Menu,
@@ -159,7 +161,9 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
 
         // Score Row
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 2.dp, start = 4.dp, end = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 2.dp, start = 4.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -174,7 +178,7 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
 fun Modifier.safeClickable(onClick: () -> Unit): Modifier =
     this.clickable(
         interactionSource = remember { MutableInteractionSource() },
-        indication = rememberRipple(),
+        indication = LocalIndication.current,
         onClick = onClick
     )
 
@@ -243,89 +247,100 @@ fun BlockPreviewCard(
     block: Block,
     isSelected: Boolean = false,
     onClick: () -> Unit,
-    onDragStart: (block: Block, startPosition: Offset) -> Unit,
-    onDrag: (dragAmount: Offset) -> Unit,
+    onDragStart: (fingerInWindow: Offset) -> Unit,
+    onDrag: (currentFingerPos: Offset) -> Unit,
     onDragEnd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Capture the absolute screen position of the card to use as the drag anchor.
-    var cardOffsetInRoot by remember(block.id) { mutableStateOf(Offset.Zero) }
+    // The card's top-left corner in WINDOW coordinates
+    var cardWindowPos by remember(block.id) { mutableStateOf(Offset.Zero) }
 
-    // Always-up-to-date references for lambdas and block
-    val currentBlock = rememberUpdatedState(block)
-    val currentOnClick = rememberUpdatedState(onClick)
-    val currentOnDragStart = rememberUpdatedState(onDragStart)
-    val currentOnDrag = rememberUpdatedState(onDrag)
-    val currentOnDragEnd = rememberUpdatedState(onDragEnd)
+    val onStartState = rememberUpdatedState(onDragStart)
+    val onDragState = rememberUpdatedState(onDrag)
+    val onEndState = rememberUpdatedState(onDragEnd)
 
-    val cardShape = RoundedCornerShape(8.dp)
+    // Buffer the initial down position; only fire onDragStart when movement actually begins
+    var pendingStartWindowPos by remember { mutableStateOf<Offset?>(null) }
 
-    // Border color: lavender normally, turquoise blue when selected
-    val previewBorderColor = if (isSelected) {
-        Color(0xFF00E5FF) // turquoise blue when selected
-    } else {
-        Color(0xFF7F5AF0) // lavender when not selected
-    }
+    // Use Pink_Jackie when selected, otherwise keep the faint lavender border
+    val effectiveBorderColor = if (isSelected) Pink_Jackie else Color(0x407F5AF0)
+    val backgroundColor = if (isSelected) Pink_Jackie.copy(alpha = 0.08f) else Color(0x264A148C)
 
     Card(
-        shape = cardShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(4.dp),
         modifier = modifier
             .size(80.dp)
-            .onGloballyPositioned { layoutCoordinates ->
-                cardOffsetInRoot = layoutCoordinates.localToWindow(Offset.Zero)
+            .onGloballyPositioned { coords ->
+                // store window coordinates to match grid/window coordinates
+                cardWindowPos = coords.positionInWindow()
             }
-            .then(Modifier.pointerInput(block.id) {
-                detectDragOrClick(
-                    onDragStart = {
-                        currentOnDragStart.value(currentBlock.value, cardOffsetInRoot)
+            .pointerInput(block.id) {
+                detectSimpleDragOrTap(
+                    onDragStart = { localPos ->
+                        // Buffer the down position; don't call parent onDragStart yet
+                        pendingStartWindowPos = cardWindowPos + localPos
                     },
-                    onDrag = { _, dragAmount ->
-                        currentOnDrag.value(dragAmount)
+                    onDrag = { localPos ->
+                        val windowPos = cardWindowPos + localPos
+                        // If we have a buffered start, this is the first movement -> now start drag
+                        pendingStartWindowPos?.let { startPos ->
+                            onStartState.value(startPos)
+                            pendingStartWindowPos = null
+                        }
+                        onDragState.value(windowPos)
                     },
-                    onDragEnd = { currentOnDragEnd.value() },
-                    onDragCancel = { currentOnDragEnd.value() },
-                    onClick = { currentOnClick.value() }
+                    onDragEnd = {
+                        // Clear any pending start and forward end
+                        pendingStartWindowPos = null
+                        onEndState.value()
+                    },
+                    onTap = {
+                        // Tap cancels any pending start and becomes a click
+                        pendingStartWindowPos = null
+                        onClick()
+                    }
                 )
-            })
+            }
     ) {
-        // Piece preview container: glass background + conditional border color
+        val shape = RoundedCornerShape(8.dp)
+
         Box(
-            contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    color = Color(0x264A148C),      // Piece Container: low-opacity purple glass
-                    shape = cardShape
-                )
-                .border(
-                    width = 2.dp,
-                    color = previewBorderColor,
-                    shape = cardShape
-                )
-                .padding(6.dp)
+                .background(backgroundColor, shape)
+                .border( if (isSelected) 3.dp else 2.dp, effectiveBorderColor, shape)
+                .padding(6.dp),
+            contentAlignment = Alignment.Center
         ) {
-            // Inner block grid: fully opaque
             BlockGrid(
                 block = block,
                 cellSize = 12.dp,
                 modifier = Modifier.graphicsLayer(
                     scaleX = 0.9f,
-                    scaleY = 0.9f,
-                    alpha = 1f
+                    scaleY = 0.9f
                 )
             )
         }
     }
 }
 
+// kotlin
+// File: `app/src/main/java/com/betterblocks/GameComponents.kt`
+// Modified: SpecialBlockButton - use positionInWindow()
 @Composable
-fun BlockGrid(block: Block, cellSize: Dp, modifier: Modifier = Modifier) {
+fun BlockGrid(
+    block: Block,
+    cellSize: Dp,
+    modifier: Modifier = Modifier
+) {
     Column(modifier = modifier) {
         for (r in 0 until block.boundingBoxHeight) {
             Row {
                 for (c in 0 until block.boundingBoxWidth) {
+
                     val isPresent = block.shape.any { it.row == r && it.col == c }
+
                     Box(
                         modifier = Modifier
                             .size(cellSize)
@@ -413,9 +428,9 @@ fun BottomBar(
                 count = uiState.rainbowBlockCount,
                 isSelected = uiState.selectedBlock?.id == RAINBOW_BLOCK.id,
                 onClick = { onUseRainbowImmediately() },
-                onDragStart = { offset: Offset ->
+                onDragStart = { block, offset ->  // ✅ Now receives Block
                     onSelectRainbow()
-                    onDragStart(RAINBOW_BLOCK, offset)
+                    onDragStart(block, offset)  // ✅ Pass both to parent
                 },
                 onDrag = onDrag,
                 onDragEnd = onDragEnd
@@ -453,8 +468,8 @@ fun ColorWipeButton(
 
         Box(
             modifier = Modifier
-                .size(GameSettings.bottomBarButtonSize.value.dp)
-                .scale(GameSettings.bottomBarIconScale.value)
+                .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
+                .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0x4D4A148C)) // Piece Container / Holder: Purple Glass (30% opacity)
                 .border(
@@ -474,163 +489,6 @@ fun ColorWipeButton(
                     .aspectRatio(1f),
                 contentScale = ContentScale.Fit
             )
-        }
-    }
-}
-
-// --- NEW: Color Wheel Dialog Component ---
-@Composable
-fun ColorWheelDialog(
-    onDismiss: () -> Unit,
-    onSpinFinished: (Int) -> Unit
-// Returns the BLOCK_DRAWABLE index (0-6)
-) {
-    // Map indices to approximate Colors for the wheel visual
-    val segmentColors = listOf(
-        Color(0xFF2196F3), // Blue
-        Color(0xFF4CAF50), // Green
-        Color(0xFFE91E63), // Pink
-        Color(0xFFFF9800), // Orange
-        Color(0xFF9C27B0), // Purple
-        Color(0xFFF44336), // Red
-        Color(0xFFFFEB3B)  // Yellow
-    )
-
-    var isSpinning by remember { mutableStateOf(false) }
-    val rotation = remember { Animatable(0f) }
-
-    // We pre-determine the result so we know where to stop the wheel
-    val targetIndex = (0..6).random()
-
-    LaunchedEffect(isSpinning) {
-        if (isSpinning) {
-            SoundManager.startWheelSpinLoop()
-            val segmentAngle = 360f / 7f
-            // Target rotation logic: 5 spins + adjustment to land index at 270 deg (top)
-            val targetRotation =
-                360f * 5 + (270f - (targetIndex * segmentAngle) - (segmentAngle / 2))
-
-            rotation.animateTo(
-                targetValue = targetRotation,
-                animationSpec = tween(durationMillis = 3000, easing = FastOutSlowInEasing)
-            )
-            SoundManager.stopWheelSpinLoop()
-            // Animation done, trigger the action
-            kotlinx.coroutines.delay(500)
-            onSpinFinished(targetIndex)
-        }
-    }
-
-    Dialog(onDismissRequest = { if (!isSpinning) onDismiss() }) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = DeepBlue),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(2.dp, Pink_Jackie)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "COLOR GAMBLE",
-                    color = LightText,
-                    fontSize = 24.sp,
-                    fontFamily = Oswald,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    "Spin to destroy all blocks of one color!",
-                    color = LightText.copy(0.7f),
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    fontFamily = Oswald
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // --- THE WHEEL ---
-                Box(contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.size(200.dp)) {
-                        val strokeWidth = 2.dp.toPx()
-
-                        rotate(rotation.value) {
-                            val anglePerSegment = 360f / 7f
-                            segmentColors.forEachIndexed { index, color ->
-                                drawArc(
-                                    color = color,
-                                    startAngle = index * anglePerSegment,
-                                    sweepAngle = anglePerSegment,
-                                    useCenter = true,
-                                    size = size
-                                )
-                                // Draw segment borders
-                                drawArc(
-                                    color = DeepBlue,
-                                    startAngle = index * anglePerSegment,
-                                    sweepAngle = anglePerSegment,
-                                    useCenter = true,
-                                    style = Stroke(width = strokeWidth),
-                                    size = size
-                                )
-                            }
-                        }
-                    }
-
-                    // The "Center Pivot" Object
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = Pink_Jackie,
-                        border = BorderStroke(2.dp, Color.White),
-                        modifier = Modifier.size(40.dp),
-                        shadowElevation = 8.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                "?",
-                                color = DeepBlue,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
-                            )
-                        }
-                    }
-
-                    // The "Clicker/Pointer" at the top - CHANGED TO BLACK ARROW
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDropDown, // Arrow pointing down
-                        contentDescription = null,
-                        tint = Color.Black, // Black arrow
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .offset(y = (-12).dp)
-                            .size(48.dp) // Slightly larger for visibility
-                            .zIndex(2f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                if (!isSpinning) {
-                    Button(
-                        onClick = { isSpinning = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("SPIN (1 ITEM)", fontWeight = FontWeight.Bold, fontFamily = Oswald)
-                    }
-                } else {
-                    Text(
-                        "SPINNING...",
-                        color = Pink_Jackie,
-                        fontSize = 18.sp,
-                        fontFamily = Oswald,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
         }
     }
 }
@@ -665,8 +523,8 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
 
         Box(
             modifier = Modifier
-                .size(GameSettings.bottomBarButtonSize.value.dp)
-                .scale(GameSettings.bottomBarIconScale.value)
+                .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
+                .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color(0xFF311B92)) // Power-up Buttons: Deep Indigo
                 .border(
@@ -696,20 +554,18 @@ fun SpecialBlockButton(
     count: Int,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onDragStart: (Offset) -> Unit,
+    onDragStart: (Block, Offset) -> Unit,
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit
 ) {
     if (count <= 0) return
 
-    var buttonPos by remember { mutableStateOf(Offset.Zero) }
-
+    var buttonWindowPos by remember { mutableStateOf(Offset.Zero) }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.onGloballyPositioned { buttonPos = it.positionInRoot() }
+        modifier = Modifier.onGloballyPositioned { buttonWindowPos = it.positionInWindow() }
     ) {
-        // Count Badge
         Surface(
             color = Pink_Jackie,
             shape = RoundedCornerShape(50),
@@ -718,7 +574,7 @@ fun SpecialBlockButton(
             Text(
                 text = "x$count",
                 color = DarkBackground,
-                fontSize = 10.sp,
+                fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
@@ -729,9 +585,8 @@ fun SpecialBlockButton(
 
         Box(
             modifier = Modifier
-                .size(GameSettings.bottomBarButtonSize.value.dp)
-                .scale(GameSettings.bottomBarIconScale.value)
-
+                .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
+                .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (isSelected) Pink_Jackie else SpecialPurple)
                 .border(
@@ -740,21 +595,31 @@ fun SpecialBlockButton(
                     RoundedCornerShape(16.dp)
                 )
                 .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { onDragStart(buttonPos) },
-                        onDrag = { change, dragAmount -> change.consume(); onDrag(dragAmount) },
-                        onDragEnd = { onDragEnd() }
+                    detectSimpleDragOrTap(
+                        onDragStart = { localPos ->
+                            val windowPos = buttonWindowPos + localPos
+                            Log.d("SpecialBlockButton", "onDragStart localPos=$localPos buttonWindowPos=$buttonWindowPos windowPos=$windowPos")
+                            onDragStart(RAINBOW_BLOCK, windowPos)
+                        },
+                        onDrag = { localPos ->
+                            val windowPos = buttonWindowPos + localPos
+                            Log.d("SpecialBlockButton", "onDrag localPos=$localPos windowPos=$windowPos")
+                            onDrag(windowPos)
+                        },
+                        onDragEnd = {
+                            onDragEnd()
+                        },
+                        onTap = {
+                            onClick()
+                        }
                     )
-                }
-                .safeClickable { onClick() },
+                },
             contentAlignment = Alignment.Center
         ) {
             Box(
-                modifier = Modifier.scale(2.0f * GameSettings.bottomBarIconScale.value)
+                modifier = Modifier.scale(2.0f * GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
             ) {
                 BlockShapeDisplay(RAINBOW_BLOCK, 18.dp)
-
-
             }
         }
     }
@@ -1112,46 +977,34 @@ fun calculateDragOffset(block: Block, cellSizePx: Float): Offset {
  *
  * This ensures ghost preview and actual placement are ALWAYS identical.
  */
+
+
+
+
 fun calculateGridPosition(
-    dragPos: Offset,
+    blockCenter: Offset,
     gridTopLeft: Offset,
     gridSizePx: Float,
-    gridSize: Int,
-    visualOffsetX: Float = 0f,  // NEW: Offset compensation
-    visualOffsetY: Float = 0f   // NEW: Offset compensation
+    gridSize: Int
 ): Pair<Int, Int>? {
-    // Step 1: Compensate for visual offset to get TRUE block center
-    val trueCenterX = dragPos.x - visualOffsetX
-    val trueCenterY = dragPos.y - visualOffsetY
-
-    Log.d("GRID_PLACEMENT", "dragPos=$dragPos offset=($visualOffsetX, $visualOffsetY)")
-    Log.d("GRID_PLACEMENT", "trueCenter=($trueCenterX, $trueCenterY)")
-
-    // Step 2: Calculate relative position to grid
-    val relativeX = trueCenterX - gridTopLeft.x
-    val relativeY = trueCenterY - gridTopLeft.y
-    Log.d("GRID_PLACEMENT", "relative: X=$relativeX Y=$relativeY")
 
     val cellSize = gridSizePx / gridSize
 
-    // Step 3: Generous boundary check (200% tolerance for smooth edges)
-    val tolerance = cellSize * 2.0f  // INCREASED: Even more forgiving
+    val relX = blockCenter.x - gridTopLeft.x
+    val relY = blockCenter.y - gridTopLeft.y
 
-    if (relativeX < -tolerance || relativeX > gridSizePx + tolerance ||
-        relativeY < -tolerance || relativeY > gridSizePx + tolerance
-    ) {
-        Log.d("GRID_PLACEMENT", "OUT OF BOUNDS (tolerance=$tolerance)")
-        return null
-    }
+    if (relX < 0f || relY < 0f) return null
+    if (relX >= gridSizePx || relY >= gridSizePx) return null
 
-    // Step 4: Floor-based cell calculation
-    // This matches "which cell am I mostly over" logic
-    val col = (relativeX / cellSize).toInt().coerceIn(0, gridSize - 1)
-    val row = (relativeY / cellSize).toInt().coerceIn(0, gridSize - 1)
+    val col = (relX / cellSize).toInt()
+    val row = (relY / cellSize).toInt()
 
-    Log.d("GRID_PLACEMENT", "✅ SUCCESS: row=$row col=$col")
-    return Pair(row, col)
+    return if (row in 0 until gridSize && col in 0 until gridSize)
+        Pair(row, col)
+    else null
 }
+
+
 
 fun isValidPlacement(board: GameGrid, block: Block, origin: Pair<Int, Int>): Boolean {
     val ignoreCollision = block.isSpecial

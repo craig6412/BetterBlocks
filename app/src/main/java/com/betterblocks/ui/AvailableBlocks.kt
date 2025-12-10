@@ -11,18 +11,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import com.betterblocks.Block
+import com.betterblocks.BlockPreviewCard
 import com.betterblocks.GameUiState
 import com.betterblocks.InteractionType
-import android.util.Log
 
 @Composable
 fun AvailableBlocks(
     uiState: GameUiState,
     onBlockInteraction: (Block, InteractionType) -> Unit,
-    onDragStart: (Block, Offset) -> Unit,
-    onDrag: (Offset) -> Unit,
+    onDragStart: (Block, Offset) -> Unit,  // ✅ Block + Offset
+    onDrag: (Offset) -> Unit,              // ✅ Just Offset
     onDragEnd: () -> Unit
-) {
+){
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -31,23 +31,22 @@ fun AvailableBlocks(
         verticalAlignment = Alignment.CenterVertically
     ) {
         uiState.availableBlocks.forEach { block ->
-            // Use key() to ensure proper recomposition when blocks change
             key(block.id) {
                 BlockPreviewCard(
                     block = block,
                     isSelected = (uiState.selectedBlock?.id == block.id),
                     onClick = {
-                        // TAP interaction: toggle selection
                         onBlockInteraction(block, InteractionType.TAP)
                     },
-                    // DRAG_START interaction: always select the block being dragged
-                    onDragStart = { _, startPosition ->
-                        val latest = uiState.availableBlocks.firstOrNull { it.id == block.id } ?: block
-                        onBlockInteraction(latest, InteractionType.DRAG_START)
-                        onDragStart(latest, startPosition)
+                    onDragStart = { fingerRootPos ->
+                        onDragStart(block, fingerRootPos)  // Pass Block + Offset
                     },
-                    onDrag = onDrag,
-                    onDragEnd = onDragEnd
+                    onDrag = { currentFingerPos ->
+                        onDrag(currentFingerPos)  // Pass current position
+                    },
+                    onDragEnd = {
+                        onDragEnd()
+                    }
                 )
             }
         }

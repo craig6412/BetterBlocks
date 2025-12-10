@@ -25,6 +25,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.betterblocks.DarkBackground
+import com.betterblocks.DeepBlue
+import com.betterblocks.LightText
+import com.betterblocks.Oswald
+import com.betterblocks.Pink_Jackie
+import com.betterblocks.SuccessGreen
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.trophyColorForTier
 import kotlinx.coroutines.delay

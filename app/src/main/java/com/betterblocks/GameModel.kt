@@ -117,13 +117,16 @@ data class GameUiState(
     val scoreState: ScorePopupState = ScorePopupState(),
 
     // NEW FIELDS (needed for pre-clear tint)
-    val previewClearIndices: List<Int> = emptyList() ,  // which rows/cols will clear
+    val previewClearIndices: List<Int> = emptyList(),  // which rows/cols will clear
     val previewIsRow: Boolean = true,                   // true=row, false=column
-    val moveNumber: Int = 0                            // increments per block placement, used for tint cycling
+    val moveNumber: Int = 0,                            // increments per block placement, used for tint cycling
 
-)
+    // NEW: selection/rotation session tracking (runtime only)
+    val selectionToken: Long = 0L,                    // increments when a block is newly selected
+    val rotationPaidSelectionToken: Long = 0L         // token for which rotation payment/free-rotation was consumed
+ )
 
-data class ClearResult(val newBoard: GameGrid, val totalClears: Int)
+ data class ClearResult(val newBoard: GameGrid, val totalClears: Int)
 
 // ---------------------------
 // 2. Block Definitions

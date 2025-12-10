@@ -4,7 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.indication
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,16 +41,17 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import com.betterblocks.ads.AdManager
 import androidx.compose.ui.zIndex
-import androidx.compose.material.ripple.rememberRipple
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-
-
+import com.betterblocks.DeepBlue
+import com.betterblocks.LightText
+import com.betterblocks.Oswald
+import com.betterblocks.Pink_Jackie
+import com.betterblocks.SpecialPurple
+import com.betterblocks.SuccessGreen
 
 
 // Gradient colors for background
 val BannerBlueTop = Color(0xFF011133)
-val BannerBlueBottom = Color(0xFF02287A)
+val BannerBlueBottom = Color(0xFF021B4F)
 
 
 @Composable
@@ -244,7 +244,7 @@ fun MainMenuScreen(
                     text = "PLAY",
                     icon = Icons.Default.PlayArrow,
                     onClick = onPlayClicked,
-                    containerColor = Color(0xFFD01F5B),
+                    containerColor = Color(0xFF673AB7),
                     contentColor = Color.White,
                     height = 80.dp
                 )
@@ -256,7 +256,7 @@ fun MainMenuScreen(
                     icon = Icons.Default.ShoppingCart,
                     onClick = onShopClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                    border = BorderStroke(3.dp, Color(0xFF673AB7))
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -266,7 +266,7 @@ fun MainMenuScreen(
                     icon = Icons.Default.EmojiEvents,
                     onClick = onHighScoresClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                    border = BorderStroke(3.dp, Color(0xFF673AB7))
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -276,7 +276,7 @@ fun MainMenuScreen(
                     icon = Icons.Default.Assessment,
                     onClick = onStatsClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                    border = BorderStroke(3.dp, Color(0xFF673AB7))
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -286,7 +286,7 @@ fun MainMenuScreen(
                     icon = Icons.Default.Settings,
                     onClick = onSettingsClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFFD01F5B))
+                    border = BorderStroke(3.dp, Color(0xFF673AB7))
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))

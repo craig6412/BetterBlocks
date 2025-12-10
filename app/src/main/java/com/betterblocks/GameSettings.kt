@@ -18,13 +18,6 @@ object GameSettings {
     // REDUCED: From 120f down to 90f to remove the "Gap" between grid and blocks
     var availableBlocksRowHeight = mutableFloatStateOf(90f)
 
-    // 3. Block Preview Scale
-    // Set to 1.3f to fit nicely in the 90dp height
-    var availableBlockScale = mutableFloatStateOf(0.9f)
-
-    // 4. Bottom Bar Padding
-    var bottomBarPadding = mutableFloatStateOf(4f)
-
     // 5. Rotate Button Scale
     var rotateButtonScale = mutableFloatStateOf(1.0f)
 
@@ -71,7 +64,7 @@ object GameSettings {
 
     // Ghost/Drop matching offsets: Alignment between ghost and actual drop position
     // Kept independent so ghost/drop calculation can be tuned separately from visual preview
-    var matchingDragOffsetY = mutableFloatStateOf(80f) // dp - ghost Y alignment
+    var matchingDragOffsetY = mutableFloatStateOf(0f) // dp - ghost Y alignment
     var matchingDragOffsetX = mutableFloatStateOf(0f)   // dp - ghost X alignment (centered)
 
     // --- BLOCK PLACEMENT CORRECTION (Fine-tuning for exact placement) ---
@@ -83,7 +76,9 @@ object GameSettings {
     // --- DRAGGED BLOCK SCALE ---
     // 1.0f = same size as placed blocks on the game grid
     var draggedBlockScale = mutableFloatStateOf(1.0f) // Scale of the block preview while dragging
-
+    // Final correction offsets applied to the drag preview & ghost alignment
+    var dragCorrectionX = mutableFloatStateOf(0f)   // in dp
+    var dragCorrectionY = mutableFloatStateOf(0f)   // in dp
     // --- INVENTORY CONTROLS (for Testing) ---
     var testRainbowCount = mutableStateOf(0)     // 0 to 1,000,000
     var testColorWipeCount = mutableStateOf(0)   // 0 to 1,000,000

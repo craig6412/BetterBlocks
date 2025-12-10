@@ -4,11 +4,13 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.*
@@ -16,22 +18,26 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.betterblocks.*
-import com.betterblocks.ui.BoardBackground
-import com.betterblocks.ui.SuccessGreen
-import com.betterblocks.ui.BLOCK_TEXTURE_SCALE
-import com.betterblocks.ui.safeClickable
+import com.betterblocks.BoardBackground
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.sqrt
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import kotlin.div
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -392,6 +398,8 @@ private val preClearTintColors = listOf(
 private fun pickTintColor(index: Int): Color {
     return preClearTintColors[index % preClearTintColors.size]
 }
+
+// kotlin
 @Composable
 fun AnimatedGameBoard(
     board: GameGrid,
@@ -403,21 +411,25 @@ fun AnimatedGameBoard(
     onCellClick: (row: Int, col: Int) -> Unit,
     uiState: GameUiState,
     effectCells: Set<Coord>,
-    onClearAnimationFinished: () -> Unit
+    onClearAnimationFinished: () -> Unit,
+    controller: SimpleDragController // <-- new param
 ) {
     Log.d("BoardRender", "Using ULTRA animation system (clearing=${effectCells.size})")
 
-    val totalBoardSize = cellDp * gridSize
     val density = LocalDensity.current
     val cellSizePx = with(density) { cellDp.toPx() }
+    val totalBoardPx = cellSizePx * gridSize
+    val totalBoardSize = cellDp * gridSize
 
-    // ⭐ ULTRA ANIMATOR – now driven by the clearingCells state from GameUiState
-    // Apply slower speed when color wipe is active
+    // Match the border width used by the Box so logic compensates for the visual inset.
+    val borderStrokePx = with(density) { 3.dp.toPx() }
+    // visual inset to adjust for border/padding; tweak if necessary
+    val visualInset = Offset(x = borderStrokePx, y = borderStrokePx)
+
+    // Animation state for line clears
     val animationSpeed = if (uiState.isColorWipeAnimating) {
         com.betterblocks.COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER
-    } else {
-        1.0f
-    }
+    } else 1f
 
     val lineClearAnimState = rememberLineClearAnimationState(
         clearingCells = uiState.clearingCells,
@@ -427,26 +439,44 @@ fun AnimatedGameBoard(
         onAnimationComplete = onClearAnimationFinished
     )
 
-// Detect rows/columns that WILL clear if placed now
-    val previewClearLines: List<Int> = uiState.previewClearIndices
-
-// Pick a color for the pre-clear tint
+    val previewClearLines = uiState.previewClearIndices
     val previewTintColor = pickTintColor(uiState.moveNumber)
+
+    var boardWindowPos by remember { mutableStateOf(Offset.Zero) }
 
     Box(
         modifier = Modifier
             .size(totalBoardSize)
             .offset(y = 10.dp)
+            // capture window coords into local state during layout; apply to controller from LaunchedEffect
+            .onGloballyPositioned { coords ->
+                // store window pos into a local state (safe during measure)
+                boardWindowPos = coords.positionInWindow()
+            }
             .clip(RoundedCornerShape(8.dp))
             .background(BoardBackground)
             .border(
-                width = 3.dp,
-                color = Color(0xFF9C27B0), // Blue
+                width = 1.dp,
+                color = Color(0xFF2196F3),
                 shape = RoundedCornerShape(8.dp)
             )
     ) {
+
+        // Defer the controller.setGridMetrics call so we don't write snapshot state during measure/layout
+        LaunchedEffect(boardWindowPos, cellSizePx, totalBoardPx) {
+            if (boardWindowPos != Offset.Zero) {
+                controller.setGridMetrics(
+                    topLeft = boardWindowPos,
+                    totalGridPx = totalBoardPx,
+                    cellPx = cellSizePx,
+                    visualOffset = visualInset
+                )
+                Log.d("BoardRender", "setGridMetrics (deferred) topLeftWindow=$boardWindowPos totalBoardPx=$totalBoardPx cellSizePx=$cellSizePx visualInset=$visualInset")
+            }
+        }
+
         // ----------------------------------------------------------------------
-        // LAYER 1 — TILE GRID
+        // LAYER 1 — GRID TILES
         // ----------------------------------------------------------------------
         LazyVerticalGrid(
             columns = GridCells.Fixed(gridSize),
@@ -457,36 +487,24 @@ fun AnimatedGameBoard(
                 val r = index / gridSize
                 val c = index % gridSize
                 val cell = Coord(r, c)
+
                 val isOccupied = cellValue != null
-
                 val isClearing = lineClearAnimState.affectedCells.contains(cell)
-                val cellAnimState = lineClearAnimState.cellStates[cell]
+                val animState = lineClearAnimState.cellStates[cell]
 
-                // Ghost block color
-                val ghostColor =
-                    if (ghostBlock != null && ghostOrigin != null &&
-                        ghostBlock.shape.any {
-                            it.row == r - ghostOrigin.first &&
-                                    it.col == c - ghostOrigin.second
-                        }
-                    ) {
-                        if (isGhostValid)
-                            SuccessGreen.copy(alpha = 0.35f)
-                        else
-                            Color.Red.copy(alpha = 0.35f)
-                    } else BoardBackground
+                // Ghost block tint suppressed here — handled by dedicated ghost layer.
+                val ghostColor = Color.Transparent
 
-                // Determine whether this cell should receive the preview tint (predicted clear)
-                val isPreviewTinted = !isClearing && (
-                    if (uiState.previewIsRow) (r in uiState.previewClearIndices) else (c in uiState.previewClearIndices)
-                )
+                val isPreviewTinted = !isClearing &&
+                        if (uiState.previewIsRow) (r in previewClearLines)
+                        else (c in previewClearLines)
 
                 AnimatedBoardCell(
                     cell = cell,
                     cellValue = cellValue,
                     isOccupied = isOccupied,
                     isClearing = isClearing,
-                    cellAnimState = cellAnimState,
+                    cellAnimState = animState,
                     ghostColor = ghostColor,
                     cellDp = cellDp,
                     tintColor = previewTintColor.copy(alpha = 0.65f),
@@ -496,38 +514,73 @@ fun AnimatedGameBoard(
             }
         }
 
-        // LAYER 1.5 — GRID LINES (drawn over tiles)
+        // ----------------------------------------------------------------------
+        // LAYER 1.25 — CLEAN BLOCK BLAST GHOST (Outline + faint fill)
+        // ----------------------------------------------------------------------
+        if (ghostBlock != null && ghostOrigin != null) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val outlineColor = if (isGhostValid)
+                    Color(0xFF00FFAA)     // neon teal
+                else
+                    Color(0xFFFF5577)     // neon red/pink
+
+                val fillColor = outlineColor.copy(alpha = 0.08f)
+                val strokeWidth = cellSizePx * 0.10f
+                val corner = cellSizePx * 0.22f
+
+                ghostBlock.shape.forEach { shapeCell ->
+                    val gx = (ghostOrigin.second + shapeCell.col) * cellSizePx
+                    val gy = (ghostOrigin.first + shapeCell.row) * cellSizePx
+
+                    // Soft fill behind
+                    drawRoundRect(
+                        color = fillColor,
+                        topLeft = Offset(gx, gy),
+                        size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
+                        cornerRadius = CornerRadius(corner, corner)
+                    )
+
+                    // Neon outline
+                    drawRoundRect(
+                        color = outlineColor,
+                        topLeft = Offset(gx, gy),
+                        size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
+                        cornerRadius = CornerRadius(corner, corner),
+                        style = Stroke(width = strokeWidth)
+                    )
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------------
+        // LAYER 1.5 — GRID LINES
+        // ----------------------------------------------------------------------
         Canvas(modifier = Modifier.fillMaxSize()) {
             val strokeWidth = 2.dp.toPx()
-            val lineColor = GridLineColor
-
             val cellPx = cellDp.toPx()
             val boardPx = cellPx * gridSize
 
-            // Vertical grid lines
             for (c in 1 until gridSize) {
-                val x = c * cellPx
                 drawLine(
-                    color = lineColor,
-                    start = Offset(x, 0f),
-                    end = Offset(x, boardPx),
+                    color = GridLineColor,
+                    start = Offset(c * cellPx, 0f),
+                    end = Offset(c * cellPx, boardPx),
                     strokeWidth = strokeWidth
                 )
             }
-
-            // Horizontal grid lines
             for (r in 1 until gridSize) {
-                val y = r * cellPx
                 drawLine(
-                    color = lineColor,
-                    start = Offset(0f, y),
-                    end = Offset(boardPx, y),
+                    color = GridLineColor,
+                    start = Offset(0f, r * cellPx),
+                    end = Offset(boardPx, r * cellPx),
                     strokeWidth = strokeWidth
                 )
             }
         }
 
-        // ⭐ NEW — Pre-Clear Glow Pulse (subtle infinite pulse)
+        // ----------------------------------------------------------------------
+        // LAYER 1.75 — PREVIEW GLOW
+        // ----------------------------------------------------------------------
         val infinite = rememberInfiniteTransition()
         val pulseAlpha by infinite.animateFloat(
             initialValue = 0.20f,
@@ -560,7 +613,6 @@ fun AnimatedGameBoard(
                 }
             }
         }
-
 
         // ----------------------------------------------------------------------
         // LAYER 2 — SWEEP BAR
@@ -600,12 +652,8 @@ fun AnimatedGameBoard(
     }
 }
 
-// --------------------------------------------------------------------------
-// TILE CELL COMPOSABLE
-// --------------------------------------------------------------------------
-
 @Composable
-private fun AnimatedBoardCell(
+fun AnimatedBoardCell(
     cell: Coord,
     cellValue: Int?,
     isOccupied: Boolean,
@@ -617,92 +665,55 @@ private fun AnimatedBoardCell(
     isPreviewTinted: Boolean,
     onCellClick: () -> Unit
 ) {
-    val innerBloom = cellAnimState?.innerBloom ?: 0f
-    val outerBloom = cellAnimState?.outerBloom ?: 0f
-    val additiveGlow = cellAnimState?.additiveGlow ?: 0f
-    val flashWhite = cellAnimState?.flashWhite ?: 0f
-    val scale = cellAnimState?.scale ?: 1f
-    val alpha = cellAnimState?.alpha ?: 1f
-    val rotation = cellAnimState?.rotation ?: 0f
+    // Minimal, robust cell renderer to avoid crashes from TODO
+    val corner = 6.dp
+    val padding = 0.dp
+
+    val bgColor = if (isOccupied) Color(0xFF0F0C14) else Color.Transparent
+    val alpha = if (isClearing) 0.4f else 1f
 
     Box(
         modifier = Modifier
             .size(cellDp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.alpha = alpha
-                rotationZ = rotation
-            }
-            .background(ghostColor)
-            .safeClickable { onCellClick() }
+            .padding(padding)
+            .clip(RoundedCornerShape(corner))
+            .background(bgColor)
+            .safeClickable { onCellClick() },
+        contentAlignment = Alignment.Center
     ) {
-        // Tile image
-        if (isOccupied && cellValue != null) {
+        // Draw block texture if present (cellValue holds drawable resource id)
+        if (cellValue != null) {
             Image(
                 painter = painterResource(id = cellValue),
                 contentDescription = null,
-                contentScale = ContentScale.FillBounds,
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer {
-                        // Combine ULTRA animator scale with texture scale
-                        scaleX = scale * BLOCK_TEXTURE_SCALE
-                        scaleY = scale * BLOCK_TEXTURE_SCALE
-                        rotationZ = rotation
-                        this.alpha = alpha
-                    }
+                    .scale(com.betterblocks.BLOCK_TEXTURE_SCALE)
+                    .graphicsLayer { this.alpha = alpha }
             )
-
         }
 
-        // --- PREVIEW TINT PASS ---
-        val shouldTint = isPreviewTinted && isOccupied && cellValue != null && !isClearing
-        if (shouldTint) {
-            val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-            val scale by infiniteTransition.animateFloat(
-                initialValue = 1.0f,
-                targetValue = 1.05f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(400, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ), label = "pulseScale"
+        // Preview tint overlay (for previewed clear rows/cols)
+        if (isPreviewTinted) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(tintColor.copy(alpha = 0.14f))
             )
-             // Use the provided tintColor passed from AnimatedGameBoard
-             Canvas(modifier = Modifier.matchParentSize().graphicsLayer {
-                 scaleX = scale
-                 scaleY = scale
-             }) {
-                 // Multiply pass - recolors base texture while preserving lighting
-                 drawRect(
-                     color = Color.White,
-                     alpha = 0.2f,
-                     blendMode = BlendMode.Screen
-                 )
-             }
-         }
+        }
 
-         // Overlays
-         if (isClearing) {
-            if (innerBloom > 0f) CellInnerGlowLayer(cellAnimState)
-            if (outerBloom > 0f) CellOuterGlowLayer(cellAnimState)
-            if (additiveGlow > 0f) CellAdditiveLayer(cellAnimState)
-            if (flashWhite > 0f) CellFlashLayer(cellAnimState)
-
-            // NEW: soft tint glow behind fragments (above tile, under fragments)
-            CellTintGlowLayer(tintColor = tintColor.copy(alpha = 0.45f), animState = cellAnimState, modifier = Modifier.fillMaxSize())
-
-            // NEW: burst into little tinted fragments
-            CellFragmentBurstLayer(animState = cellAnimState, tintColor = tintColor, modifier = Modifier.fillMaxSize())
-
-            CellTintLayer(cellAnimState)
+        // Ghost outline
+        if (ghostColor != Color.Transparent) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .border(1.dp, ghostColor.copy(alpha = 0.22f), RoundedCornerShape(corner))
+            )
         }
     }
 }
 
-// --------------------------------------------------------------------------
-// NEW: CellTintGlowLayer
-// --------------------------------------------------------------------------
 
 @Composable
 private fun CellTintGlowLayer(

@@ -1,6 +1,5 @@
 package com.betterblocks.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -12,6 +11,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.betterblocks.DarkBackground
+import com.betterblocks.LightText
+import com.betterblocks.Oswald
+import com.betterblocks.Pink_Jackie
 
 @Composable
 fun ComingSoonScreen(title: String, onBack: () -> Unit) {

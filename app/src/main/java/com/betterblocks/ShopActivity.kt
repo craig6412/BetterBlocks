@@ -33,7 +33,6 @@ import androidx.lifecycle.lifecycleScope
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.ui.*
 import com.betterblocks.ui.theme.BetterBlocksTheme
-import java.util.*
 import java.util.concurrent.TimeUnit
 
 

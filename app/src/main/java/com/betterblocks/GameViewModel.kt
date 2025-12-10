@@ -21,12 +21,19 @@ import kotlin.math.max
 import kotlin.random.Random
 import com.betterblocks.KEY_SAVED_SELECTED
 import com.betterblocks.KEY_HIGH_SCORE
-
+import kotlin.collections.get
+import kotlin.compareTo
+import kotlin.text.get
+import kotlin.text.toLong
+import kotlin.times
 
 
 // --- Constants ---
 const val GRID_SIZE = 9
 const val BLOCKS_PER_ROUND = 3
+
+// Broadcast action sent by DeveloperActivity when developer knobs are saved
+const val ACTION_DEV_SETTINGS_CHANGED = "com.betterblocks.ACTION_DEV_SETTINGS_CHANGED"
 
 // Animation Timing Constants
 const val BLOCK_CLEAR_DELAY_MS = LineClearAnimator.SWEEP_DURATION.toLong()
@@ -95,8 +102,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(createInitialState())
     val uiState: StateFlow<GameUiState> = _uiState
 
+    // Receiver to listen for developer settings changes so we can apply inventory overrides at runtime
+    private val devSettingsReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            if (intent?.action == ACTION_DEV_SETTINGS_CHANGED) {
+                Log.d("GameViewModel", "Dev settings changed broadcast received; applying inventory overrides.")
+                applyDeveloperInventoryOverrides()
+            }
+        }
+    }
+
     // Internal tracking to trigger the animation only once per session/high score beat
     private var scoreToBeat: Int = 0
+
+    // NEW: runtime-only counter used to tie rotation payments to a specific selection session
+    private var selectionCounter: Long = 0L
+
+    init {
+        try {
+            application.registerReceiver(devSettingsReceiver, android.content.IntentFilter(ACTION_DEV_SETTINGS_CHANGED))
+        } catch (t: Throwable) {
+            Log.w("GameViewModel", "Failed to register dev settings receiver: ${t.message}")
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try {
+            getApplication<Application>().unregisterReceiver(devSettingsReceiver)
+        } catch (t: Throwable) {
+            Log.w("GameViewModel", "Failed to unregister dev settings receiver: ${t.message}")
+        }
+    }
 
     /**
      * Creates the initial state for a new game, loading saved data.
@@ -386,18 +423,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Triggered when the Color Wheel stops spinning.
      */
+    // Patch: Add diagnostics and clearer logging to onColorWipeSpinResult
     fun onColorWipeSpinResult(colorIndex: Int) {
         val currentState = _uiState.value
-        if (currentState.colorWipeCount <= 0) return
+        Log.d("GameViewModel", "onColorWipeSpinResult called colorIndex=$colorIndex colorWipeCount=${currentState.colorWipeCount}")
 
-        // 1. Deduct Inventory immediately
+        if (currentState.colorWipeCount <= 0) {
+            Log.d("GameViewModel", "onColorWipeSpinResult aborting: no color wipes available")
+            return
+        }
+
+        // Deduct Inventory immediately
         val newCount = currentState.colorWipeCount - 1
         saveColorWipeCount(newCount)
         _uiState.update { it.copy(colorWipeCount = newCount) }
         saveSelectedBlockId(_uiState.value.selectedBlock?.id)
+        Log.d("GameViewModel", "Color wipe consumed -> newCount=$newCount")
 
         // 2. Find all matching blocks
-        val targetDrawableId = BLOCK_DRAWABLES[colorIndex]
+        val targetDrawableId = try {
+            BLOCK_DRAWABLES[colorIndex]
+        } catch (t: Throwable) {
+            Log.e("GameViewModel", "Invalid colorIndex=$colorIndex", t)
+            return
+        }
+
         val cellsToClear = mutableSetOf<Coord>()
         for (r in 0 until GRID_SIZE) {
             for (c in 0 until GRID_SIZE) {
@@ -407,18 +457,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        Log.d("GameViewModel", "Color wipe targetDrawableId=$targetDrawableId matchedCells=${cellsToClear.size}")
+
         viewModelScope.launch {
             if (cellsToClear.isNotEmpty()) {
-                // 3. CRITICAL FIX: Keep the board state unchanged during animation
-                // The board already has the blocks, so we just need to set effectCells
-                // and isColorWipeAnimating flag WITHOUT changing the board
+                // 3. Keep the board state unchanged during animation; set effect layer
                 _uiState.update {
                     it.copy(
-                        board = currentState.board,  // Keep the original board with blocks visible
+                        board = currentState.board,
                         effectCells = cellsToClear,
                         isColorWipeAnimating = true
                     )
                 }
+                Log.d("GameViewModel", "Effect layer set; starting color wipe animation for ${cellsToClear.size} cells")
 
                 // Use slower animation duration for color wipe
                 val colorWipeDelay =
@@ -434,6 +485,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // 5. Score: 50 points per block
                 val points = cellsToClear.size * 50
 
+                Log.d("GameViewModel", "Applying board changes: cleared=${cellsToClear.size} points=$points")
                 updateScoreAndState(
                     currentState = currentState,
                     newAvailableBlocks = currentState.availableBlocks,
@@ -442,14 +494,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     newBoard = newBoard,
                     clearSelection = true
                 )
+
                 // Clear effect layer and color wipe flag after state update
                 _uiState.update { it.copy(effectCells = emptySet(), isColorWipeAnimating = false) }
-
-                // After a board change, re-check for possible moves / game over
+                Log.d("GameViewModel", "Color wipe finished; effect layer cleared")
                 checkGameOverOrLastChance()
+            } else {
+                // No matching cells — nothing to animate; already consumed an item above.
+                Log.d("GameViewModel", "No matching blocks found for colorIndex=$colorIndex; nothing cleared")
+                // Ensure UI isn't left in animating state
+                _uiState.update { it.copy(effectCells = emptySet(), isColorWipeAnimating = false) }
             }
         }
     }
+
 
     private fun handleFullBoardRainbowWipe(state: GameUiState) {
         // Compute occupied cells from the snapshot 'state' only
@@ -693,15 +751,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Public API for rotation button
     fun rotateSelectedBlock() {
         val currentState = _uiState.value
+
+        // Disallow rotation in game over/last chance or while board animations are running
         if (currentState.isGameOver || currentState.selectedBlock == null || currentState.isLastChance) return
+        if (currentState.isColorWipeAnimating || currentState.isRainbowWipeActive || currentState.clearingCells.isNotEmpty()) return
 
         val currentBlock = currentState.selectedBlock
 
+        // Determine if we've already consumed payment/free-rotation for this selection token
+        val alreadyPaidForThisSelection = currentState.rotationPaidSelectionToken != 0L && currentState.rotationPaidSelectionToken == currentState.selectionToken
+
         var newCoins = currentState.coins
         var newFreeRotations = currentState.freeRotations
-        val isAlreadyPaidFor = currentState.lastRotatedBlockId == currentBlock.id
 
-        if (!isAlreadyPaidFor) {
+        if (!alreadyPaidForThisSelection) {
             if (newFreeRotations > 0) {
                 newFreeRotations -= 1
             } else if (newCoins >= ROTATION_COST) {
@@ -715,17 +778,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val rotatedBlock = currentBlock.rotate()
         val newAvailableBlocks = if (!currentBlock.isSpecial) {
             currentState.availableBlocks.map { if (it.id == currentBlock.id) rotatedBlock else it }
-        } else {
-            currentState.availableBlocks
-        }
+        } else currentState.availableBlocks
+
+        // Mark that this selection token has had rotation payment consumed
+        val paidToken = if (!alreadyPaidForThisSelection) currentState.selectionToken else currentState.rotationPaidSelectionToken
 
         val updatedState = currentState.copy(
             availableBlocks = newAvailableBlocks,
             selectedBlock = rotatedBlock,
             coins = newCoins,
             freeRotations = newFreeRotations,
-            lastRotatedBlockId = currentBlock.id
+            lastRotatedBlockId = currentBlock.id,
+            rotationPaidSelectionToken = paidToken
         )
+
         _uiState.value = updatedState
         persistGameSnapshot(
             board = updatedState.board,
@@ -747,9 +813,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun selectBlock(block: Block) {
         val current = _uiState.value
         if (current.isGameOver || current.isLastChance) return
-        val newSelected = if (current.selectedBlock == block) null else block
-        _uiState.update { it.copy(selectedBlock = newSelected) }
-        saveSelectedBlockId(newSelected?.id)
+
+        val isSame = current.selectedBlock == block
+        if (isSame) {
+            // deselect
+            _uiState.update { it.copy(selectedBlock = null, selectionToken = 0L) }
+            saveSelectedBlockId(null)
+            return
+        }
+
+        // New selection -> increment runtime selection counter and record token
+        selectionCounter += 1L
+        val newToken = selectionCounter
+        _uiState.update { it.copy(selectedBlock = block, selectionToken = newToken) }
+        saveSelectedBlockId(block.id)
     }
 
     // Toggle the special Rainbow Wipe block selection from UI
@@ -813,6 +890,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         rowsToClear.forEach { r -> for (c in 0 until GRID_SIZE) cellsToClear.add(Coord(r, c)) }
         colsToClear.forEach { c -> for (r in 0 until GRID_SIZE) cellsToClear.add(Coord(r, c)) }
 
+        // --- SPECIAL METER: increment when player clears more than one line/column at once ---
+        val clearedLines = rowsToClear.size + colsToClear.size
+        if (clearedLines > 1) {
+            // Use current state's values; onSpecialMeterFilled will award a rainbow if meter completes
+            onSpecialMeterFilled(current.rainbowBlockCount, current.specialMeterValue)
+        }
+
         var finalBoard = newBoard
         var points = block.shape.size
         if (cellsToClear.isNotEmpty()) {
@@ -863,21 +947,40 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         for (block in state.availableBlocks) {
             if (block.isSpecial) continue
 
-            for (row in 0 until GRID_SIZE) {
-                for (col in 0 until GRID_SIZE) {
-                    var fits = true
-                    for (offset in block.shape) {
-                        val r = row + offset.row
-                        val c = col + offset.col
-                        if (r !in 0 until GRID_SIZE || c !in 0 until GRID_SIZE || board[r][c] != null) {
-                            fits = false
-                            break
+            var candidate = block
+            repeat(4) { rotationIndex ->
+                // Bounding quick check
+                if (candidate.boundingBoxHeight > GRID_SIZE || candidate.boundingBoxWidth > GRID_SIZE) {
+                    candidate = candidate.rotate()
+                    return@repeat
+                }
+
+                for (row in 0 until GRID_SIZE) {
+                    for (col in 0 until GRID_SIZE) {
+                        if (row + candidate.boundingBoxHeight > GRID_SIZE || col + candidate.boundingBoxWidth > GRID_SIZE) continue
+
+                        var fits = true
+                        for (offset in candidate.shape) {
+                            val r = row + offset.row
+                            val c = col + offset.col
+                            if (r !in 0 until GRID_SIZE || c !in 0 until GRID_SIZE || board[r][c] != null) {
+                                fits = false
+                                break
+                            }
+                        }
+
+                        if (fits) {
+                            Log.d("GameViewModel", "hasAnyValidMove -> TRUE blockId=${block.id} rotation=$rotationIndex origin=($row,$col)")
+                            return true
                         }
                     }
-                    if (fits) return true
                 }
+
+                candidate = candidate.rotate()
             }
         }
+
+        Log.d("GameViewModel", "hasAnyValidMove -> FALSE")
         return false
     }
 

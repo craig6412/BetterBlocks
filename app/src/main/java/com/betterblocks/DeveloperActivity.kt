@@ -1,6 +1,7 @@
 package com.betterblocks
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -100,5 +101,9 @@ class DeveloperActivity : ComponentActivity() {
         editor.putInt("testScore", GameSettings.testScore.value)
 
         editor.apply()
+
+        // Notify running app that developer settings were saved so ViewModel can apply overrides
+        val intent = Intent("com.betterblocks.ACTION_DEV_SETTINGS_CHANGED")
+        sendBroadcast(intent)
     }
 }

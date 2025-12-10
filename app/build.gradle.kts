@@ -87,6 +87,7 @@ dependencies {
     implementation(libs.androidx.ui.unit)
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.foundation.layout)
+    implementation(libs.androidx.animation.core)
 
 
     debugImplementation("androidx.compose.ui:ui-tooling")

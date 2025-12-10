@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.betterblocks.ads.AdManager
 import com.betterblocks.ads.BannerAdView
-import com.betterblocks.ui.DarkBackground
 import com.betterblocks.ui.MainMenuScreen
 import com.betterblocks.ui.theme.BetterBlocksTheme
 import androidx.core.view.WindowCompat
