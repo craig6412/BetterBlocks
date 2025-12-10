@@ -1,5 +1,7 @@
 package com.betterblocks.ui
 
+//calling Game REady for closed testing
+
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
