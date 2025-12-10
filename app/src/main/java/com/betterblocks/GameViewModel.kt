@@ -660,6 +660,90 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    // Called when the player accepts the last-chance rainbow wipe
+    fun onLastChanceUsed() {
+        val state = _uiState.value
+        if (!state.isLastChance || state.rainbowBlockCount <= 0) return
+
+        val newCount = state.rainbowBlockCount - 1
+        saveRainbowCount(newCount)
+        _uiState.update { it.copy(rainbowBlockCount = newCount, isLastChance = false, selectedBlock = null) }
+
+        // Start the full-board rainbow wipe animation flow using the current snapshot
+        handleFullBoardRainbowWipe(_uiState.value)
+
+        // Persist the inventory and snapshot
+        val post = _uiState.value
+        persistGameSnapshot(
+            board = post.board,
+            blocks = post.availableBlocks,
+            coins = post.coins,
+            rainbowCount = post.rainbowBlockCount,
+            colorWipeCount = post.colorWipeCount,
+            score = post.score,
+            meterValue = post.specialMeterValue,
+            freeRotations = post.freeRotations,
+            lastRotatedBlockId = post.lastRotatedBlockId,
+            selectedBlockId = post.selectedBlock?.id,
+            isGameOver = post.isGameOver,
+            isLastChance = post.isLastChance
+        )
+    }
+
+    // Called when the user declines the last-chance rainbow wipe -> finalize game over
+    fun onLastChanceDeclined() {
+        val state = _uiState.value
+        if (!state.isLastChance) return
+
+        _uiState.update { it.copy(isLastChance = false, isGameOver = true, selectedBlock = null) }
+
+        val post = _uiState.value
+        persistGameSnapshot(
+            board = post.board,
+            blocks = post.availableBlocks,
+            coins = post.coins,
+            rainbowCount = post.rainbowBlockCount,
+            colorWipeCount = post.colorWipeCount,
+            score = post.score,
+            meterValue = post.specialMeterValue,
+            freeRotations = post.freeRotations,
+            lastRotatedBlockId = post.lastRotatedBlockId,
+            selectedBlockId = post.selectedBlock?.id,
+            isGameOver = post.isGameOver,
+            isLastChance = post.isLastChance
+        )
+    }
+
+    // Public API to immediately use one rainbow wipe (from dialogs / quick actions)
+    fun useRainbowWipeImmediately() {
+        val state = _uiState.value
+        if (state.rainbowBlockCount <= 0) return
+
+        val newCount = state.rainbowBlockCount - 1
+        saveRainbowCount(newCount)
+        _uiState.update { it.copy(rainbowBlockCount = newCount, selectedBlock = null) }
+
+        // Start full-board wipe animation
+        handleFullBoardRainbowWipe(_uiState.value)
+
+        // Persist snapshot
+        val post = _uiState.value
+        persistGameSnapshot(
+            board = post.board,
+            blocks = post.availableBlocks,
+            coins = post.coins,
+            rainbowCount = post.rainbowBlockCount,
+            colorWipeCount = post.colorWipeCount,
+            score = post.score,
+            meterValue = post.specialMeterValue,
+            freeRotations = post.freeRotations,
+            lastRotatedBlockId = post.lastRotatedBlockId,
+            selectedBlockId = post.selectedBlock?.id,
+            isGameOver = post.isGameOver,
+            isLastChance = post.isLastChance
+        )
+    }
+
     // --- MAIN MENU / STATS HELPERS ---
 
     // Refresh user-facing stats when returning to main menu (placeholder; extend as needed)
