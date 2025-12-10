@@ -87,6 +87,9 @@ fun GameScreen(
     onDismissPurchaseSuccess: () -> Unit = {},
     onClearCoinAnimation: () -> Unit = {},
     onDismissShopBubble: () -> Unit = {},
+    onWatchAd: () -> Unit,
+    onGoToShop: () -> Unit,
+    onDismissZeroCoins: () -> Unit = {},
     onClearAnimationFinished: () -> Unit
 ) {
     val context = LocalContext.current
@@ -481,6 +484,19 @@ fun GameScreen(
                 onShare = {
                     // Use helper from GameOverSummaryDialog to create a share intent
                     shareGameResults(context, uiState.score, uiState.trophyTier)
+                }
+            )
+        }
+
+        // --- Zero Coins Dialog ---
+        if (uiState.showZeroCoinsDialog) {
+            ZeroCoinsDialog(
+                onDismiss = onDismissZeroCoins,
+                onWatchAd = {
+                    onWatchAd()
+                },
+                onGoToShop = {
+                    onGoToShop()
                 }
             )
         }

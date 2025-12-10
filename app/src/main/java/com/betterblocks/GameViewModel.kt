@@ -860,6 +860,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 newCoins -= ROTATION_COST
                 saveCoins(newCoins)
             } else {
+                // No free rotations and not enough coins — show the zero-coins dialog prompting shop or ad
+                _uiState.update { it.copy(showZeroCoinsDialog = true) }
                 return
             }
         }
@@ -898,6 +900,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    // Dismiss the zero-coins dialog (UI call)
+    fun dismissZeroCoinsDialog() {
+        _uiState.update { it.copy(showZeroCoinsDialog = false) }
+    }
     // Simple tap-based selection used by GameActivity / GameScreen
     fun selectBlock(block: Block) {
         val current = _uiState.value

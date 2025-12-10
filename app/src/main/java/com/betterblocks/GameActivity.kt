@@ -1,5 +1,6 @@
 package com.betterblocks
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -68,6 +69,20 @@ class GameActivity : ComponentActivity() {
                         onDismissPurchaseSuccess = viewModel::dismissPurchaseSuccessDialog,
                         onClearCoinAnimation = viewModel::clearCoinEarnedAnimation,
                         onDismissShopBubble = viewModel::dismissShopPurchaseBubble,
+                        onWatchAd = {
+                            val activity = this@GameActivity
+                            if (AdManager.isRewardedLoaded.value) {
+                                AdManager.showDoubleRewarded(activity, onCompletedBoth = { viewModel.addCoins(50) }, onFailed = { AdManager.preloadDoubleRewarded(activity) })
+                            } else {
+                                AdManager.preloadDoubleRewarded(activity)
+                            }
+                            viewModel.dismissZeroCoinsDialog()
+                        },
+                        onGoToShop = {
+                            startActivity(Intent(this@GameActivity, ShopActivity::class.java))
+                            viewModel.dismissZeroCoinsDialog()
+                        },
+                        onDismissZeroCoins = { viewModel.dismissZeroCoinsDialog() },
                         onClearAnimationFinished = viewModel::onClearAnimationFinished
                     )
                 }
