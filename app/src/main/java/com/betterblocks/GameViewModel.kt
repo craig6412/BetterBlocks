@@ -162,7 +162,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val restoredBlocks =
             blocksJson?.let { runCatching { BlockSerializer.blocksFromJson(it) }.getOrNull() }
         val blocksAreValid = areBlocksRestorable(restoredBlocks)
-        val finalBlocks = if (blocksAreValid) restoredBlocks!! else generateNewBlocks()
+        val finalBlocks = if (blocksAreValid) restoredBlocks!! else generateNewBlocks(savedBoard)
+
         if (!blocksAreValid) {
             saveBlocks(finalBlocks)
         }
@@ -217,9 +218,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      *
      * @return List of 3 blocks optimized for current board state
      */
-    private fun generateNewBlocks(): List<Block> {
+    private fun generateNewBlocks(board: GameGrid): List<Block> {
         return generateSmartPreview(
-            board = _uiState.value.board,
+            board = board,
             allBlocks = BLOCK_MANAGER
         )
     }
@@ -550,7 +551,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // If we were doing a rainbow wipe, clear the board now
         if (currentState.isRainbowWipeActive && currentState.clearingCells.isNotEmpty()) {
             val clearedBoard: GameGrid = Array(GRID_SIZE) { Array<Int?>(GRID_SIZE) { null } }
-            val newBlocks = generateNewBlocks()
+            val newBlocks = generateNewBlocks(clearedBoard)
+
             val points = currentState.clearingCells.size * 50
 
             _uiState.update {
@@ -1002,7 +1004,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val remainingBlocks = current.availableBlocks.filter { it.id != block.id }
-        val nextBlocks = if (remainingBlocks.isEmpty()) generateNewBlocks() else remainingBlocks
+        val nextBlocks = if (remainingBlocks.isEmpty()) generateNewBlocks(finalBoard)
+        else remainingBlocks
 
         _uiState.update {
             it.copy(

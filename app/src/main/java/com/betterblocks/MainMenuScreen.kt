@@ -291,13 +291,16 @@ fun MainMenuScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                MenuButton(
-                    text = "DEVELOPER",
-                    icon = Icons.Default.Build,
-                    onClick = onDeveloperClicked,
-                    containerColor = Color(0xFF607D8B),
-                    height = 50.dp
-                )
+                // Only show developer entry in debug builds
+                if (BuildConfig.DEBUG) {
+                    MenuButton(
+                        text = "DEVELOPER",
+                        icon = Icons.Default.Build,
+                        onClick = onDeveloperClicked,
+                        containerColor = Color(0xFF607D8B),
+                        height = 50.dp
+                    )
+                }
 
                 Spacer(modifier = Modifier.weight(0.8f))
 
