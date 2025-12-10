@@ -64,6 +64,7 @@ class GameActivity : ComponentActivity() {
                         onColorWipeSpinResult = viewModel::onColorWipeSpinResult,
                         onDismissTierPromotion = { viewModel.dismissTierPromotion() },
                         onDismissRainbowEarned = viewModel::dismissRainbowEarnedDialog,
+                        onDismissFirstGameOver = viewModel::dismissFirstGameOverDialog,
                         onDismissPurchaseSuccess = viewModel::dismissPurchaseSuccessDialog,
                         onClearCoinAnimation = viewModel::clearCoinEarnedAnimation,
                         onDismissShopBubble = viewModel::dismissShopPurchaseBubble,

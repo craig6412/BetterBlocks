@@ -80,6 +80,7 @@ const val KEY_IS_GAME_OVER = "is_game_over"
 const val KEY_IS_LAST_CHANCE = "is_last_chance"
 
 const val KEY_TROPHY_TIER = "trophy_tier"
+const val KEY_FIRST_GAME_OVER_SHOWN = "first_game_over_shown"
 
 // Distinguish between simple taps and drag initiation on a block.
 enum class InteractionType {
@@ -316,6 +317,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putInt(KEY_SAVED_SELECTED, selectedBlockId ?: -1)
             .putBoolean(KEY_IS_GAME_OVER, isGameOver)
             .putBoolean(KEY_IS_LAST_CHANCE, isLastChance)
+            // don't overwrite first-game-over flag here
             .apply()
     }
 
@@ -1024,62 +1026,46 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isGameOver = updated.isGameOver,
             isLastChance = updated.isLastChance
         )
+
+        // FIRST-TIME GAME OVER: award 3 free rainbow wipes on initial install and show dialog
+        try {
+            val firstShown = prefs.getBoolean(KEY_FIRST_GAME_OVER_SHOWN, false)
+            if (updated.isGameOver && !firstShown) {
+                val newCount = updated.rainbowBlockCount + 3
+                saveRainbowCount(newCount)
+                prefs.edit().putBoolean(KEY_FIRST_GAME_OVER_SHOWN, true).apply()
+                _uiState.update {
+                    it.copy(
+                        rainbowBlockCount = newCount,
+                        showFirstGameOverDialog = true,
+                        selectedBlock = null
+                    )
+                }
+                // Persist the awarded rainbows + meter (unchanged)
+                val post = _uiState.value
+                persistGameSnapshot(
+                    board = post.board,
+                    blocks = post.availableBlocks,
+                    coins = post.coins,
+                    rainbowCount = post.rainbowBlockCount,
+                    colorWipeCount = post.colorWipeCount,
+                    score = post.score,
+                    meterValue = post.specialMeterValue,
+                    freeRotations = post.freeRotations,
+                    lastRotatedBlockId = post.lastRotatedBlockId,
+                    selectedBlockId = post.selectedBlock?.id,
+                    isGameOver = post.isGameOver,
+                    isLastChance = post.isLastChance
+                )
+            }
+        } catch (t: Throwable) {
+            Log.w("GameViewModel", "Failed to award first-game rainbow: ${t.message}")
+        }
     }
 
-    fun onLastChanceUsed() {
-        val currentState = _uiState.value
-        if (!currentState.isLastChance || currentState.rainbowBlockCount <= 0) return
-
-        // Consume one rainbow and clear last-chance flag
-        val newCount = currentState.rainbowBlockCount - 1
-        saveRainbowCount(newCount)
-        val updated = currentState.copy(
-            isLastChance = false,
-            rainbowBlockCount = newCount,
-            selectedBlock = null
-        )
-        _uiState.value = updated
-
-        // Perform a full-board rainbow wipe using existing handler
-        handleFullBoardRainbowWipe(updated)
-    }
-
-    fun onLastChanceDeclined() {
-        val currentState = _uiState.value
-        if (!currentState.isLastChance) return
-
-        val updated = currentState.copy(
-            isLastChance = false,
-            isGameOver = true,
-            selectedBlock = null
-        )
-        _uiState.value = updated
-        persistGameSnapshot(
-            board = updated.board,
-            blocks = updated.availableBlocks,
-            coins = updated.coins,
-            rainbowCount = updated.rainbowBlockCount,
-            colorWipeCount = updated.colorWipeCount,
-            score = updated.score,
-            meterValue = updated.specialMeterValue,
-            freeRotations = updated.freeRotations,
-            lastRotatedBlockId = updated.lastRotatedBlockId,
-            selectedBlockId = updated.selectedBlock?.id,
-            isGameOver = updated.isGameOver,
-            isLastChance = updated.isLastChance
-        )
-    }
-
-    /** Direct entry from UI to trigger a full-board rainbow wipe (not last-chance flow). */
-    fun useRainbowWipeImmediately() {
-        val currentState = _uiState.value
-        if (currentState.isGameOver || currentState.isLastChance || currentState.rainbowBlockCount <= 0) return
-
-        val newCount = currentState.rainbowBlockCount - 1
-        saveRainbowCount(newCount)
-        val updated = currentState.copy(rainbowBlockCount = newCount, selectedBlock = null)
-        _uiState.value = updated
-
-        handleFullBoardRainbowWipe(updated)
+    // Dismiss the first-game-over reward dialog (UI call)
+    fun dismissFirstGameOverDialog() {
+        _uiState.update { it.copy(showFirstGameOverDialog = false) }
+        // Persist the flag in prefs already set when awarding; snapshot persisted already
     }
 }

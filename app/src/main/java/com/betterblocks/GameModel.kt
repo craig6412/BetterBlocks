@@ -99,6 +99,7 @@ data class GameUiState(
     val newlyUnlockedTier: TrophyTier? = null,
     // NEW UI STATE FIELDS
     val showRainbowEarnedDialog: Boolean = false,
+    val showFirstGameOverDialog: Boolean = false,
     val showPurchaseSuccessDialog: Boolean = false,
     val purchaseCoinsAwarded: Int = 0,
     val coinsEarnedThisUpdate: Int = 0,
