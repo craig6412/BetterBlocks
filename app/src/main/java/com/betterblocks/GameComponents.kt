@@ -63,7 +63,7 @@ import kotlinx.coroutines.delay
 
 // --- CONSTANTS & COLORS ---
 val DeepBlue = Color(0xFF0B0123)           // Main Background: Midnight Void
-val DarkBackground = Color(0xFF08060B)     // Game Grid / Empty Slots: Abyssal Purple
+val DarkBackground = Color(0xFF000000)     // Game Grid / Empty Slots: Abyssal Purple
 val BoardBackground = Color(0xFF08060B)    // Match grid background to Abyssal Purple
 val LightText = Color(0xFFF2E7FE)          // All Text/Labels: Ice White
 val Pink_Jackie = Color(0xFF673AB7)        // Special Charge / accent: Neon Cyber-Violet
@@ -271,6 +271,7 @@ fun BlockPreviewCard(
 
     Card(
         shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = DarkBackground),
         elevation = CardDefaults.cardElevation(4.dp),
         modifier = modifier
             .size(80.dp)

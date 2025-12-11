@@ -88,7 +88,7 @@ data class GameUiState(
     val isRainbowWipeActive: Boolean = false,
     val isColorWipeAnimating: Boolean = false, // Flag to slow down color wipe animation
     val showHighScoreAnim: Boolean = false,
-    val rainbowBlockCount: Int = 3,
+    val rainbowBlockCount: Int = 2,
     val colorWipeCount: Int = 3, // <-- ADDED: Color Wipe Inventory
     val specialMeterValue: Int = 0,
     val isSoundEnabled: Boolean = true,

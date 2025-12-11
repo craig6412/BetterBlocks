@@ -44,9 +44,9 @@ const val RAINBOW_WIPE_COST = 1000 // Coins to buy a Rainbow Wipe
 const val COLOR_WIPE_COST = 75 // Coins to buy a Color Wipe
 
 // --- DEVELOPER OVERRIDES ---
-private const val DEV_INITIAL_COINS = 1500 // $9,999 for development
+private const val DEV_INITIAL_COINS = 150// $9,999 for development
 private const val DEV_INITIAL_RAINBOW = 10 // 99 blocks for development
-private const val DEV_INITIAL_COLOR_WIPE = 15 // Start with 5 Color Wipes
+private const val DEV_INITIAL_COLOR_WIPE = 5 // Start with 5 Color Wipes
 
 // Persistence Keys
 

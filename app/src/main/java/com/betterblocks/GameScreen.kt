@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
@@ -68,6 +69,21 @@ import com.betterblocks.SCREEN_HORIZONTAL_PADDING
 import com.betterblocks.isValidPlacement
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.trophyColorForTier
+import kotlin.times
+
+
+//song lyrics because I am getting somewhere finally
+
+/* Called you, never heard back
+After everything we been through, the good and the bad
+You're 'bout to throw it all away and overreact
+Because I overreacted, karma, I guess
+My temper gets the best of me, a part of me that
+I wish I knew how to get rid of, it's a issue I have​
+My M.O. say I need you and I love you to death
+Then turn around and go and treat you like you nothing but trash, I know
+I know I messed that part up, but */
+
 
 @Composable
 fun GameScreen(
