@@ -516,9 +516,18 @@ fun GameScreen(
             )
         }
 
-        // Show Game Over summary dialog when ViewModel marks the game over
-        if (uiState.isGameOver) {
-            Log.d("GameScreen", "uiState.isGameOver == true -> showing GameOverSummaryDialog")
+        // --- Last‑chance dialog (offer a rainbow wipe once per game) ---
+        if (uiState.isLastChance) {
+            Log.d("GameScreen", "uiState.isLastChance == true -> showing LastChanceDialog")
+            LastChanceDialog(
+                onUseRainbow = { onLastChanceUsed() },
+                onGameOver = { onLastChanceDeclined() }
+            )
+        }
+
+        // Show Game Over summary dialog when ViewModel marks the game over OR explicitly requests the summary
+        if (uiState.isGameOver || uiState.showGameSummaryDialog) {
+            Log.d("GameScreen", "Showing GameOverSummaryDialog -> isGameOver=${uiState.isGameOver} showGameSummaryDialog=${uiState.showGameSummaryDialog}")
             GameOverSummaryDialog(
                 finalScore = uiState.score,
                 highScore = uiState.highScore,
