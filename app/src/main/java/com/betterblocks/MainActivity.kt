@@ -82,7 +82,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Refresh user stats when returning to main menu (e.g., from Shop)
         gameViewModel.refreshUserStats()
-        // Apply any DeveloperActivity overrides (inventory + tuning) into live state
-        gameViewModel.applyDeveloperOverrides()
+        // Apply developer overrides only in debug builds to avoid overwriting prefs with default test values
+        if (BuildConfig.DEBUG) {
+            gameViewModel.applyDeveloperOverrides()
+        }
     }
 }

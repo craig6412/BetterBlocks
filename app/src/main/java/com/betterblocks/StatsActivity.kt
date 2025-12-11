@@ -65,10 +65,21 @@ fun StatsScreen(onBack: () -> Unit) {
     val rainbowCount = prefs.getInt(KEY_RAINBOW_COUNT, 0)
     val colorWipeCount = prefs.getInt(KEY_COLOR_WIPE_COUNT, 0)
     val currentTier = getPlayerTier(bestScore, lifetimeCoins, prefs)
-    val firebaseUserId = prefs.getString(KEY_FIREBASE_USER_ID, "Unknown") ?: "Unknown"
+    val firebaseUserId = runCatching { prefs.getString(KEY_FIREBASE_USER_ID, "Unknown") ?: "Unknown" }.getOrDefault("Unknown")
 
     // Daily reward stats
-    val lastClaimDate = prefs.getString(KEY_DAILY_REWARD_DATE, null)
+    // KEY_DAILY_REWARD_DATE may be stored as a Long (epoch ms) or as a String; handle both safely.
+    val lastClaimDate: String? = run {
+        val all = prefs.all
+        val raw = all[KEY_DAILY_REWARD_DATE]
+        when (raw) {
+            null -> null
+            is String -> raw
+            is Long -> SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(raw))
+            is Int -> SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(raw.toLong()))
+            else -> try { prefs.getString(KEY_DAILY_REWARD_DATE, null) } catch (_: ClassCastException) { null }
+        }
+    }
     val currentStreak = prefs.getInt(KEY_DAILY_STREAK, 0)
     val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     val hasClaimedToday = lastClaimDate == today
@@ -588,4 +599,3 @@ fun StatRow(label: String, value: String) {
         )
     }
 }
-

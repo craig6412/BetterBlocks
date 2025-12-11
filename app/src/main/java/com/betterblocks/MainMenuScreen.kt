@@ -39,6 +39,7 @@ import com.betterblocks.BuildConfig
 import android.app.Activity
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.window.Dialog
 import com.betterblocks.ads.AdManager
 import androidx.compose.ui.zIndex
 import com.betterblocks.DeepBlue

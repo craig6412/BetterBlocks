@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import android.content.SharedPreferences
 
 // --- Constants ---
 const val GRID_SIZE = 9
@@ -45,40 +46,59 @@ const val COLOR_WIPE_COST = 75 // Coins to buy a Color Wipe
 
 // --- DEVELOPER OVERRIDES ---
 private const val DEV_INITIAL_COINS = 150// $9,999 for development
-private const val DEV_INITIAL_RAINBOW = 10 // 99 blocks for development
+private const val DEV_INITIAL_RAINBOW = 2 // starting rainbow wipes for new installs
 private const val DEV_INITIAL_COLOR_WIPE = 5 // Start with 5 Color Wipes
 
-// Persistence Keys
+// Prefs schema version to force default reset on first run after update
+const val PREFS_SCHEMA_VERSION = 3
+const val KEY_PREFS_SCHEMA_VERSION = "prefs_schema_version"
 
-const val KEY_HIGH_SCORE = "high_score"
-const val KEY_COINS = "user_coins"
-const val KEY_RAINBOW_COUNT = "user_rainbow_count"
-const val KEY_COLOR_WIPE_COUNT = "user_color_wipe_count"
-
-const val KEY_MUSIC_ENABLED = "music_enabled"
-const val KEY_SAVED_BOARD = "saved_board"
-const val KEY_SAVED_BLOCKS = "saved_blocks"
-const val KEY_SAVED_SCORE = "saved_score"
-const val KEY_SAVED_SELECTED = "saved_selected"
-const val KEY_SAVED_METER = "saved_meter"
-const val KEY_FREE_ROTATIONS = "free_rotations"
-const val KEY_LAST_ROTATED_ID = "last_rotated_id"
-const val KEY_IS_GAME_OVER = "is_game_over"
-const val KEY_IS_LAST_CHANCE = "is_last_chance"
-
-const val KEY_TROPHY_TIER = "trophy_tier"
-const val KEY_FIRST_GAME_OVER_SHOWN = "first_game_over_shown"
-
-
-// Distinguish between simple taps and drag initiation on a block.
-enum class InteractionType {
-    TAP,
-    DRAG_START
-}
-
+// --- GAME VIEWMODEL ---
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
+
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    // Keep in-memory UI state in sync with direct SharedPreferences writes from other Activities
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+        try {
+            when (key) {
+                KEY_COINS -> {
+                    val new = sp.getInt(KEY_COINS, _uiState.value.coins)
+                    Log.d("GameViewModel", "prefsListener: KEY_COINS changed -> $new")
+                    _uiState.update { it.copy(coins = new) }
+                }
+                KEY_RAINBOW_COUNT -> {
+                    val new = sp.getInt(KEY_RAINBOW_COUNT, _uiState.value.rainbowBlockCount)
+                    Log.d("GameViewModel", "prefsListener: KEY_RAINBOW_COUNT changed -> $new")
+                    _uiState.update { it.copy(rainbowBlockCount = new) }
+                }
+                KEY_COLOR_WIPE_COUNT -> {
+                    val new = sp.getInt(KEY_COLOR_WIPE_COUNT, _uiState.value.colorWipeCount)
+                    Log.d("GameViewModel", "prefsListener: KEY_COLOR_WIPE_COUNT changed -> $new")
+                    _uiState.update { it.copy(colorWipeCount = new) }
+                }
+                KEY_FREE_ROTATIONS -> {
+                    val new = sp.getInt(KEY_FREE_ROTATIONS, _uiState.value.freeRotations)
+                    Log.d("GameViewModel", "prefsListener: KEY_FREE_ROTATIONS changed -> $new")
+                    _uiState.update { it.copy(freeRotations = new) }
+                }
+                KEY_HIGH_SCORE -> {
+                    val new = sp.getInt(KEY_HIGH_SCORE, _uiState.value.highScore)
+                    Log.d("GameViewModel", "prefsListener: KEY_HIGH_SCORE changed -> $new")
+                    _uiState.update { it.copy(highScore = new) }
+                }
+                KEY_SAVED_SELECTED -> {
+                    val sel = sp.getInt(KEY_SAVED_SELECTED, -1).takeIf { it != -1 }
+                    Log.d("GameViewModel", "prefsListener: KEY_SAVED_SELECTED changed -> $sel")
+                    _uiState.update { it.copy(selectedBlock = restoreSelectedBlock(sel, it.availableBlocks, sp.getInt(KEY_RAINBOW_COUNT, it.rainbowBlockCount) > 0)) }
+                }
+                else -> Log.d("GameViewModel", "prefsListener: other key changed -> $key")
+            }
+        } catch (t: Throwable) {
+            Log.w("GameViewModel", "prefsListener error for key=$key: ${t.message}")
+        }
+    }
+
     private val scoreAnimator = ScoreAnimator(viewModelScope)
     private var zeroCoinsShown = prefs.getBoolean("zero_coins_shown", false)
     private var firebaseUserId: String = "UNKNOWN"
@@ -98,6 +118,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var selectionCounter: Long = 0L
 
     init {
+        // Register listener before initial checks so external writes during startup are observed
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
         // Intentionally empty init; developer overrides can be triggered from the dev UI actions which call
         // `applyDeveloperInventoryOverrides()` directly. Avoid dynamic broadcast receiver registration here.
         // Run initial checks for daily reward and season start on startup
@@ -106,12 +128,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             checkSeasonStart()
         }
     }
-    override fun onCleared() { super.onCleared() }
+    override fun onCleared() {
+        try { prefs.unregisterOnSharedPreferenceChangeListener(prefsListener) } catch (_: Throwable) {}
+        super.onCleared()
+    }
 
     /**
      * Creates the initial state for a new game, loading saved data.
      */
     private fun createInitialState(): GameUiState {
+        // Schema bump OR truly fresh install: ensure developer defaults are applied to prefs
+        val storedSchema = prefs.getInt(KEY_PREFS_SCHEMA_VERSION, 0)
+        val isFreshInstall = !prefs.contains(KEY_COINS)
+        // DEBUG: Log current prefs state
+        val currentCoins = prefs.getInt(KEY_COINS, -1)  // -1 to detect if key exists
+        val currentRainbow = prefs.getInt(KEY_RAINBOW_COUNT, -1)
+        val currentColorWipe = prefs.getInt(KEY_COLOR_WIPE_COUNT, -1)
+        Log.d("GameViewModel", "createInitialState: storedSchema=$storedSchema isFreshInstall=$isFreshInstall currentCoins=$currentCoins currentRainbow=$currentRainbow currentColorWipe=$currentColorWipe")
+
+        // FORCE OVERWRITE if values are below defaults (handles backup restore on "fresh" install)
+        val forceOverwrite = currentCoins < DEV_INITIAL_COINS || currentRainbow < DEV_INITIAL_RAINBOW || currentColorWipe < DEV_INITIAL_COLOR_WIPE
+        if (storedSchema < PREFS_SCHEMA_VERSION || isFreshInstall || forceOverwrite) {
+            Log.d("GameViewModel", "createInitialState: Overwriting defaults (schema bump or fresh install or forceOverwrite=$forceOverwrite)")
+            prefs.edit()
+                .putInt(KEY_COINS, DEV_INITIAL_COINS)
+                .putInt(KEY_RAINBOW_COUNT, DEV_INITIAL_RAINBOW)
+                .putInt(KEY_COLOR_WIPE_COUNT, DEV_INITIAL_COLOR_WIPE)
+                .putInt(KEY_PREFS_SCHEMA_VERSION, PREFS_SCHEMA_VERSION)
+                .apply()
+        } else {
+            Log.d("GameViewModel", "createInitialState: Skipping overwrite (schema up-to-date and not fresh)")
+        }
+
         val savedHighScore = prefs.getInt(KEY_HIGH_SCORE, 0)
         val savedCoins = prefs.getInt(KEY_COINS, DEV_INITIAL_COINS)
         val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, savedCoins)
@@ -175,6 +223,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             rainbowBlockCount = savedRainbowCount,
             specialMeterValue = savedMeter,
             colorWipeCount = savedColorWipeCount,
+            // Show first-install welcome dialog for fresh installs or when we just bumped schema
+            showFirstInstallFreeCoinsDialog = isFreshInstall || (storedSchema < PREFS_SCHEMA_VERSION),
             isSoundEnabled = savedSound,
             isMusicEnabled = savedMusic
         )
@@ -204,7 +254,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun saveCoins(coins: Int) {
+        val prev = prefs.getInt(KEY_COINS, -9999)
         prefs.edit().putInt(KEY_COINS, coins).apply()
+        Log.d("GameViewModel", "saveCoins: prev=$prev -> new=$coins")
     }
 
     private fun saveLifetimeCoinsIfHigher(totalCoins: Int) {
@@ -215,11 +267,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun saveRainbowCount(count: Int) {
+        val prev = prefs.getInt(KEY_RAINBOW_COUNT, -9999)
         prefs.edit().putInt(KEY_RAINBOW_COUNT, count).apply()
+        Log.d("GameViewModel", "saveRainbowCount: prev=$prev -> new=$count")
     }
 
     private fun saveColorWipeCount(count: Int) {
+        val prev = prefs.getInt(KEY_COLOR_WIPE_COUNT, -9999)
         prefs.edit().putInt(KEY_COLOR_WIPE_COUNT, count).apply()
+        Log.d("GameViewModel", "saveColorWipeCount: prev=$prev -> new=$count")
     }
 
     private fun saveSoundEnabled(enabled: Boolean) {
@@ -1209,6 +1265,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // --- Small helper to persist free rotations count ---
     private fun saveFreeRotations(count: Int) {
         prefs.edit().putInt(KEY_FREE_ROTATIONS, count).apply()
+    }
+
+    // Dismiss the first-install free coins dialog and persist that it was shown
+    fun dismissFirstInstallFreeCoinsDialog() {
+        prefs.edit().putInt(KEY_PREFS_SCHEMA_VERSION, PREFS_SCHEMA_VERSION).apply()
+        _uiState.update { it.copy(showFirstInstallFreeCoinsDialog = false) }
     }
 
 }
