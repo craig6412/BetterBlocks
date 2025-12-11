@@ -32,14 +32,15 @@ fun AvailableBlocks(
     ) {
         uiState.availableBlocks.forEach { block ->
             key(block.id) {
+                val displayBlock = if (uiState.selectedBlock?.id == block.id) uiState.selectedBlock!! else block
                 BlockPreviewCard(
-                    block = block,
+                    block = displayBlock,
                     isSelected = (uiState.selectedBlock?.id == block.id),
                     onClick = {
-                        onBlockInteraction(block, InteractionType.TAP)
+                        onBlockInteraction(displayBlock, InteractionType.TAP)
                     },
                     onDragStart = { fingerRootPos ->
-                        onDragStart(block, fingerRootPos)  // Pass Block + Offset
+                        onDragStart(displayBlock, fingerRootPos)  // Pass Block + Offset (rotated instance if selected)
                     },
                     onDrag = { currentFingerPos ->
                         onDrag(currentFingerPos)  // Pass current position

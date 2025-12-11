@@ -292,7 +292,7 @@ fun MainMenuScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Only show developer entry in debug builds
-                if (BuildConfig.DEBUG) {
+               // if (BuildConfig.DEBUG) {
                     MenuButton(
                         text = "DEVELOPER",
                         icon = Icons.Default.Build,
@@ -300,7 +300,7 @@ fun MainMenuScreen(
                         containerColor = Color(0xFF607D8B),
                         height = 50.dp
                     )
-                }
+                // }
 
                 Spacer(modifier = Modifier.weight(0.8f))
 

@@ -20,3 +20,4 @@ const val KEY_DAILY_STREAK = "daily_streak"
 
 // Season Timer
 const val KEY_SEASON_START_DATE = "season_start_date"
+const val KEY_SEASON_STARTED = "season_started"

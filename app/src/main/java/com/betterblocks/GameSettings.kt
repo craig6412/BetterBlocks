@@ -22,7 +22,7 @@ object GameSettings {
     var rotateButtonScale = mutableFloatStateOf(1.0f)
 
 
-    var bannerScale = mutableFloatStateOf(2.0f)
+    var bannerScale = mutableStateOf(2.0f)
 
     // --- Bottom Bar Layout Controls ---
     var bottomBarVerticalPadding = mutableStateOf(12)        // dp
@@ -84,6 +84,22 @@ object GameSettings {
     var testColorWipeCount = mutableStateOf(0)   // 0 to 1,000,000
     var testCoins = mutableStateOf(0)            // 0 to 1,000,000
     var testScore = mutableStateOf(0)            // 0 to 1,000,000 - Affects current game score
+
+    // --- Season control (single epoch all users share on release) ---
+    /**
+     * Set this to the epoch millis you want the season to start for everyone.
+     * Example: 1704067200000L == 2024-01-01T00:00:00Z
+     */
+    @JvmStatic
+    var seasonStartEpochMs: Long = 1704067200000L
+
+    @JvmStatic
+    var seasonLengthDays: Int = 90
+
+    fun seasonEndEpochMs(): Long = seasonStartEpochMs + seasonLengthDays * 24L * 60L * 60L * 1000L
+
+    fun isSeasonActive(now: Long = System.currentTimeMillis()): Boolean =
+        now >= seasonStartEpochMs && now < seasonEndEpochMs()
 }
 
         // Bottom bar padding between icons

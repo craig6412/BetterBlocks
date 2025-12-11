@@ -30,7 +30,8 @@
         <!-- Main launcher activity -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -40,31 +41,37 @@
         <!-- Game activity (launched from MainActivity) -->
         <activity
             android:name=".GameActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
         <!-- 4. Shop Activity -->
         <activity
             android:name=".ShopActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
         <activity
             android:name=".SettingsActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="portrait" />
         <activity
             android:name=".HighScoreActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:screenOrientation="portrait" />
 
         <!-- Stats Activity -->
         <activity
             android:name=".StatsActivity"
             android:exported="false"
-            android:label="Stats"/>
+            android:label="Stats"
+            android:screenOrientation="portrait" />
 
         <!-- 6. Developer Activity (Use this to fix the crash) -->
         <activity
             android:name=".DeveloperActivity"
             android:exported="false"
-            android:label="Developer Menu"/>
+            android:label="Developer Menu"
+            android:screenOrientation="portrait" />
 
     </application>
 </manifest>

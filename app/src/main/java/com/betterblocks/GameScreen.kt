@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,6 +38,8 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import kotlinx.coroutines.launch
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -112,6 +115,7 @@ fun GameScreen(
 
     var showMenuDialog by remember { mutableStateOf(false) }
     var showColorWheelDialog by remember { mutableStateOf(false) }
+    var showBuyColorWipeDialog by remember { mutableStateOf(false) }
 
     // How far above finger block appears
     val liftPx = with(density) { 100.dp.toPx() }
@@ -348,8 +352,13 @@ fun GameScreen(
                     onSelectRainbow = onSelectRainbow,
                     onUseRainbowImmediately = onUseRainbowImmediately,
                     onColorWipeClick = {
-                        Log.d("GameScreen", "BottomBar.onColorWipeClick -> showColorWheelDialog = true")
-                        showColorWheelDialog = true
+                        Log.d("GameScreen", "BottomBar.onColorWipeClick -> checking color wipe inventory")
+                        if (uiState.colorWipeCount <= 0) {
+                            // Prompt user to buy color wipes from the shop
+                            showBuyColorWipeDialog = true
+                        } else {
+                            showColorWheelDialog = true
+                        }
                     },
                     onDragStart = { block, previewOffset ->
                         Log.d("GameScreen", "onDragStart (BottomBar): block=${block.id} previewOffset=$previewOffset")
@@ -411,6 +420,31 @@ fun GameScreen(
                         Log.e("GameScreen", "onColorWipeSpinResult threw", t)
                     }
                 }
+            )
+        }
+
+        // Buy / Purchase prompt when user has zero color wipes
+        if (showBuyColorWipeDialog) {
+            AlertDialog(
+                onDismissRequest = { showBuyColorWipeDialog = false },
+                title = { Text(text = "No Color Wipes", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
+                text = {
+                    Column {
+                        Text(text = "You don't have any Color Wipes.")
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = "Would you like to purchase some from the shop?", color = LightText.copy(alpha = 0.9f))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showBuyColorWipeDialog = false
+                        onGoToShop()
+                    }) { Text("Go to Shop") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showBuyColorWipeDialog = false }) { Text("Cancel") }
+                },
+                properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = true, dismissOnBackPress = true)
             )
         }
 
@@ -512,26 +546,94 @@ fun GameScreen(
     }
 }
 
-// Minimal local fallback implementation for ColorWheelDialog to satisfy references during build.
+// Color wheel dialog implementation with spinning animation
 @Composable
 private fun ColorWheelDialog(
     onDismiss: () -> Unit,
     onSpinFinished: (Int) -> Unit
 ) {
+    // 8-segment wheel
+    val segments = 8
+    val segmentColors = listOf(
+        Color(0xFF2196F3), // Blue
+        Color(0xFF4CAF50), // Green
+        Color(0xFFE91E63), // Pink
+        Color(0xFFFF9800), // Orange
+        Color(0xFF9C27B0), // Purple
+        Color(0xFFF44336), // Red
+        Color(0xFFFFEB3B), // Yellow
+        Color(0xFF00BCD4)  // Teal
+    )
+
+    var spinning by remember { mutableStateOf(false) }
+    val rotation = remember { androidx.compose.animation.core.Animatable(0f) }
+    val random = java.util.Random()
+    val coroutineScope = rememberCoroutineScope()
+
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = "Color Wheel") },
-        text = { Text(text = "Spin the wheel to pick a color wipe result.") },
+        onDismissRequest = { if (!spinning) onDismiss() },
+        title = { Text(text = "Color Wheel", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(modifier = Modifier.size(260.dp), contentAlignment = Alignment.Center) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val radius = size.minDimension / 2f
+                        val center = center
+                        val sweep = 360f / segments
+                        var start = rotation.value % 360f
+                        // Draw segments
+                        for (i in 0 until segments) {
+                            drawArc(
+                                color = segmentColors[i % segmentColors.size],
+                                startAngle = -start + i * sweep,
+                                sweepAngle = sweep,
+                                useCenter = true,
+                                topLeft = center - androidx.compose.ui.geometry.Offset(radius, radius),
+                                size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2)
+                            )
+                        }
+                        // Draw center circle
+                        drawCircle(color = DarkBackground, radius = radius * 0.28f, center = center)
+                    }
+                    // Pointer at top
+                    Box(modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-12).dp)) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropUp,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(text = if (spinning) "Spinning..." else "Tap Spin to try your luck!", color = LightText)
+            }
+        },
         confirmButton = {
             TextButton(onClick = {
-                // Return a default spin result (zero) — actual logic can be provided elsewhere.
-                onSpinFinished(0)
+                if (spinning) return@TextButton
+                spinning = true
+                // Spin asynchronously using coroutineScope
+                val extraRotations = 5 + random.nextInt(6) // between 5..10 full rotations
+                val targetDegrees = extraRotations * 360f + random.nextFloat() * 360f
+                coroutineScope.launch {
+                    rotation.animateTo(targetDegrees, animationSpec = androidx.compose.animation.core.tween(durationMillis = 2400))
+                    // Compute final index — pointer at top (0 degrees) maps to segment index
+                    val finalAngle = (rotation.value % 360f + 360f) % 360f
+                    val sweep = 360f / segments
+                    val index = (((360f - finalAngle + sweep / 2f) / sweep).toInt()).mod(segments)
+                    spinning = false
+                    onSpinFinished(index)
+                }
             }) {
-                Text("Spin")
+                Text(if (spinning) "Spinning..." else "Spin")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        }
+            TextButton(onClick = { if (!spinning) onDismiss() }) { Text("Cancel") }
+        },
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = !spinning, dismissOnBackPress = !spinning)
     )
 }

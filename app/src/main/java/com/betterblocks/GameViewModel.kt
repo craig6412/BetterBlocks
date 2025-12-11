@@ -2,14 +2,11 @@ package com.betterblocks
 
 import android.app.Application
 import android.content.Context
-import android.content.Intent
 import android.util.Log
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.betterblocks.animation.LineClearAnimator
 import com.betterblocks.animation.ScoreAnimator
-import com.betterblocks.model.FloatingScorePopup
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.getPlayerTier
 import kotlinx.coroutines.delay
@@ -17,16 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.math.max
-import kotlin.random.Random
-import com.betterblocks.KEY_SAVED_SELECTED
-import com.betterblocks.KEY_HIGH_SCORE
-import kotlin.collections.get
-import kotlin.compareTo
-import kotlin.text.get
-import kotlin.text.toLong
-import kotlin.times
-
 
 // --- Constants ---
 const val GRID_SIZE = 9
@@ -82,6 +69,7 @@ const val KEY_IS_LAST_CHANCE = "is_last_chance"
 const val KEY_TROPHY_TIER = "trophy_tier"
 const val KEY_FIRST_GAME_OVER_SHOWN = "first_game_over_shown"
 
+
 // Distinguish between simple taps and drag initiation on a block.
 enum class InteractionType {
     TAP,
@@ -103,16 +91,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(createInitialState())
     val uiState: StateFlow<GameUiState> = _uiState
 
-    // Receiver to listen for developer settings changes so we can apply inventory overrides at runtime
-    private val devSettingsReceiver = object : android.content.BroadcastReceiver() {
-        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
-            if (intent?.action == ACTION_DEV_SETTINGS_CHANGED) {
-                Log.d("GameViewModel", "Dev settings changed broadcast received; applying inventory overrides.")
-                applyDeveloperInventoryOverrides()
-            }
-        }
-    }
-
     // Internal tracking to trigger the animation only once per session/high score beat
     private var scoreToBeat: Int = 0
 
@@ -120,21 +98,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var selectionCounter: Long = 0L
 
     init {
-        try {
-            application.registerReceiver(devSettingsReceiver, android.content.IntentFilter(ACTION_DEV_SETTINGS_CHANGED))
-        } catch (t: Throwable) {
-            Log.w("GameViewModel", "Failed to register dev settings receiver: ${t.message}")
+        // Intentionally empty init; developer overrides can be triggered from the dev UI actions which call
+        // `applyDeveloperInventoryOverrides()` directly. Avoid dynamic broadcast receiver registration here.
+        // Run initial checks for daily reward and season start on startup
+        viewModelScope.launch {
+            checkDailyReward()
+            checkSeasonStart()
         }
     }
-
-    override fun onCleared() {
-        super.onCleared()
-        try {
-            getApplication<Application>().unregisterReceiver(devSettingsReceiver)
-        } catch (t: Throwable) {
-            Log.w("GameViewModel", "Failed to unregister dev settings receiver: ${t.message}")
-        }
-    }
+    override fun onCleared() { super.onCleared() }
 
     /**
      * Creates the initial state for a new game, loading saved data.
@@ -757,8 +729,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // Daily reward check; currently just ensures dialog flags are consistent
     fun checkDailyReward() {
-        // Hook your original daily reward logic back in here if needed.
-        // For now this is a no-op that leaves existing uiState fields unchanged.
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val dayMs = 24L * 60L * 60L * 1000L
+            val lastClaim = prefs.getLong(KEY_DAILY_REWARD_DATE, 0L)
+
+            val todayIndex = now / dayMs
+            val lastIndex = if (lastClaim == 0L) -1L else lastClaim / dayMs
+
+            val dayPassed = lastIndex < todayIndex
+            if (dayPassed) {
+                val streakPrev = prefs.getInt(KEY_DAILY_STREAK, 0)
+                val newStreak = if (lastIndex == todayIndex - 1L) streakPrev + 1 else 1
+
+                val dayNumber = (newStreak - 1) % 7 + 1
+                val coins = when (dayNumber) {
+                    1 -> 50
+                    2 -> 75
+                    3 -> 100
+                    4 -> 125
+                    5 -> 150
+                    6 -> 175
+                    7 -> 250
+                    else -> 50
+                }
+                val hasRainbow = dayNumber == 7
+
+                _uiState.update {
+                    it.copy(
+                        showDailyRewardDialog = true,
+                        dailyRewardDay = dayNumber,
+                        dailyRewardStreak = newStreak,
+                        dailyRewardCoins = coins,
+                        dailyRewardRainbow = hasRainbow
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(showDailyRewardDialog = false) }
+            }
+        }
     }
 
     // Claim daily reward: apply whatever is in uiState.dailyReward* and hide dialog
@@ -766,6 +775,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         val newCoins = state.coins + state.dailyRewardCoins
         saveCoins(newCoins)
+        // Persist date and streak
+        val now = System.currentTimeMillis()
+        prefs.edit()
+            .putLong(KEY_DAILY_REWARD_DATE, now)
+            .putInt(KEY_DAILY_STREAK, state.dailyRewardStreak)
+            .apply()
+
         _uiState.update {
             it.copy(
                 coins = newCoins,
@@ -776,173 +792,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Simple coin ad reward entry point (used by free coins button)
-    fun addCoins(amount: Int) {
-        val newCoins = _uiState.value.coins + amount
-        saveCoins(newCoins)
-        _uiState.update { it.copy(coins = newCoins) }
-    }
-
-    /**
-     * DEV-ONLY: Apply all relevant overrides from GameSettings into live game state.
-     * This is called when returning from DeveloperActivity so both inventory (coins,
-     * score, wipes) and tuning values (offsets, padding, scales) take effect.
-     */
-    fun applyDeveloperOverrides() {
-        // Inventory knobs
-        val devCoins = GameSettings.testCoins.value
-        val devScore = GameSettings.testScore.value
-        val devRainbow = GameSettings.testRainbowCount.value
-        val devColorWipe = GameSettings.testColorWipeCount.value
-
-        _uiState.update { current ->
-            current.copy(
-                coins = devCoins,
-                score = devScore,
-                rainbowBlockCount = devRainbow,
-                colorWipeCount = devColorWipe
-            )
-        }
-
-        // Persist inventory so they behave like normal game values
-        saveCoins(devCoins)
-        saveRainbowCount(devRainbow)
-        saveColorWipeCount(devColorWipe)
-        prefs.edit().putInt(KEY_SAVED_SCORE, devScore).apply()
-
-        // Layout / visual tuning knobs from GameSettings are read directly
-        // by Composables (e.g., GameComponents, AnimatedGameBoard) via
-        // mutableState in GameSettings, so no extra wiring is needed here.
-    }
-
-    // DEV-ONLY: Apply values from GameSettings test knobs into the live game state.
-    // This lets DeveloperActivity adjust coins / score / inventory for quick testing.
-    fun applyDeveloperInventoryOverrides() {
-        val devCoins = GameSettings.testCoins.value
-        val devScore = GameSettings.testScore.value
-        val devRainbow = GameSettings.testRainbowCount.value
-        val devColorWipe = GameSettings.testColorWipeCount.value
-
-        _uiState.update { current ->
-            current.copy(
-                coins = devCoins,
-                score = devScore,
-                rainbowBlockCount = devRainbow,
-                colorWipeCount = devColorWipe
-            )
-        }
-
-        // Persist these so they survive process death like normal game state
-        saveCoins(devCoins)
-        saveRainbowCount(devRainbow)
-        saveColorWipeCount(devColorWipe)
-        prefs.edit().putInt(KEY_SAVED_SCORE, devScore).apply()
-    }
-
-    // Public API for rotation button
-    fun rotateSelectedBlock() {
-        val currentState = _uiState.value
-
-        // Disallow rotation in game over/last chance or while board animations are running
-        if (currentState.isGameOver || currentState.selectedBlock == null || currentState.isLastChance) return
-        if (currentState.isColorWipeAnimating || currentState.isRainbowWipeActive || currentState.clearingCells.isNotEmpty()) return
-
-        val currentBlock = currentState.selectedBlock
-
-        // Determine if we've already consumed payment/free-rotation for this selection token
-        val alreadyPaidForThisSelection = currentState.rotationPaidSelectionToken != 0L && currentState.rotationPaidSelectionToken == currentState.selectionToken
-
-        var newCoins = currentState.coins
-        var newFreeRotations = currentState.freeRotations
-
-        if (!alreadyPaidForThisSelection) {
-            if (newFreeRotations > 0) {
-                newFreeRotations -= 1
-            } else if (newCoins >= ROTATION_COST) {
-                newCoins -= ROTATION_COST
-                saveCoins(newCoins)
-            } else {
-                // No free rotations and not enough coins — show the zero-coins dialog prompting shop or ad
-                _uiState.update { it.copy(showZeroCoinsDialog = true) }
-                return
+    // Season start wiring
+    fun checkSeasonStart() {
+        viewModelScope.launch {
+            val started = prefs.getBoolean(KEY_SEASON_STARTED, false)
+            val now = System.currentTimeMillis()
+            if (!started && now >= GameSettings.seasonStartEpochMs) {
+                startSeason()
             }
         }
-
-        val rotatedBlock = currentBlock.rotate()
-        val newAvailableBlocks = if (!currentBlock.isSpecial) {
-            currentState.availableBlocks.map { if (it.id == currentBlock.id) rotatedBlock else it }
-        } else currentState.availableBlocks
-
-        // Mark that this selection token has had rotation payment consumed
-        val paidToken = if (!alreadyPaidForThisSelection) currentState.selectionToken else currentState.rotationPaidSelectionToken
-
-        val updatedState = currentState.copy(
-            availableBlocks = newAvailableBlocks,
-            selectedBlock = rotatedBlock,
-            coins = newCoins,
-            freeRotations = newFreeRotations,
-            lastRotatedBlockId = currentBlock.id,
-            rotationPaidSelectionToken = paidToken
-        )
-
-        _uiState.value = updatedState
-        persistGameSnapshot(
-            board = updatedState.board,
-            blocks = updatedState.availableBlocks,
-            coins = updatedState.coins,
-            rainbowCount = updatedState.rainbowBlockCount,
-            colorWipeCount = updatedState.colorWipeCount,
-            score = updatedState.score,
-            meterValue = updatedState.specialMeterValue,
-            freeRotations = updatedState.freeRotations,
-            lastRotatedBlockId = updatedState.lastRotatedBlockId,
-            selectedBlockId = updatedState.selectedBlock?.id,
-            isGameOver = updatedState.isGameOver,
-            isLastChance = updatedState.isLastChance
-        )
     }
 
-    // Dismiss the zero-coins dialog (UI call)
-    fun dismissZeroCoinsDialog() {
-        _uiState.update { it.copy(showZeroCoinsDialog = false) }
-    }
-    // Simple tap-based selection used by GameActivity / GameScreen
-    fun selectBlock(block: Block) {
-        val current = _uiState.value
-        if (current.isGameOver || current.isLastChance) return
-
-        val isSame = current.selectedBlock == block
-        if (isSame) {
-            // deselect
-            _uiState.update { it.copy(selectedBlock = null, selectionToken = 0L) }
-            saveSelectedBlockId(null)
-            return
+    private fun startSeason() {
+        viewModelScope.launch {
+            prefs.edit().putBoolean(KEY_SEASON_STARTED, true).apply()
+            Log.d("GameViewModel", "Season started at configured epoch: ${GameSettings.seasonStartEpochMs}")
+            // Optionally update uiState if you have season fields
         }
-
-        // New selection -> increment runtime selection counter and record token
-        selectionCounter += 1L
-        val newToken = selectionCounter
-        _uiState.update { it.copy(selectedBlock = block, selectionToken = newToken) }
-        saveSelectedBlockId(block.id)
     }
 
-    // Toggle the special Rainbow Wipe block selection from UI
-    fun selectRainbowBlock() {
-        val current = _uiState.value
-        if (current.isLastChance || current.isGameOver || current.rainbowBlockCount <= 0) return
-        val rainbow = RAINBOW_BLOCK
-        val newSelected = if (current.selectedBlock?.id == rainbow.id) null else rainbow
-        _uiState.update { it.copy(selectedBlock = newSelected) }
-        saveSelectedBlockId(newSelected?.id)
-    }
+    // --- GAME LOGIC ---
 
-    // Dismiss tier promotion dialog (if used by UI)
-    fun dismissTierPromotion() {
-        _uiState.update { it.copy(showTierPromotionDialog = false, newlyUnlockedTier = null) }
-    }
-
-    // Core placement entry used by GameActivity / GameScreen
-    fun placeBlock(row: Int, col: Int) {
+    /**
+     * Called when a player places a block.
+     *
+     * This handles normal blocks, special blocks (rainbow/color wipe), and detects clears.
+     */
+    fun onBlockPlaced(row: Int, col: Int) {
         val current = _uiState.value
         val block = current.selectedBlock ?: return
         if (current.isGameOver || current.isLastChance) return
@@ -1161,4 +1037,178 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(showFirstGameOverDialog = false) }
         // Persist the flag in prefs already set when awarding; snapshot persisted already
     }
+
+    // DEV-ONLY: Apply values from GameSettings test knobs into the live game state.
+    // This lets DeveloperActivity adjust coins / score / inventory for quick testing.
+    fun applyDeveloperInventoryOverrides() {
+        try {
+            val devCoins = GameSettings.testCoins.value
+            val devScore = GameSettings.testScore.value
+            val devRainbow = GameSettings.testRainbowCount.value
+            val devColorWipe = GameSettings.testColorWipeCount.value
+
+            _uiState.update { current ->
+                current.copy(
+                    coins = devCoins.takeIf { it >= 0 } ?: current.coins,
+                    score = devScore.takeIf { it >= 0 } ?: current.score,
+                    rainbowBlockCount = devRainbow.takeIf { it >= 0 } ?: current.rainbowBlockCount,
+                    colorWipeCount = devColorWipe.takeIf { it >= 0 } ?: current.colorWipeCount
+                )
+            }
+
+            // Persist these so they survive process death like normal game state
+            if (devCoins >= 0) saveCoins(devCoins)
+            if (devRainbow >= 0) saveRainbowCount(devRainbow)
+            if (devColorWipe >= 0) saveColorWipeCount(devColorWipe)
+            prefs.edit().putInt(KEY_SAVED_SCORE, devScore).apply()
+
+            Log.d("GameViewModel", "Applied developer inventory overrides: coins=$devCoins score=$devScore rainbows=$devRainbow colorWipes=$devColorWipe")
+        } catch (t: Throwable) {
+            Log.w("GameViewModel", "applyDeveloperInventoryOverrides failed: ${t.message}")
+        }
+    }
+
+    /** Public wrapper used by Activities to apply developer overrides (inventory + tuning). */
+    fun applyDeveloperOverrides() {
+        // Apply inventory overrides
+        applyDeveloperInventoryOverrides()
+        // Future: apply other GameSettings-based overrides here
+    }
+
+    // --- Activity-facing wrapper APIs (fix unresolved reference errors) ---
+
+    /** Backwards-compatible alias used by GameActivity */
+    fun placeBlock(row: Int, col: Int) = onBlockPlaced(row, col)
+
+    /** Select a preview block (from bottom row/available blocks) */
+    fun selectBlock(block: Block) {
+        Log.d("GameViewModel", "selectBlock -> id=${block.id} name=${block.name}")
+        _uiState.update {
+            it.copy(
+                selectedBlock = block,
+                selectionToken = it.selectionToken + 1L,
+                rotation = 0, // reset rotation when a new block is selected
+                rotationPaidSelectionToken = 0L // clear rotation payment marker for new selection
+            )
+        }
+        // Persist selected preview for snapshot
+        saveSelectedBlockId(block.id)
+    }
+
+    /** Rotate the currently selected block (consumes a free rotation or charges coins). */
+    fun rotateSelectedBlock() {
+        val currentState = _uiState.value
+        Log.d("GameViewModel", "rotateSelectedBlock called selected=${currentState.selectedBlock?.id} selectionToken=${currentState.selectionToken} freeRotations=${currentState.freeRotations} coins=${currentState.coins} rotationPaid=${currentState.rotationPaidSelectionToken}")
+
+        // Disallow rotation in game over/last chance or while board animations are running
+        if (currentState.isGameOver || currentState.selectedBlock == null || currentState.isLastChance) return
+        if (currentState.isColorWipeAnimating || currentState.isRainbowWipeActive || currentState.clearingCells.isNotEmpty()) return
+
+        val currentBlock = currentState.selectedBlock
+
+        // Determine if we've already consumed payment/free-rotation for this selection token
+        val alreadyPaidForThisSelection = currentState.rotationPaidSelectionToken != 0L && currentState.rotationPaidSelectionToken == currentState.selectionToken
+
+        // Don't rotate special blocks
+        if (currentBlock.isSpecial) return
+
+        var newCoins = currentState.coins
+        var newFreeRotations = currentState.freeRotations
+
+        if (!alreadyPaidForThisSelection) {
+            if (newFreeRotations > 0) {
+                newFreeRotations -= 1
+                // persist free rotations immediately so survives process death
+                saveFreeRotations(newFreeRotations)
+            } else if (newCoins >= ROTATION_COST) {
+                newCoins -= ROTATION_COST
+                saveCoins(newCoins)
+                saveLifetimeCoinsIfHigher(newCoins)
+            } else {
+                // No free rotations and not enough coins — show the zero-coins dialog prompting shop or ad
+                _uiState.update { it.copy(showZeroCoinsDialog = true) }
+                return
+            }
+        }
+
+        // Perform rotation on the selected block (90deg clockwise)
+        val rotated = currentBlock.rotate()
+
+        // If we consumed payment/free-rotation now, mark the selection token so we don't charge again for same selection
+        if (!alreadyPaidForThisSelection) {
+            _uiState.update { it.copy(rotationPaidSelectionToken = currentState.selectionToken) }
+        }
+
+        Log.d("GameViewModel", "rotateSelectedBlock -> rotatedId=${rotated.id} newFreeRotations=$newFreeRotations newCoins=$newCoins")
+
+        // Update last rotated id in prefs and update UI state
+        prefs.edit().putInt(KEY_LAST_ROTATED_ID, rotated.id).apply()
+
+        _uiState.update {
+            it.copy(
+                selectedBlock = rotated,
+                freeRotations = newFreeRotations,
+                coins = newCoins,
+                lastRotatedBlockId = rotated.id
+            )
+        }
+
+        // Persist snapshot after rotation
+        val post = _uiState.value
+        persistGameSnapshot(
+            board = post.board,
+            blocks = post.availableBlocks,
+            coins = post.coins,
+            rainbowCount = post.rainbowBlockCount,
+            colorWipeCount = post.colorWipeCount,
+            score = post.score,
+            meterValue = post.specialMeterValue,
+            freeRotations = post.freeRotations,
+            lastRotatedBlockId = post.lastRotatedBlockId,
+            selectedBlockId = post.selectedBlock?.id,
+            isGameOver = post.isGameOver,
+            isLastChance = post.isLastChance
+        )
+    }
+
+    /** Select the Rainbow special block as the active preview (if available). */
+    fun selectRainbowBlock() {
+        val state = _uiState.value
+        if (state.rainbowBlockCount <= 0) {
+            _uiState.update { it.copy(showZeroCoinsDialog = true) }
+            return
+        }
+        _uiState.update {
+            it.copy(selectedBlock = RAINBOW_BLOCK, selectionToken = it.selectionToken + 1L,
+                rotation = 0, // ensure rainbow selection also resets rotation state
+                rotationPaidSelectionToken = 0L
+            )
+        }
+        saveSelectedBlockId(RAINBOW_BLOCK.id)
+    }
+
+    /** Dismiss the trophy / tier promotion dialog. */
+    fun dismissTierPromotion() {
+        _uiState.update { it.copy(showTierPromotionDialog = false, newlyUnlockedTier = null) }
+    }
+
+    /** Add coins to player (used for rewards / ads). */
+    fun addCoins(amount: Int) {
+        if (amount <= 0) return
+        val newTotal = _uiState.value.coins + amount
+        saveCoins(newTotal)
+        saveLifetimeCoinsIfHigher(newTotal)
+        _uiState.update { it.copy(coins = newTotal, coinsEarnedThisUpdate = amount) }
+    }
+
+    /** Hide the zero-coins dialog. */
+    fun dismissZeroCoinsDialog() {
+        _uiState.update { it.copy(showZeroCoinsDialog = false) }
+    }
+
+    // --- Small helper to persist free rotations count ---
+    private fun saveFreeRotations(count: Int) {
+        prefs.edit().putInt(KEY_FREE_ROTATIONS, count).apply()
+    }
+
 }
