@@ -234,6 +234,11 @@ fun MainMenuScreen(
                             .fillMaxWidth(0.9f)
                             .aspectRatio(3.2f)
                             .scale(GameSettings.bannerScale.value)
+                            .offset
+                                (x = 5.dp,
+
+                                y = (-10).dp)
+
                             .zIndex(50f),
                         contentScale = ContentScale.Fit
                     )
@@ -312,7 +317,7 @@ fun MainMenuScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                banner?.invoke()
+               // banner?.invoke()
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -352,7 +357,7 @@ fun MainMenuScreen(
                     .size(75.dp)
                     .offset(
                         x = (300).dp,  // tweak X
-                        y = (100).dp    // tweak Y
+                        y = (180).dp    // tweak Y
                     )
                     .zIndex(1000f)
                     .clickable(

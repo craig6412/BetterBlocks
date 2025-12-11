@@ -8,6 +8,11 @@ const val KEY_SELECTED_TROPHY_TAB = "selected_trophy_tab"
 const val KEY_HIGHEST_TIER_UNLOCKED = "highest_tier_unlocked"
 const val KEY_FIREBASE_USER_ID = "firebase_user_id"
 
+// Player chosen display name (from HighScoreActivity)
+const val KEY_PLAYER_NAME = "player_name"
+
+
+
 // Haptic Feedback
 const val KEY_HAPTIC_ENABLED = "haptic_enabled"
 
@@ -41,3 +46,6 @@ const val KEY_IS_GAME_OVER = "is_game_over"
 const val KEY_IS_LAST_CHANCE = "is_last_chance"
 const val KEY_TROPHY_TIER = "trophy_tier"
 const val KEY_FIRST_GAME_OVER_SHOWN = "first_game_over_shown"
+
+// Track whether the last-chance rainbow dialog has been offered for the current game session
+const val KEY_LAST_CHANCE_OFFERED = "last_chance_offered"

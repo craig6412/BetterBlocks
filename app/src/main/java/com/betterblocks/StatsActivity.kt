@@ -65,7 +65,8 @@ fun StatsScreen(onBack: () -> Unit) {
     val rainbowCount = prefs.getInt(KEY_RAINBOW_COUNT, 0)
     val colorWipeCount = prefs.getInt(KEY_COLOR_WIPE_COUNT, 0)
     val currentTier = getPlayerTier(bestScore, lifetimeCoins, prefs)
-    val firebaseUserId = runCatching { prefs.getString(KEY_FIREBASE_USER_ID, "Unknown") ?: "Unknown" }.getOrDefault("Unknown")
+    // Resolve display name preference (preferred: KEY_PLAYER_NAME; fallback: firebase id)
+    val displayName = getPlayerDisplayName(prefs)
 
     // Daily reward stats
     // KEY_DAILY_REWARD_DATE may be stored as a Long (epoch ms) or as a String; handle both safely.
@@ -166,7 +167,7 @@ fun StatsScreen(onBack: () -> Unit) {
                 enter = fadeIn() + slideInVertically()
             ) {
                 PlayerInfoCard(
-                    firebaseUserId = firebaseUserId,
+                    playerName = displayName,
                     bestScore = bestScore,
                     lifetimeCoins = lifetimeCoins,
                     currentCoins = coins
@@ -255,7 +256,7 @@ fun TrophyTierCard(currentTier: TrophyTier) {
 
 @Composable
 fun PlayerInfoCard(
-    firebaseUserId: String,
+    playerName: String,
     bestScore: Int,
     lifetimeCoins: Int,
     currentCoins: Int
@@ -280,7 +281,9 @@ fun PlayerInfoCard(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
-            StatRow(label = "Player ID", value = firebaseUserId.take(12) + "...")
+            // Show chosen player name (or fallback id)
+            StatRow(label = "Player", value = playerName.takeIf { it.isNotBlank() } ?: "Player")
+            Spacer(modifier = Modifier.height(6.dp))
             StatRow(label = "Best Score", value = String.format("%,d", bestScore))
             StatRow(label = "Lifetime Coins", value = String.format("%,d", lifetimeCoins))
             StatRow(label = "Current Coins", value = String.format("%,d", currentCoins))
@@ -597,5 +600,22 @@ fun StatRow(label: String, value: String) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+// Helper: Resolve display name preferring explicit player name then fallback to firebase id safely.
+private fun getPlayerDisplayName(prefs: android.content.SharedPreferences): String {
+    // 1) Prefer explicit player name string saved by HighScoreActivity
+    prefs.getString(KEY_PLAYER_NAME, null)?.let { name ->
+        if (name.isNotBlank()) return name
+    }
+
+    // 2) Fallback to firebase id or stored user id; handle stored types safely
+    val raw = prefs.all[KEY_FIREBASE_USER_ID]
+    return when (raw) {
+        is String -> raw
+        is Long -> raw.toString()
+        is Int -> raw.toString()
+        else -> prefs.getString(KEY_FIREBASE_USER_ID, null) ?: "Player"
     }
 }

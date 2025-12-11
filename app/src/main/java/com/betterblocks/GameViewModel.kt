@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import android.content.SharedPreferences
+import kotlin.apply
+import kotlin.compareTo
 
 // --- Constants ---
 const val GRID_SIZE = 9
@@ -116,6 +118,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // NEW: runtime-only counter used to tie rotation payments to a specific selection session
     private var selectionCounter: Long = 0L
+    // NEW: runtime-only flag to ensure we offer the "last chance" rainbow dialog only once per game
+    private var lastChanceOfferedThisGame: Boolean = false
+    // Persisted mirror so that recreation of the ViewModel doesn't re-offer the dialog
+    private var lastChanceOfferedPersisted: Boolean = prefs.getBoolean(KEY_LAST_CHANCE_OFFERED, false)
 
     init {
         // Register listener before initial checks so external writes during startup are observed
@@ -422,8 +428,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun resetGameTracking() {
-        // Minimal no-op implementation to satisfy references.
-        // If you had custom tracking (streaks, analytics), restore it here.
+        // Reset runtime-only tracking for a fresh session
+        lastChanceOfferedThisGame = false
+        lastChanceOfferedPersisted = false
+        prefs.edit().putBoolean(KEY_LAST_CHANCE_OFFERED, false).apply()
+        // If you had other session-only trackers, reset them here as well.
     }
 
     /**
@@ -457,7 +466,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Triggered when the Color Wheel stops spinning.
      */
-    // Patch: Add diagnostics and clearer logging to onColorWipeSpinResult
+    // Patch: Add diagnostics and clearer logging to onColorWipeSpinResult with deep-copying to avoid aliasing bugs
     fun onColorWipeSpinResult(colorIndex: Int) {
         val currentState = _uiState.value
         Log.d("GameViewModel", "onColorWipeSpinResult called colorIndex=$colorIndex colorWipeCount=${currentState.colorWipeCount}")
@@ -495,10 +504,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             if (cellsToClear.isNotEmpty()) {
-                // 3. Keep the board state unchanged during animation; set effect layer
+                // Make a deep copy snapshot of the board to avoid aliasing with the live UI state.
+                val boardSnapshot: GameGrid = currentState.board.map { it.clone() }.toTypedArray()
+
+                // 3. Keep the board state unchanged during animation; set effect layer using the snapshot.
                 _uiState.update {
                     it.copy(
-                        board = currentState.board,
+                        board = boardSnapshot,         // use the copy so UI/logic don't share references
                         effectCells = cellsToClear,
                         isColorWipeAnimating = true
                     )
@@ -506,12 +518,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 Log.d("GameViewModel", "Effect layer set; starting color wipe animation for ${cellsToClear.size} cells")
 
                 // Use slower animation duration for color wipe
-                val colorWipeDelay =
-                    (BLOCK_CLEAR_DELAY_MS * COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER).toLong()
+                val colorWipeDelay = (BLOCK_CLEAR_DELAY_MS * COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER).toLong()
                 delay(colorWipeDelay)
 
-                // 4. Remove from board after animation
-                val newBoard = currentState.board.map { it.clone() }.toTypedArray()
+                // 4. Remove from the snapshot after animation (not the original array)
+                val newBoard = boardSnapshot.map { it.clone() }.toTypedArray()
                 for (cell in cellsToClear) {
                     newBoard[cell.row][cell.col] = null
                 }
@@ -695,6 +706,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (!state.isLastChance || state.rainbowBlockCount <= 0) return
 
+        // Mark that we've offered last-chance this game (defensive)
+        lastChanceOfferedThisGame = true
+        lastChanceOfferedPersisted = true
+        prefs.edit().putBoolean(KEY_LAST_CHANCE_OFFERED, true).apply()
+
         val newCount = state.rainbowBlockCount - 1
         saveRainbowCount(newCount)
         _uiState.update { it.copy(rainbowBlockCount = newCount, isLastChance = false, selectedBlock = null) }
@@ -725,7 +741,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (!state.isLastChance) return
 
-        _uiState.update { it.copy(isLastChance = false, isGameOver = true, selectedBlock = null) }
+        // Mark that we've offered last-chance this game (defensive)
+        lastChanceOfferedThisGame = true
+        lastChanceOfferedPersisted = true
+        prefs.edit().putBoolean(KEY_LAST_CHANCE_OFFERED, true).apply()
+
+        _uiState.update { it.copy(isLastChance = false, isGameOver = true, selectedBlock = null, showGameSummaryDialog = true) }
 
         val post = _uiState.value
         persistGameSnapshot(
@@ -1028,11 +1049,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val anyMove = hasAnyValidMove(state)
         if (anyMove) return
 
-        val updated = if (state.rainbowBlockCount > 0) {
-            // Player gets a last chance using a rainbow wipe
+        // Re-evaluate persisted flag at call time to handle ViewModel recreation
+        val persistedFlag = prefs.getBoolean(KEY_LAST_CHANCE_OFFERED, false)
+        val alreadyOffered = lastChanceOfferedThisGame || persistedFlag
+        Log.d("GameViewModel", "checkGameOverOrLastChance -> state.rainbow=${state.rainbowBlockCount} lastChanceThisGame=$lastChanceOfferedThisGame persistedLastChance=$persistedFlag isLastChance=${state.isLastChance} isGameOver=${state.isGameOver}")
+
+        val updated = if (state.rainbowBlockCount > 0 && !alreadyOffered) {
+            // Offer last-chance once per game
+            lastChanceOfferedThisGame = true
+            // Persist immediately so recreation doesn't re-offer
+            prefs.edit().putBoolean(KEY_LAST_CHANCE_OFFERED, true).apply()
+            Log.d("GameViewModel", "checkGameOverOrLastChance -> OFFER last chance dialog")
             state.copy(isLastChance = true, selectedBlock = null)
         } else {
-            // No moves and no rainbow wipes → game over
+            // Either no rainbows, or we've already offered the last chance this game; finalize game over
+            Log.d("GameViewModel", "checkGameOverOrLastChance -> FINALIZE game over (alreadyOffered=$alreadyOffered rainbow=${state.rainbowBlockCount})")
             state.copy(isGameOver = true, selectedBlock = null)
         }
 
@@ -1066,7 +1097,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         selectedBlock = null
                     )
                 }
-                // Persist the awarded rainbows + meter (unchanged)
                 val post = _uiState.value
                 persistGameSnapshot(
                     board = post.board,

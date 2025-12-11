@@ -22,7 +22,7 @@ object GameSettings {
     var rotateButtonScale = mutableFloatStateOf(1.0f)
 
 
-    var bannerScale = mutableStateOf(2.0f)
+    var bannerScale = mutableStateOf(3.0f)
 
     // --- Bottom Bar Layout Controls ---
     var bottomBarVerticalPadding = mutableStateOf(12)        // dp

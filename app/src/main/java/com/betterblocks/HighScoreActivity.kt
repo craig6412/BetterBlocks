@@ -64,7 +64,6 @@ class HighScoreActivity : ComponentActivity() {
 // HIGH SCORE SCREEN — Refined UI
 // ---------------------------------------------------------
 
-const val KEY_PLAYER_NAME = "player_name"
 private val PLAYER_NAME_REGEX = Regex("^[A-Za-z0-9 ]+")
 
 @OptIn(ExperimentalFoundationApi::class)

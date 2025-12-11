@@ -68,12 +68,12 @@ fun PowerUpsPopup(
                     )
 
                     Text(
-                        text = "• Color Wheel: Re-rolls the colors of your current blocks. Helps avoid dead turns.",
+                        text = "• Color Wheel:  Clears all blocks of one chosen color. Earned during streaks or purchased in the Shop.",
                         style = MaterialTheme.typography.bodyMedium
                     )
 
                     Text(
-                        text = "• Color Wipe: Clears all blocks of one chosen color. Earned during streaks or purchased in the Shop.",
+                        text = "•Rotations: 3 free rotations per game, after though it is 10 coins per block.",
                         style = MaterialTheme.typography.bodyMedium
                     )
 
