@@ -38,7 +38,11 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalInspectionMode
+import com.betterblocks.ui.sw
+import com.betterblocks.ui.sh
+import com.betterblocks.ui.sdp
+import com.betterblocks.ui.ssp
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -65,6 +69,7 @@ import com.betterblocks.LastChanceDialog
 import com.betterblocks.LightText
 import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
+import com.betterblocks.PreviewGameViewModel
 import com.betterblocks.SCREEN_HORIZONTAL_PADDING
 import com.betterblocks.isValidPlacement
 import com.betterblocks.model.TrophyTier
@@ -84,7 +89,11 @@ My M.O. say I need you and I love you to death
 Then turn around and go and treat you like you nothing but trash, I know
 I know I messed that part up, but */
 
-
+enum class DeviceClass {
+    Phone,
+    Tablet,
+    Foldable
+}
 @Composable
 fun GameScreen(
     uiState: GameUiState,
@@ -96,6 +105,7 @@ fun GameScreen(
     onReset: () -> Unit,
     onGoToMenu: () -> Unit,
     onLastChanceUsed: () -> Unit,
+    forcePreviewFold: Boolean = false,
     onLastChanceDeclined: () -> Unit,
     onToggleSound: () -> Unit,
     onToggleMusic: () -> Unit,
@@ -115,7 +125,8 @@ fun GameScreen(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    val haptic = LocalHapticFeedback.current
+    // Haptic feedback: use a safe no-op so builds/previews don't fail if platform API is unavailable.
+    val performHaptic: (HapticFeedbackType) -> Unit = { /* no-op (device may still have haptics) */ }
 
     // Central drag controller (Block Blast style)
     val drag = remember { SimpleDragController() }
@@ -134,7 +145,7 @@ fun GameScreen(
     var showBuyColorWipeDialog by remember { mutableStateOf(false) }
 
     // How far above finger block appears
-    val liftPx = with(density) { 100.dp.toPx() }
+    val liftPx = with(density) { sh(0.12f).toPx() }
 
     // Ghost info (controller output)
     val ghostPosition = drag.ghostPosition  // ✅ Correct property name
@@ -145,6 +156,70 @@ fun GameScreen(
         ghostPosition != null && block != null &&
                 isValidPlacement(uiState.board, block, ghostPosition)
     }
+
+
+    @Composable
+    fun deviceCategory(): DeviceClass {
+        val w = sw(1f)
+        val h = sh(1f)
+
+        val smallest = minOf(w, h)
+        val largest = maxOf(w, h)
+        val aspect = largest / smallest
+
+        return when {
+            // TRUE foldables: VERY wide, VERY large
+            smallest > 1350.dp && aspect > 1.35f -> DeviceClass.Foldable
+
+            // Tablets: smallest dimension over 600dp, but not insane aspect ratios
+            smallest > 600.dp -> DeviceClass.Tablet
+
+            else -> DeviceClass.Phone
+        }
+    }
+
+
+
+    @Composable
+    fun boardSize(forcePreviewFold: Boolean = false): Dp {
+        val category =
+            if (forcePreviewFold) DeviceClass.Foldable
+            else deviceCategory()
+
+        val smallest = minOf(sw(1f), sh(1f))
+
+        return when (category) {
+            DeviceClass.Phone -> smallest * 1f   // FULL SIZE
+            DeviceClass.Tablet -> smallest * 0.75f
+            DeviceClass.Foldable -> smallest * 0.45f
+        }
+    }
+
+    @Composable
+    fun gridVerticalOffset(): Dp {
+        return when (deviceCategory()) {
+            DeviceClass.Phone -> sh(-0.07f)   // what you already use
+            DeviceClass.Foldable -> sh(-0.04f) // foldables need less lift
+            DeviceClass.Tablet -> sh(-0.04f)   // tablets need BIGGER lift
+        }
+    }
+    @Composable
+    fun availableBlocksOffset(): Dp {
+        return when (deviceCategory()) {
+
+            DeviceClass.Phone ->
+                sh(-0.05f)   // your existing value
+
+            DeviceClass.Foldable ->
+                sh(-0.03f)   // foldables have plenty of vertical room
+
+            DeviceClass.Tablet ->
+                sh(-0.02f)   // tablets need the most upward adjustment
+        }
+    }
+
+    @Composable
+    fun cellSize(): Dp = boardSize() / 9
 
     // Debug toggle - set to true to render guide overlay during drag
     val renderDebugOverlay = true
@@ -186,15 +261,15 @@ fun GameScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
 
-                        // GRID
+                        // GRID (90% of screen width as requested)
+                        val boardWidth = boardSize(forcePreviewFold)
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = SCREEN_HORIZONTAL_PADDING)
-                                .aspectRatio(1f)
-                                .fillMaxWidth()
+                                .padding(horizontal = sdp(0.02f))
+                                .size(boardWidth)
                                 .offset(
                                     x = GameSettings.gridOffsetX.value.dp,
-                                    y = (-25).dp
+                                    y = gridVerticalOffset()
                                 )
                                 // capture measured values during layout into local state, apply to drag in LaunchedEffect
                                 .onGloballyPositioned { coordinates ->
@@ -206,15 +281,20 @@ fun GameScreen(
                             // apply captured metrics to the drag controller after layout to avoid snapshot writes during measure
                             LaunchedEffect(measuredGridTopLeftWindow, measuredGridSizePx) {
                                 if (measuredGridTopLeftWindow != Offset.Zero && measuredGridSizePx > 0f) {
+                                    // compute an even integer pixel cell size so rendering and drag math align
+                                    val rawCellPx = measuredGridSizePx / 9f
+                                    var cellPxInt = rawCellPx.toInt().coerceAtLeast(1)
+                                    if (cellPxInt % 2 != 0) cellPxInt -= 1 // make even
+
                                     drag.gridTopLeft = measuredGridTopLeftWindow
                                     drag.gridSizePx = measuredGridSizePx
-                                    drag.cellSizePx = measuredGridSizePx / 9f
-                                    Log.d("GameScreen", "Deferred drag metrics set: topLeftWindow=$measuredGridTopLeftWindow sizePx=$measuredGridSizePx cellPx=${measuredGridSizePx/9f}")
+                                    drag.cellSizePx = cellPxInt.toFloat()
+                                    Log.d("GameScreen", "Deferred drag metrics set: topLeftWindow=$measuredGridTopLeftWindow sizePx=$measuredGridSizePx cellPx=$cellPxInt")
                                 }
                             }
 
                             // Visual border drawn slightly larger than the grid so there is a ~5.dp gap
-                            val borderGap = 8.dp
+                            val borderGap = sdp(0.005f)
                              if (measuredGridSizePx > 0f) {
                                  val gridDp = with(density) { measuredGridSizePx.toDp() }
                                  val borderSize = gridDp + (borderGap * 2)
@@ -224,25 +304,36 @@ fun GameScreen(
                                          .size(borderSize)
                                          .offset (
                                              x = 0.dp,
-                                             y = 10.dp
+                                             y = sdp(0.01f)
 
                                          )
                                          .align(Alignment.Center)
                                          .border(
-                                             width = 4.5.dp,
-                                             color = Color(0xFF3F51B5),
-                                             shape = RoundedCornerShape(8.dp)
+                                             width = sdp(0.005f),
+                                             color = LightText.copy(alpha = 0.08f),
+                                             shape = RoundedCornerShape(sdp(0.01f))
                                          )
                                          .zIndex(0f)
                                  )
                              }
 
                             // The actual game board (measurements used by drag controller remain tied to this Box)
+                            // Compute an effective cell Dp that matches the even pixel cell size used by the drag controller
+                            val effectiveCellDp = if (measuredGridSizePx > 0f) {
+                                val rawCellPx = measuredGridSizePx / 9f
+                                var cellPxInt = rawCellPx.toInt().coerceAtLeast(1)
+                                if (cellPxInt % 2 != 0) cellPxInt -= 1
+                                with(density) { cellPxInt.toDp() }
+                            } else {
+                                cellSize()
+                            }
+
+
                             Box(modifier = Modifier.align(Alignment.Center).zIndex(1f)) {
                                 com.betterblocks.animation.AnimatedGameBoard(
                                     board = uiState.board,
                                     gridSize = 9,
-                                    cellDp = cellDp,
+                                    cellDp = effectiveCellDp,
                                     // Let the AnimatedGameBoard draw the ghost preview using the controller's dragged block and computed ghost origin
                                     ghostBlock = drag.draggedBlock,
                                     ghostOrigin = drag.ghostPosition,
@@ -256,7 +347,7 @@ fun GameScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(sdp(0.01f)))
 
                         // =====================
                         // AVAILABLE BLOCKS ROW
@@ -267,7 +358,8 @@ fun GameScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(safeAvailableBlocksHeight)
-                                .padding(horizontal = SCREEN_HORIZONTAL_PADDING),
+                                .padding(horizontal = SCREEN_HORIZONTAL_PADDING)
+                                .offset(y = availableBlocksOffset()), // move available blocks row up by ~5% of screen height
                             contentAlignment = Alignment.Center
                         ) {
                             AvailableBlocks(
@@ -312,9 +404,7 @@ fun GameScreen(
                                     recentDragTimeMs = 0L
 
                                     if (drop != null) {
-                                        haptic.performHapticFeedback(
-                                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove
-                                        )
+                                        performHaptic(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                         onGridCellClicked(drop.first, drop.second)
                                     }
                                 }
@@ -339,7 +429,7 @@ fun GameScreen(
                 // =====================
                 // MENU / SETTINGS DIALOG
                 // =====================
-                if (showMenuDialog) {
+                if (!LocalInspectionMode.current && showMenuDialog) {
                     GameMenuDialog(
                         uiState = uiState,
                         onDismiss = { showMenuDialog = false },
@@ -350,7 +440,7 @@ fun GameScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(sdp(0.02f)))
 
                 // =====================
                 // BOTTOM BAR (Coins, Drag targets, etc.)
@@ -397,7 +487,7 @@ fun GameScreen(
                         recentlyDraggedBlockId = null
                         recentDragTimeMs = 0L
                         if (drop != null) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            performHaptic(HapticFeedbackType.TextHandleMove)
                             onGridCellClicked(drop.first, drop.second)
                         }
                     }
@@ -419,7 +509,7 @@ fun GameScreen(
         // DEBUG: Log composition
         // =====================
         // Color wheel dialog rendering (debug logs)
-        if (showColorWheelDialog) {
+        if (!LocalInspectionMode.current && showColorWheelDialog) {
             Log.d("GameScreen", "showColorWheelDialog == true -> rendering ColorWheelDialog")
             ColorWheelDialog(
                 onDismiss = {
@@ -440,14 +530,14 @@ fun GameScreen(
         }
 
         // Buy / Purchase prompt when user has zero color wipes
-        if (showBuyColorWipeDialog) {
+        if (!LocalInspectionMode.current && showBuyColorWipeDialog) {
             AlertDialog(
                 onDismissRequest = { showBuyColorWipeDialog = false },
                 title = { Text(text = "No Color Wipes", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
                 text = {
                     Column {
                         Text(text = "You don't have any Color Wipes.")
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(sdp(0.006f)))
                         Text(text = "Would you like to purchase some from the shop?", color = LightText.copy(alpha = 0.9f))
                     }
                 },
@@ -465,14 +555,14 @@ fun GameScreen(
         }
 
         // --- Rainbow Earned Dialog (earned by filling special meter) ---
-        if (uiState.showRainbowEarnedDialog) {
+        if (!LocalInspectionMode.current && uiState.showRainbowEarnedDialog) {
             AlertDialog(
                 onDismissRequest = { onDismissRainbowEarned() },
                 title = { Text(text = "CONGRATULATIONS!", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
                 text = {
                     Column {
                         Text(text = "You just earned a free Rainbow Wipe.", color = LightText)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(sdp(0.006f)))
                         Text(text = "Use it when you're stuck to clear the board.", color = LightText.copy(alpha = 0.9f))
                     }
                 },
@@ -491,14 +581,14 @@ fun GameScreen(
         }
 
         // --- First-Time Game Over Reward Dialog (awards 3 rainbows on first-ever game over) ---
-        if (uiState.showFirstGameOverDialog) {
+        if (!LocalInspectionMode.current && uiState.showFirstGameOverDialog) {
             AlertDialog(
                 onDismissRequest = { onDismissFirstGameOver() },
                 title = { Text(text = "WELCOME!", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
                 text = {
                     Column {
                         Text(text = "This is your first game over — congratulations!", color = LightText)
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(sdp(0.006f)))
                         Text(text = "We've awarded you 3 free Rainbow Wipes to help you get back in the game.", color = LightText.copy(alpha = 0.9f))
                     }
                 },
@@ -517,7 +607,7 @@ fun GameScreen(
         }
 
         // --- Last‑chance dialog (offer a rainbow wipe once per game) ---
-        if (uiState.isLastChance) {
+        if (!LocalInspectionMode.current && uiState.isLastChance) {
             Log.d("GameScreen", "uiState.isLastChance == true -> showing LastChanceDialog")
             LastChanceDialog(
                 onUseRainbow = { onLastChanceUsed() },
@@ -526,7 +616,7 @@ fun GameScreen(
         }
 
         // Show Game Over summary dialog when ViewModel marks the game over OR explicitly requests the summary
-        if (uiState.isGameOver || uiState.showGameSummaryDialog) {
+        if (!LocalInspectionMode.current && (uiState.isGameOver || uiState.showGameSummaryDialog)) {
             Log.d("GameScreen", "Showing GameOverSummaryDialog -> isGameOver=${uiState.isGameOver} showGameSummaryDialog=${uiState.showGameSummaryDialog}")
             GameOverSummaryDialog(
                 finalScore = uiState.score,
@@ -550,7 +640,7 @@ fun GameScreen(
         }
 
         // --- Zero Coins Dialog ---
-        if (uiState.showZeroCoinsDialog) {
+        if (!LocalInspectionMode.current && uiState.showZeroCoinsDialog) {
             ZeroCoinsDialog(
                 onDismiss = onDismissZeroCoins,
                 onWatchAd = {
@@ -600,7 +690,7 @@ private fun ColorWheelDialog(
         title = { Text(text = "Color Wheel", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(260.dp), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(sw(0.35f)), contentAlignment = Alignment.Center) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val radius = size.minDimension / 2f
                         val center = center
@@ -623,16 +713,16 @@ private fun ColorWheelDialog(
                     // Pointer at top
                     Box(modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .offset(y = (-12).dp)) {
+                        .offset(y = sdp(-0.012f))) {
                         Icon(
                             imageVector = Icons.Default.ArrowDropUp,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(sdp(0.03f))
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sdp(0.01f)))
                 Text(text = if (spinning) "Spinning..." else "Tap Spin to try your luck!", color = LightText)
             }
         },
@@ -660,5 +750,81 @@ private fun ColorWheelDialog(
             TextButton(onClick = { if (!spinning) onDismiss() }) { Text("Cancel") }
         },
         properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = !spinning, dismissOnBackPress = !spinning)
+    )
+}
+
+@Preview(
+    name = "Galaxy Z Fold (Unfolded)",
+    device = "spec:width=2208dp,height=1760dp,dpi=420",
+    showSystemUi = true,
+    showBackground = true
+)
+@Composable
+fun GameScreenPreview_Fold() {
+    val vm = PreviewGameViewModel()
+    GameScreen(
+        uiState = vm.uiState.collectAsState().value,
+        forcePreviewFold = true,  // ONLY FOR THIS ONE
+        onGridCellClicked = { _, _ -> },
+        onSelectBlock = {},
+        onRotateBlock = {},
+        onSelectRainbow = {},
+        onReset = {},
+        onGoToMenu = {},
+        onLastChanceUsed = {},
+        onLastChanceDeclined = {},
+        onToggleSound = {},
+        onToggleMusic = {},
+        onUseRainbowImmediately = {},
+        onColorWipeSpinResult = {},
+        onDismissTierPromotion = {},
+        onShareTier = {},
+        onDismissRainbowEarned = {},
+        onDismissFirstGameOver = {},
+        onDismissPurchaseSuccess = {},
+        onClearCoinAnimation = {},
+        onDismissShopBubble = {},
+        onWatchAd = {},
+        onGoToShop = {},
+        onDismissZeroCoins = {},
+        onClearAnimationFinished = {}
+    )
+}
+
+@Preview(
+    name = "Tablet – Portrait",
+    device = "spec:width=800dp,height=1280dp,dpi=480",
+    showSystemUi = true,
+    showBackground = true
+)
+@Composable
+fun GameScreenPreview_Tablet() {
+    val vm = PreviewGameViewModel()
+    GameScreen(
+        uiState = vm.uiState.collectAsState().value,
+        forcePreviewFold = false,   // TABLET SHOULD USE REAL CATEGORY DETECTION
+        onGridCellClicked = { _, _ -> },
+        onSelectBlock = {},
+        onRotateBlock = {},
+        onSelectRainbow = {},
+        onReset = {},
+        onGoToMenu = {},
+        onLastChanceUsed = {},
+        onLastChanceDeclined = {},
+        onToggleSound = {},
+        onToggleMusic = {},
+        onUseRainbowImmediately = {},
+        onColorWipeSpinResult = {},
+        onDismissTierPromotion = {},
+        onShareTier = {},
+        onDismissRainbowEarned = {},
+        onDismissFirstGameOver = {},
+        onDismissPurchaseSuccess = {},
+        onClearCoinAnimation = {},
+        onDismissShopBubble = {},
+        onWatchAd = {},
+        onGoToShop = {},
+        onDismissZeroCoins = {},
+        onClearAnimationFinished = {}
     )
 }

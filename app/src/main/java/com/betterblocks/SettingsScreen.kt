@@ -5,7 +5,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.tooling.preview.Preview
+import com.betterblocks.ui.sdp
+import com.betterblocks.ui.ssp
 
 
 
@@ -30,7 +32,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(20.dp),
+                .padding(sdp(0.03f)),
             verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.Start
         ) {
@@ -42,7 +44,7 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.headlineMedium
             )
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(sdp(0.03f)))
 
             // THEME TOGGLE
             Row(
@@ -65,7 +67,7 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             // SOUND TOGGLE
             Row(
@@ -89,7 +91,7 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             // HAPTIC TOGGLE
             Row(
@@ -113,7 +115,7 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(sdp(0.04f)))
 
             Button(
                 onClick = onBack,
@@ -123,4 +125,24 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
+@Composable
+fun SettingsScreenPreview() {
+    val vm = PreviewSettingsViewModel()
+    SettingsScreen(
+        initialSoundEnabled = vm.isSoundEnabled,
+        initialHapticEnabled = vm.isMusicEnabled,
+        initialDarkTheme = true,
+        onToggleSound = {},
+        onToggleHaptic = {},
+        onToggleTheme = {},
+        onBack = {}
+    )
 }

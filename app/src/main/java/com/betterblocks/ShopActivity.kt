@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -89,7 +90,7 @@ class ShopActivity : ComponentActivity() {
                     )
 
                     // IAP Purchase Success Dialog
-                    if (showPurchaseSuccessDialog) {
+                    if (!LocalInspectionMode.current && showPurchaseSuccessDialog) {
                         PurchaseSuccessDialog(
                             coinsAwarded = purchasedCoins,
                             onDismiss = {
@@ -100,7 +101,7 @@ class ShopActivity : ComponentActivity() {
                     }
 
                     // Power-up Purchase Success Dialog
-                    if (showItemSuccessDialog) {
+                    if (!LocalInspectionMode.current && showItemSuccessDialog) {
                         ItemPurchaseSuccessDialog(
                             itemName = purchasedItemName,
                             onDismiss = {
@@ -111,7 +112,7 @@ class ShopActivity : ComponentActivity() {
                     }
 
                     // Not Enough Coins Dialog
-                    if (showNotEnoughCoinsDialog) {
+                    if (!LocalInspectionMode.current && showNotEnoughCoinsDialog) {
                         NotEnoughCoinsDialog(
                             onDismiss = { showNotEnoughCoinsDialog = false },
                             onGoToShop = {
@@ -122,7 +123,7 @@ class ShopActivity : ComponentActivity() {
                     }
 
                     // Trophy Purchase Success Dialog
-                    if (showTrophySuccessDialog && purchasedTrophyTier != null) {
+                    if (!LocalInspectionMode.current && showTrophySuccessDialog && purchasedTrophyTier != null) {
                         TrophyPurchaseSuccessDialog(
                             tier = purchasedTrophyTier!!,
                             onDismiss = {
@@ -895,12 +896,12 @@ fun LargeTrophyCard(
                     imageVector = Icons.Default.EmojiEvents,
                     contentDescription = null,
                     tint = trophyColor,
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier
+                        .size(56.dp)
+                        .padding(end = 12.dp)
                 )
 
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column {
+                Column(verticalArrangement = Arrangement.Center) {
                     Text(
                         text = item.tier.name,
                         color = trophyColor,
@@ -1427,15 +1428,20 @@ fun ShopItemCard(item: ShopItem, onPurchase: () -> Unit) {
 }
 
 // --- PREVIEW (For Android Studio) ---
-@Preview(showBackground = true)
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
 @Composable
 fun ShopScreenPreview() {
+    val vm = PreviewShopViewModel()
     BetterBlocksTheme {
         Surface(color = DarkBackground) {
-            // Empty lambda for preview actions
             ShopScreen(
                 onBack = {},
-                onPurchaseClick = {},
+                onPurchaseClick = { _ -> vm.onPurchase("") },
                 onPowerUpPurchase = { _, _ -> },
                 onTrophyPurchase = { _, _ -> }
             )
@@ -1708,3 +1714,4 @@ fun TrophyPurchaseSuccessDialog(
         }
     }
 }
+

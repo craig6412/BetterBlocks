@@ -28,6 +28,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -45,6 +46,8 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.random.Random
+import androidx.compose.ui.tooling.preview.Preview
+
 
 class HighScoreActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -217,7 +220,7 @@ fun HighscoreScreen(onBack: () -> Unit) {
         }
     }
 
-    if (showNameDialog) {
+    if (!LocalInspectionMode.current && showNameDialog) {
         PlayerNameDialog(
             currentName = playerName.takeIf { it.isNotBlank() },
             onSave = { chosenName ->
@@ -488,6 +491,8 @@ fun PlayerNameDialog(
     var name by rememberSaveable(currentName) { mutableStateOf(currentName ?: "") }
     var errorText by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
+    // Capture inspection mode at composition time so it can be used from coroutines safely
+    val isInPreview = LocalInspectionMode.current
 
     fun attemptSave() {
         val trimmed = name.trim()
@@ -567,7 +572,24 @@ fun PlayerNameDialog(
     )
 
     LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+        if (isInPreview) return@LaunchedEffect
+        // Try to request focus a few times with short delays — AlertDialog's internals may not have
+        // attached the focus target yet when this effect first runs. This avoids the crash seen in logs.
+        repeat(6) { attempt ->
+            try {
+                focusRequester.requestFocus()
+                return@LaunchedEffect
+            } catch (e: IllegalStateException) {
+                // Not ready yet; wait a short time and retry
+                kotlinx.coroutines.delay(50L)
+            }
+        }
+        // Last attempt without catching to surface unexpected issues
+        try {
+            focusRequester.requestFocus()
+        } catch (_: Throwable) {
+            // Swallow to avoid crash — focus is optional for dialog correctness
+        }
     }
 }
 
@@ -601,4 +623,17 @@ fun trophyColorForTier(tier: TrophyTier): Color = when (tier) {
     TrophyTier.PLATINUM -> Color(0xFFE5E4E2)
     TrophyTier.DIAMOND -> Color(0xFF0FF0FC)
     TrophyTier.ELITE -> Color(0xFFFFD700)
+}
+
+
+
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
+@Composable
+fun HighscoreScreenPreview() {
+    HighscoreScreen(onBack = {})
 }

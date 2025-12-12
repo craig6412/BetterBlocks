@@ -28,48 +28,55 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.betterblocks.R
-import com.betterblocks.GameSettings
-import com.betterblocks.GameUiState
-import com.betterblocks.GameViewModel
-import com.betterblocks.BuildConfig
+import com.betterblocks.ui.sdp
+import com.betterblocks.ui.ssp
+import com.betterblocks.ui.sw
+import com.betterblocks.ui.sh
 import android.app.Activity
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.ui.window.Dialog
-import com.betterblocks.ads.AdManager
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.betterblocks.R
+import com.betterblocks.GameUiState
+import com.betterblocks.GameViewModel
+import com.betterblocks.BuildConfig
 import com.betterblocks.DeepBlue
 import com.betterblocks.LightText
 import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
 import com.betterblocks.SpecialPurple
 import com.betterblocks.SuccessGreen
+import com.betterblocks.PreviewGameViewModel
+import com.betterblocks.ads.AdManager
 
 
 // Gradient colors for background
 val BannerBlueTop = Color(0xFF011133)
 val BannerBlueBottom = Color(0xFF021B4F)
 
+// Small typed callback holder to avoid reflection in previews
+data class ViewModelCallbacks(
+    val claimDailyReward: () -> Unit = {},
+    val addCoins: (Int) -> Unit = { _ -> },
+    val dismissZeroCoins: () -> Unit = {},
+    val checkDailyReward: () -> Unit = {}
+)
 
 @Composable
 fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp) // Reduced padding significantly
-            .scale(0.65f), // Scale down to 85% of original size
-        shape = RoundedCornerShape(12.dp), // Slightly smaller corners
+            .padding(horizontal = sw(0.03f), vertical = sh(0.004f))
+            .width(sw(0.9f)),
+        shape = RoundedCornerShape(sdp(0.02f)), // Slightly smaller corners
         colors = CardDefaults.cardColors(
             containerColor = DeepBlue.copy(alpha = 0.9f)
         ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 6.dp
-        ),
-        border = BorderStroke(1.5.dp, Pink_Jackie.copy(alpha = 0.3f)) // Thinner border
+        elevation = CardDefaults.cardElevation(sdp(0.006f)),
+        border = BorderStroke(sdp(0.0015f), Pink_Jackie.copy(alpha = 0.3f)) // Thinner border
     ) {
         Row(
             modifier = Modifier
@@ -83,7 +90,7 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
                         )
                     )
                 )
-                .padding(horizontal = 12.dp, vertical = 8.dp), // Reduced internal padding
+                .padding(horizontal = sw(0.03f), vertical = sh(0.01f)),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -106,9 +113,9 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .background(
                         color = SuccessGreen.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(8.dp) // Smaller radius
+                        shape = RoundedCornerShape(sdp(0.01f)) // Smaller radius
                     )
-                    .padding(horizontal = 10.dp, vertical = 6.dp), // Reduced padding
+                    .padding(horizontal = sdp(0.02f), vertical = sdp(0.01f)), // Reduced padding
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -116,13 +123,13 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
                     painter = painterResource(id = R.drawable.ic_palette_colorwipe),
                     contentDescription = "Color Wipe",
                     tint = Color.Unspecified,
-                    modifier = Modifier.size(22.dp) // Slightly smaller icon
+                    modifier = Modifier.size(sdp(0.03f)) // Slightly smaller icon
                 )
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(sdp(0.005f)))
                 Text(
                     text = uiState.colorWipeCount.toString(),
                     color = Color.White,
-                    fontSize = 17.sp, // Reduced font size
+                    fontSize = ssp(0.02f), // Reduced font size
                     fontWeight = FontWeight.Bold,
                     fontFamily = Oswald
                 )
@@ -137,21 +144,21 @@ fun StatItem(emoji: String, value: String, backgroundColor: Color) {
         modifier = Modifier
             .background(
                 color = backgroundColor,
-                shape = RoundedCornerShape(8.dp) // Smaller radius
+                shape = RoundedCornerShape(sdp(0.01f)) // Smaller radius
             )
-            .padding(horizontal = 10.dp, vertical = 6.dp), // Reduced padding
+            .padding(horizontal = sdp(0.02f), vertical = sdp(0.01f)), // Reduced padding
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         Text(
             text = emoji,
-            fontSize = 18.sp // Reduced from 24sp
+            fontSize = ssp(0.018f) // Reduced from 24sp
         )
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(sdp(0.005f)))
         Text(
             text = value,
             color = Color.White,
-            fontSize = 17.sp, // Reduced from 20sp
+            fontSize = ssp(0.02f), // Reduced from 20sp
             fontWeight = FontWeight.Bold,
             fontFamily = Oswald
         )
@@ -170,16 +177,81 @@ fun MainMenuScreen(
     onDeveloperClicked: () -> Unit,
     banner: @Composable (() -> Unit)? = null
 ) {
-    val context = LocalContext.current
+    // Production entrypoint: read state from ViewModel and delegate to pure UI function
     val uiState = viewModel.uiState.collectAsState().value
+    MainMenuScreenContent(
+        uiState = uiState,
+        onPlayClicked = onPlayClicked,
+        onShopClicked = onShopClicked,
+        onHighScoresClicked = onHighScoresClicked,
+        onStatsClicked = onStatsClicked,
+        onSettingsClicked = onSettingsClicked,
+        onDeveloperClicked = onDeveloperClicked,
+        banner = banner,
+        viewModelBackedCallbacks = ViewModelCallbacks(
+            claimDailyReward = { viewModel.claimDailyReward() },
+            addCoins = { amt -> viewModel.addCoins(amt) },
+            dismissZeroCoins = { viewModel.dismissZeroCoinsDialog() },
+            checkDailyReward = { viewModel.checkDailyReward() }
+        )
+    )
+}
+
+// Overload used by previews with PreviewGameViewModel
+@Composable
+fun MainMenuScreen(
+    viewModel: PreviewGameViewModel,
+    onPlayClicked: () -> Unit,
+    onShopClicked: () -> Unit,
+    onHighScoresClicked: () -> Unit,
+    onStatsClicked: () -> Unit,
+    onSettingsClicked: () -> Unit,
+    onDeveloperClicked: () -> Unit,
+    banner: @Composable (() -> Unit)? = null
+) {
+    val uiState = viewModel.uiState.collectAsState().value
+    MainMenuScreenContent(
+        uiState = uiState,
+        onPlayClicked = onPlayClicked,
+        onShopClicked = onShopClicked,
+        onHighScoresClicked = onHighScoresClicked,
+        onStatsClicked = onStatsClicked,
+        onSettingsClicked = onSettingsClicked,
+        onDeveloperClicked = onDeveloperClicked,
+        banner = banner,
+        viewModelBackedCallbacks = ViewModelCallbacks(
+            claimDailyReward = { viewModel.claimDailyReward() },
+            addCoins = { amt -> viewModel.addCoins(amt) },
+            dismissZeroCoins = { viewModel.dismissZeroCoinsDialog() },
+            checkDailyReward = { viewModel.checkDailyReward() }
+        )
+    )
+}
+
+// Pure UI function that does not touch Android APIs directly — accepts UI state and callbacks.
+@Composable
+private fun MainMenuScreenContent(
+    uiState: GameUiState,
+    onPlayClicked: () -> Unit,
+    onShopClicked: () -> Unit,
+    onHighScoresClicked: () -> Unit,
+    onStatsClicked: () -> Unit,
+    onSettingsClicked: () -> Unit,
+    onDeveloperClicked: () -> Unit,
+    banner: @Composable (() -> Unit)? = null,
+    viewModelBackedCallbacks: ViewModelCallbacks
+) {
+    val context = LocalContext.current
 
     var showPopup by remember {
         mutableStateOf(!hasShownPowerUpPopup(context))
     }
 
-    // Check daily reward on first composition
+    // Check daily reward on first composition — call through the provided callbacks if available
     LaunchedEffect(Unit) {
-        viewModel.checkDailyReward()
+        try {
+            viewModelBackedCallbacks.checkDailyReward()
+        } catch (_: Throwable) {}
     }
 
     Surface(
@@ -201,11 +273,11 @@ fun MainMenuScreen(
                         )
                     )
                     .padding(WindowInsets.systemBars.asPaddingValues())
-                    .padding(horizontal = 24.dp),
+                    .padding(horizontal = sdp(0.03f)),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // PowerupHeader at top with proper spacing
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(sh(0.005f)))
 
                 PowerupHeader(
                     uiState = uiState,
@@ -213,11 +285,11 @@ fun MainMenuScreen(
                         .padding(horizontal = 0.dp)
                         .offset(
                             x = 0.dp,
-                            y = (-10).dp   // move header up by 10.dp
+                            y = sh(-0.01f)   // move header up by ~1% of screen height
                         )
                 )
 
-                Spacer(modifier = Modifier.height(12.dp)) // Space between header and banner
+                Spacer(modifier = Modifier.height(sh(0.015f))) // Space between header and banner
 
                 // Flexible space before banner
                 Spacer(modifier = Modifier.weight(0.6f))
@@ -227,24 +299,20 @@ fun MainMenuScreen(
                         .fillMaxWidth()
                         .zIndex(50f)
                 ) {
+                    // Make the banner much taller while preserving width so its visual height is ~3x
                     Image(
                         painter = painterResource(id = R.drawable.banner),
                         contentDescription = "Better Blocks Game Title",
                         modifier = Modifier
-                            .fillMaxWidth(0.9f)
-                            .aspectRatio(3.2f)
-                            .scale(GameSettings.bannerScale.value)
-                            .offset
-                                (x = 5.dp,
-
-                                y = (-10).dp)
-
+                            .fillMaxWidth(0.95f)
+                            .aspectRatio(1.5f) // previously 6f (very wide/short); 2f increases banner height ~3x
+                            .offset(x = sw(0.01f), y = sh(-0.01f))
                             .zIndex(50f),
                         contentScale = ContentScale.Fit
                     )
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(sh(0.03f)))
 
                 MenuButton(
                     text = "PLAY",
@@ -252,50 +320,50 @@ fun MainMenuScreen(
                     onClick = onPlayClicked,
                     containerColor = Color(0xFF673AB7),
                     contentColor = Color.White,
-                    height = 80.dp
+                    height = sh(0.08f)
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(sh(0.02f)))
 
                 MenuButton(
                     text = "SHOP",
                     icon = Icons.Default.ShoppingCart,
                     onClick = onShopClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFF673AB7))
+                    border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(sh(0.018f)))
 
                 MenuButton(
                     text = "HIGH SCORES",
                     icon = Icons.Default.EmojiEvents,
                     onClick = onHighScoresClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFF673AB7))
+                    border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(sh(0.018f)))
 
                 MenuButton(
                     text = "STATS",
                     icon = Icons.Default.Assessment,
                     onClick = onStatsClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFF673AB7))
+                    border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(sh(0.018f)))
 
                 MenuButton(
                     text = "SETTINGS",
                     icon = Icons.Default.Settings,
                     onClick = onSettingsClicked,
                     containerColor = DeepBlue,
-                    border = BorderStroke(3.dp, Color(0xFF673AB7))
+                    border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(sh(0.018f)))
 
                 // Only show developer entry in debug builds
 
@@ -305,30 +373,30 @@ fun MainMenuScreen(
                         icon = Icons.Default.Build,
                         onClick = onDeveloperClicked,
                         containerColor = Color(0xFF607D8B),
-                        height = 50.dp
+                        height = sh(0.05f)
                     )
                 }
 
                 Spacer(modifier = Modifier.weight(0.8f))
 
                 if (!LocalInspectionMode.current && BuildConfig.DEBUG) {
-                    Text("Test Ad", color = Color.Gray, fontSize = 10.sp)
+                    Text("Test Ad", color = Color.Gray, fontSize = ssp(0.012f))
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sh(0.01f)))
 
-               // banner?.invoke()
+                // banner?.invoke()
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sh(0.01f)))
 
                 Text(
                     text = "v1.0",
                     color = Color.Gray,
-                    fontSize = 12.sp,
+                    fontSize = ssp(0.012f),
                     fontFamily = Oswald
                 )
 
-                if (showPopup) {
+                if (!LocalInspectionMode.current && showPopup) {
                     PowerUpsPopup(
                         onDismiss = {
                             setPowerUpPopupShown(context)
@@ -338,26 +406,32 @@ fun MainMenuScreen(
                 }
 
                 // Daily Reward Dialog
-                if (uiState.showDailyRewardDialog) {
+                if (!LocalInspectionMode.current && uiState.showDailyRewardDialog) {
                     DailyRewardDialog(
                         day = uiState.dailyRewardDay,
                         streak = uiState.dailyRewardStreak,
                         coins = uiState.dailyRewardCoins,
                         hasRainbowWipe = uiState.dailyRewardRainbow,
-                        onClaimReward = { viewModel.claimDailyReward() }
+                        onClaimReward = { try { viewModelBackedCallbacks.claimDailyReward() } catch (_: Throwable) {} }
                     )
                 }
             }
+
+
+            val config = LocalConfiguration.current
+            val screenWidth = config.screenWidthDp.dp
+            val screenHeight = config.screenHeightDp.dp
 
             // Free Coins floating overlay (absolute top-right over everything)
             Image(
                 painter = painterResource(id = R.drawable.free_coins),
                 contentDescription = "Free Coins",
                 modifier = Modifier
-                    .size(75.dp)
+                    .size(sw(0.15f))
                     .offset(
-                        x = (300).dp,  // tweak X
-                        y = (180).dp    // tweak Y
+                        // place near 95% of screen width; subtract half the icon width so it's visually near the edge
+                        x = screenWidth * 0.90f - sw(0.06f),
+                        y = screenHeight * 0.22f   // 22% from top
                     )
                     .zIndex(1000f)
                     .clickable(
@@ -365,10 +439,14 @@ fun MainMenuScreen(
                         interactionSource = remember { MutableInteractionSource() }
                     ) {
                         val activity = context as? Activity
+                        try {
+                            viewModelBackedCallbacks.addCoins(50)
+                        } catch (_: Throwable) {}
+
                         if (AdManager.isRewardedLoaded.value && activity != null) {
                             AdManager.showDoubleRewarded(
                                 activity,
-                                onCompletedBoth = { viewModel.addCoins(50) },
+                                onCompletedBoth = { try { viewModelBackedCallbacks.addCoins(50) } catch (_: Throwable) {} },
                                 onFailed = { AdManager.preloadDoubleRewarded(context) }
                             )
                         } else {
@@ -400,14 +478,15 @@ fun MenuButton(
         modifier = Modifier
             .fillMaxWidth()
             .height(height),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(sdp(0.02f)),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentColor
         ),
+
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 8.dp,
-            pressedElevation = 2.dp
+            defaultElevation = sdp(0.008f),
+            pressedElevation = sdp(0.0025f)
         ),
         border = border // Apply the border if provided
     ) {
@@ -418,26 +497,29 @@ fun MenuButton(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(sdp(0.035f))
             )
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(sdp(0.015f)))
             Text(
                 text = text,
-                fontSize = 20.sp,
+                fontSize = ssp(0.025f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                letterSpacing = 1.sp
+                letterSpacing = ssp(0.0015f)
             )
         }
     }
 }
 
-
-@Preview(showBackground = true)
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
 @Composable
 fun MainMenuScreenPreview() {
-    val vm: GameViewModel = viewModel()
-
+    val vm = PreviewGameViewModel()
     MainMenuScreen(
         viewModel = vm,
         onPlayClicked = {},

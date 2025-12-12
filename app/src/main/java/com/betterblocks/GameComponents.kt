@@ -46,6 +46,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import com.betterblocks.ui.sw
+import com.betterblocks.ui.sh
+import com.betterblocks.ui.sdp
+import com.betterblocks.ui.ssp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -78,7 +82,7 @@ val Oswald = FontFamily(Font(R.font.oswald_regular))
 
 // --- VISUAL ADJUSTMENT KNOBS ---
 var DEFAULT_CELL_SIZE: Dp = 38.dp
-var SCREEN_HORIZONTAL_PADDING: Dp = 16.dp
+var SCREEN_HORIZONTAL_PADDING: Dp = 16.dp // kept as fallback; composables will use sdp/sw
 
 
 // --- DETAILED TUNING KNOBS ---
@@ -104,24 +108,26 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
+            .clip(RoundedCornerShape(bottomStart = sdp(0.02f), bottomEnd = sdp(0.02f)))
             .background(DeepBlue)
             .padding(
                 top = safeHeaderPaddingDp,
                 bottom = safeHeaderPaddingDp,
-                start = 16.dp,
-                end = 16.dp
+                start = sdp(0.02f),
+                end = sdp(0.02f)
             ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top Row: Menu Button | Spacer | Coins
-        Box(modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 2.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = sdp(0.003f))
+        ) {
             IconButton(
                 onClick = onMenuClicked,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(sdp(0.045f))
                     .align(Alignment.CenterStart)
             ) {
                 Icon(
@@ -134,24 +140,24 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
             Surface(
                 color = Pink_Jackie.copy(alpha = 0.1f),
                 shape = RoundedCornerShape(50),
-                border = BorderStroke(1.dp, Pink_Jackie),
+                border = BorderStroke(sdp(0.0015f), Pink_Jackie),
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                    modifier = Modifier.padding(horizontal = sdp(0.02f), vertical = sdp(0.003f))
                 ) {
                     Icon(
                         imageVector = Icons.Filled.MonetizationOn,
                         contentDescription = "Coins",
                         tint = Pink_Jackie,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(sw(0.04f))
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(sdp(0.005f)))
                     Text(
                         text = uiState.coins.toString(),
                         color = LightText,
-                        fontSize = 14.sp,
+                        fontSize = ssp(0.035f),
                         fontWeight = FontWeight.Bold,
                         fontFamily = Oswald
                     )
@@ -166,13 +172,13 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 2.dp, bottom = 2.dp, start = 4.dp, end = 4.dp),
+                .padding(top = sdp(0.003f), bottom = sdp(0.003f), start = sdp(0.005f), end = sdp(0.005f)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             ScoreDisplay(score = uiState.score, label = "CURRENT", modifier = Modifier.weight(1f))
             ScoreDisplay(score = uiState.highScore, label = "HIGH SCORE", showTrophy = true, trophyTint = Pink_Jackie, modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.width(36.dp)) // Balancing spacer
+            Spacer(modifier = Modifier.width(sw(0.09f))) // Balancing spacer
         }
     }
 }
@@ -188,7 +194,7 @@ fun Modifier.safeClickable(onClick: () -> Unit): Modifier =
 @Composable
 fun ScoreDisplay(score: Int, label: String, modifier: Modifier = Modifier, showTrophy: Boolean = false, trophyTint: Color = LightText) {
     Column(
-        modifier = modifier.padding(horizontal = 4.dp),
+        modifier = modifier.padding(horizontal = sdp(0.005f)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -198,13 +204,14 @@ fun ScoreDisplay(score: Int, label: String, modifier: Modifier = Modifier, showT
                     contentDescription = "Trophy",
                     tint = trophyTint,
                     modifier = Modifier
-                        .size(16.dp)
-                        .padding(end = 2.dp)
+                        .size(sdp(0.03f)) // slightly larger trophy icon to match larger score text
+                        .padding(end = sdp(0.0035f))
                 )
             }
-            Text(text = score.toString(), color = LightText, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, fontFamily = Oswald)
+            // Make the main score text much larger for readability
+            Text(text = score.toString(), color = LightText, fontSize = ssp(0.06f), fontWeight = FontWeight.ExtraBold, fontFamily = Oswald)
         }
-        Text(text = label, color = LightText.copy(alpha = 0.7f), fontSize = 10.sp, fontFamily = Oswald)
+        Text(text = label, color = LightText.copy(alpha = 0.7f), fontSize = ssp(0.02f), fontFamily = Oswald)
     }
 }
 
@@ -221,25 +228,25 @@ fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
         Text(
             text = "SPECIAL CHARGE",
             color = LightText.copy(alpha = 0.9f),
-            fontSize = 14.sp,
+            fontSize = ssp(0.022f),
             fontFamily = Oswald,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = 2.dp)
+            modifier = Modifier.padding(bottom = sdp(0.003f))
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.8f)
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .height(sdp(0.01f))
+                .clip(RoundedCornerShape(sdp(0.005f)))
                 .background(Color(0xFF2A0E45)) // Charge Bar (Empty Track): Dark Track
-                .border(1.dp, Pink_Jackie.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                .border(sdp(0.0015f), Pink_Jackie.copy(alpha = 0.7f), RoundedCornerShape(sdp(0.005f)))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(animatedProgress)
                     .background(Color(0xFFD500F9)) // Special Charge Bar (Active): Neon Cyber-Violet
-                    .clip(RoundedCornerShape(4.dp))
+                    .clip(RoundedCornerShape(sdp(0.005f)))
             )
         }
     }
@@ -270,11 +277,11 @@ fun BlockPreviewCard(
     val backgroundColor = if (isSelected) Pink_Jackie.copy(alpha = 0.08f) else Color(0x264A148C)
 
     Card(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(sdp(0.01f)),
         colors = CardDefaults.cardColors(containerColor = DarkBackground),
-        elevation = CardDefaults.cardElevation(4.dp),
+        elevation = CardDefaults.cardElevation(sdp(0.006f)),
         modifier = modifier
-            .size(80.dp)
+            .size(sw(0.22f))
             .onGloballyPositioned { coords ->
                 // store window coordinates to match grid/window coordinates
                 cardWindowPos = coords.positionInWindow()
@@ -307,26 +314,26 @@ fun BlockPreviewCard(
                 )
             }
     ) {
-        val shape = RoundedCornerShape(8.dp)
+        val shape = RoundedCornerShape(sdp(0.01f))
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(backgroundColor, shape)
-                .border( if (isSelected) 3.dp else 2.dp, effectiveBorderColor, shape)
-                .padding(6.dp),
-            contentAlignment = Alignment.Center
-        ) {
+                .border(if (isSelected) sdp(0.004f) else sdp(0.003f), effectiveBorderColor, shape)
+                .padding(sdp(0.008f)),
+             contentAlignment = Alignment.Center
+         ) {
             BlockGrid(
                 block = block,
-                cellSize = 12.dp,
+                cellSize = sdp(0.03f),
                 modifier = Modifier.graphicsLayer(
                     scaleX = 0.9f,
                     scaleY = 0.9f
                 )
-            )
-        }
-    }
+             )
+         }
+     }
 }
 
 // kotlin
@@ -348,32 +355,31 @@ fun BlockGrid(
                     Box(
                         modifier = Modifier
                             .size(cellSize)
-                            .padding(PREVIEW_CELL_PADDING)
-                            .clip(RoundedCornerShape(PREVIEW_CORNER_RADIUS))
-                    ) {
-                        if (isPresent) {
-                            Image(
-                                painter = painterResource(id = block.colorResId),
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .scale(BLOCK_TEXTURE_SCALE)
-                            )
-                        } else {
-                            Spacer(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Color.Transparent)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
+                            .padding(sdp(0.0015f))
+                            .clip(RoundedCornerShape(sdp(0.005f)))
+                     ) {
+                         if (isPresent) {
+                             Image(
+                                 painter = painterResource(id = block.colorResId),
+                                 contentDescription = null,
+                                 contentScale = ContentScale.Crop,
+                                 modifier = Modifier
+                                     .fillMaxSize()
+                                     .scale(BLOCK_TEXTURE_SCALE)
+                             )
+                         } else {
+                             Spacer(
+                                 modifier = Modifier
+                                     .fillMaxSize()
+                                     .background(Color.Transparent)
+                             )
+                         }
+                     }
+                 }
+             }
+         }
+     }
+ }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BottomBar(
@@ -390,8 +396,8 @@ fun BottomBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .height(85.dp)
+            .clip(RoundedCornerShape(topStart = sdp(0.035f), topEnd = sdp(0.035f)))
+            .height(sh(0.09f)) // increased bottom bar height
     ) {
 
         // -------------------------------------------------
@@ -400,7 +406,7 @@ fun BottomBar(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .blur(20.dp)  // Blur ONLY this layer
+                .blur(sdp(0.03f))  // Blur ONLY this layer
                 .background(DeepBlue.copy(alpha = 0.55f))
         )
 
@@ -410,10 +416,10 @@ fun BottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(85.dp),  // keep the same height
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+                .height(sh(0.09f)),
+             horizontalArrangement = Arrangement.SpaceEvenly,
+             verticalAlignment = Alignment.CenterVertically
+         ) {
 
             // 1. Rotate Button
             RotationButtonWithCost(
@@ -461,25 +467,25 @@ fun ColorWipeButton(
             Text(
                 text = "x$count",
                 color = DarkBackground,
-                fontSize = 8.sp,
+                fontSize = ssp(0.02f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                modifier = Modifier.padding(horizontal = sdp(0.015f), vertical = sdp(0.003f))
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(sdp(0.004f)))
 
         Box(
             modifier = Modifier
                 .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
                 .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(sdp(0.02f)))
                 .background(Color(0x4D4A148C)) // Piece Container / Holder: Purple Glass (30% opacity)
                 .border(
-                    width = 3.dp,
+                    width = sdp(0.003f),
                     color = Color(0x407F5AF0),   // Grid Lines / accent: Faint Lavender (25% opacity)
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(sdp(0.02f))
                 )
                 .safeClickable { onClick() },
             contentAlignment = Alignment.Center
@@ -516,25 +522,25 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
             Text(
                 text = "x${uiState.freeRotations}",
                 color = DarkBackground,
-                fontSize = 10.sp,
+                fontSize = ssp(0.025f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                modifier = Modifier.padding(horizontal = sdp(0.015f), vertical = sdp(0.003f))
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(sdp(0.004f)))
 
         Box(
             modifier = Modifier
                 .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
                 .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(sdp(0.02f)))
                 .background(Color(0xFF311B92)) // Power-up Buttons: Deep Indigo
                 .border(
-                    width = 3.dp,
+                    width = sdp(0.003f),
                     color = Color(0x407F5AF0),   // Faint Lavender edge
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(sdp(0.02f))
                 )
                 .safeClickable { if (isRotationEnabled) onRotateBlock() },
             contentAlignment = Alignment.Center
@@ -578,25 +584,25 @@ fun SpecialBlockButton(
             Text(
                 text = "x$count",
                 color = DarkBackground,
-                fontSize = 8.sp,
+                fontSize = ssp(0.02f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                modifier = Modifier.padding(horizontal = sdp(0.015f), vertical = sdp(0.003f))
             )
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(sdp(0.004f)))
 
         Box(
             modifier = Modifier
                 .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
                 .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(sdp(0.02f)))
                 .background(if (isSelected) Pink_Jackie else SpecialPurple)
                 .border(
                     3.dp,
                     if (isSelected) Color.White else Color.White.copy(0.3f),
-                    RoundedCornerShape(16.dp)
+                    RoundedCornerShape(sdp(0.02f))
                 )
                 .pointerInput(Unit) {
                     detectSimpleDragOrTap(
@@ -622,9 +628,19 @@ fun SpecialBlockButton(
         ) {
             Box(
                 modifier = Modifier.scale(2.0f * GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
-            ) {
-                BlockShapeDisplay(RAINBOW_BLOCK, 18.dp)
-            }
+             ) {
+                // Use a single centered rainbow image for the special button (no tiling of 9 cells)
+                Box(contentAlignment = Alignment.Center) {
+                    Image(
+                        painter = painterResource(id = R.drawable.rainbow),
+                        contentDescription = "Rainbow Wipe",
+                        modifier = Modifier
+                            .size(sdp(0.04f))
+                            .aspectRatio(1f),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+             }
         }
     }
 }
@@ -639,8 +655,8 @@ fun BlockShapeDisplay(block: Block, cellSize: Dp) {
                     Box(
                         modifier = Modifier
                             .size(cellSize)
-                            .padding(0.5.dp)
-                            .clip(RoundedCornerShape(2.dp))
+                            .padding(sdp(0.0015f))
+                            .clip(RoundedCornerShape(sdp(0.005f)))
                     ) {
                         if (isPresent) {
                             Image(
@@ -682,18 +698,18 @@ fun GameMenuDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .padding(24.dp)
+                    .padding(sdp(0.03f))
                     .width(IntrinsicSize.Max),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     "GAME MENU",
                     color = LightText,
-                    fontSize = 28.sp,
+                    fontSize = ssp(0.035f),
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = Oswald
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(sdp(0.03f)))
 
                 MenuToggleRow(
                     label = "SOUND EFFECTS",
@@ -706,21 +722,21 @@ fun GameMenuDialog(
                     onClick = onToggleMusic
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(sdp(0.03f)))
 
                 Button(
                     onClick = onRestart,
                     colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Filled.Refresh, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("RESTART GAME", fontWeight = FontWeight.Bold, fontFamily = Oswald)
+                    Text("RESTART GAME", fontWeight = FontWeight.Bold, fontFamily = Oswald, fontSize = ssp(0.022f))
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(sdp(0.012f)))
 
                 OutlinedButton(
                     onClick = onGoToMenu,
@@ -728,15 +744,15 @@ fun GameMenuDialog(
                     border = BorderStroke(1.dp, LightText.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Filled.Home, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("MAIN MENU", fontWeight = FontWeight.Bold, fontFamily = Oswald)
+                    Text("MAIN MENU", fontWeight = FontWeight.Bold, fontFamily = Oswald, fontSize = ssp(0.022f))
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(sdp(0.012f)))
 
                 OutlinedButton(
                     onClick = onGoToMenu,
@@ -744,10 +760,10 @@ fun GameMenuDialog(
                     border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("QUIT GAME", fontWeight = FontWeight.Bold, fontFamily = Oswald)
+                    Text("QUIT GAME", fontWeight = FontWeight.Bold, fontFamily = Oswald, fontSize = ssp(0.022f))
                 }
             }
         }
@@ -760,16 +776,16 @@ fun MenuToggleRow(label: String, checked: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(50.dp)
+            .height(sh(0.05f))
             .safeClickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+            .padding(vertical = sdp(0.004f)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = label,
             color = LightText,
-            fontSize = 16.sp,
+            fontSize = ssp(0.02f),
             fontFamily = Oswald,
             fontWeight = FontWeight.Medium
         )
@@ -802,32 +818,32 @@ fun LastChanceDialog(
             border = BorderStroke(2.dp, Color.White.copy(alpha = 0.1f))
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(sdp(0.03f)),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     "LAST CHANCE!",
                     color = Pink_Jackie,
-                    fontSize = 32.sp,
+                    fontSize = ssp(0.05f),
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = Oswald
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(sdp(0.016f)))
                 Text(
                     "No more moves left. Use your Rainbow Wipe to clear the board and keep playing?",
                     color = LightText.copy(alpha = 0.8f),
                     textAlign = TextAlign.Center,
-                    fontSize = 18.sp,
+                    fontSize = ssp(0.028f),
                     fontFamily = Oswald
                 )
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(sdp(0.03f)))
 
                 Button(
                     onClick = onUseRainbow,
                     colors = ButtonDefaults.buttonColors(containerColor = SpecialPurple),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
@@ -836,7 +852,7 @@ fun LastChanceDialog(
                         fontFamily = Oswald
                     )
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(sdp(0.012f)))
 
                 OutlinedButton(
                     onClick = onGameOver,
@@ -844,7 +860,7 @@ fun LastChanceDialog(
                     border = BorderStroke(1.dp, LightText.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Text("END GAME", fontWeight = FontWeight.Bold, fontFamily = Oswald)
@@ -872,73 +888,73 @@ fun GameOverDialog(
             border = BorderStroke(2.dp, Color.White.copy(alpha = 0.1f))
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(sdp(0.03f)),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     "GAME OVER",
                     color = LightText,
-                    fontSize = 32.sp,
+                    fontSize = ssp(0.05f),
                     fontWeight = FontWeight.ExtraBold,
                     fontFamily = Oswald
                 )
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(sdp(0.03f)))
                 Text(
                     "Score",
                     color = LightText.copy(alpha = 0.7f),
-                    fontSize = 14.sp,
+                    fontSize = ssp(0.018f),
                     fontFamily = Oswald
                 )
                 Text(
                     text = score.toString(),
                     color = LightText,
-                    fontSize = 48.sp,
+                    fontSize = ssp(0.07f),
                     fontWeight = FontWeight.Bold,
                     fontFamily = Oswald
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sdp(0.008f)))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Filled.EmojiEvents,
                         contentDescription = "High Score",
                         tint = Pink_Jackie,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(sdp(0.02f))
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(sdp(0.005f)))
                     Text(
                         text = "Best: $highScore",
                         color = Pink_Jackie,
-                        fontSize = 16.sp,
+                        fontSize = ssp(0.025f),
                         fontWeight = FontWeight.Bold,
                         fontFamily = Oswald
                     )
                 }
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(sdp(0.03f)))
                 Button(
                     onClick = onRestart,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Filled.Refresh, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("PLAY AGAIN", fontWeight = FontWeight.Bold, fontFamily = Oswald)
+                    Text("PLAY AGAIN", fontWeight = FontWeight.Bold, fontFamily = Oswald, fontSize = ssp(0.022f))
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(sdp(0.012f)))
                 OutlinedButton(
                     onClick = onMenu,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = LightText),
                     border = BorderStroke(1.dp, LightText.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(sh(0.05f)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Icon(Icons.Filled.Home, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("MAIN MENU", fontWeight = FontWeight.Bold, fontFamily = Oswald)
+                    Text("MAIN MENU", fontWeight = FontWeight.Bold, fontFamily = Oswald, fontSize = ssp(0.022f))
                 }
             }
         }

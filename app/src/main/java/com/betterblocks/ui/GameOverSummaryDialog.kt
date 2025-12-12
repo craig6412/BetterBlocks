@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.window.Dialog
 import com.betterblocks.DarkBackground
 import com.betterblocks.DeepBlue
@@ -428,3 +429,23 @@ fun shareGameResults(context: Context, score: Int, tier: TrophyTier) {
     context.startActivity(Intent.createChooser(shareIntent, "Share your score"))
 }
 
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
+@Composable
+fun GameOverSummaryDialogPreview() {
+    GameOverSummaryDialog(
+        finalScore = 1234,
+        highScore = 2000,
+        totalLinesCleared = 25,
+        coinsEarned = 150,
+        trophyTier = TrophyTier.GOLD,
+        isNewHighScore = true,
+        onPlayAgain = {},
+        onMainMenu = {},
+        onShare = {}
+    )
+}

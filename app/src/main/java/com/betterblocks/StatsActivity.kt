@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.getPlayerTier
 import com.betterblocks.ui.*
@@ -617,5 +618,20 @@ private fun getPlayerDisplayName(prefs: android.content.SharedPreferences): Stri
         is Long -> raw.toString()
         is Int -> raw.toString()
         else -> prefs.getString(KEY_FIREBASE_USER_ID, null) ?: "Player"
+    }
+}
+
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
+@Composable
+fun StatsScreenPreview() {
+    BetterBlocksTheme {
+        Surface(color = DarkBackground) {
+            StatsScreen(onBack = {})
+        }
     }
 }

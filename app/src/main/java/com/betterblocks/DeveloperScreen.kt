@@ -18,13 +18,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.betterblocks.DarkBackground
 import com.betterblocks.DeepBlue
 import com.betterblocks.GameSettings
 import com.betterblocks.LightText
 import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
+import androidx.compose.ui.tooling.preview.Preview
+import com.betterblocks.ui.sdp
+import com.betterblocks.ui.ssp
+import com.betterblocks.ui.sw
 
 @Composable
 fun DeveloperScreen(onBackClicked: () -> Unit) {
@@ -43,13 +46,13 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(sdp(0.03f))
                 .verticalScroll(scrollState) // Make scrollable
         ) {
             // Header
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 24.dp)
+                modifier = Modifier.padding(bottom = sdp(0.03f))
             ) {
                 IconButton(onClick = onBackClicked) {
                     Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = LightText)
@@ -57,10 +60,10 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 Text(
                     text = "Developer Tools",
                     color = LightText,
-                    fontSize = 24.sp,
+                    fontSize = ssp(0.03f),
                     fontWeight = FontWeight.Bold,
                     fontFamily = Oswald,
-                    modifier = Modifier.padding(start = 8.dp)
+                    modifier = Modifier.padding(start = sdp(0.015f))
                 )
             }
 
@@ -84,7 +87,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             // --- 3. Grid Position X (Left/Right) ---
             DevSettingCard(title = "Grid X Offset: ${currentGridX.toInt()} dp") {
@@ -96,7 +99,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             // --- 4. Grid Position Y (Up/Down) ---
             DevSettingCard(title = "Grid Y Offset: ${currentGridY.toInt()} dp") {
@@ -108,7 +111,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             // --- 5. Header Vertical Padding ---
             DevSettingCard(title = "headerVerticalPadding: ${GameSettings.headerVerticalPadding.value.toInt()} dp") {
@@ -120,7 +123,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "availableBlocksRowHeight: ${GameSettings.availableBlocksRowHeight.value.toInt()} dp") {
                 Slider(
@@ -130,7 +133,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "bottomBarVerticalPadding: ${GameSettings.bottomBarVerticalPadding.value.toInt()} dp") {
                 Slider(
@@ -140,7 +143,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "Icon Spacing: ${GameSettings.bottomBarIconSpacing.value.value.toInt()} dp") {
                 Slider(
@@ -150,7 +153,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
 // --- BUTTON BORDER WIDTH ---
             DevSettingCard(title = "Button Border: ${GameSettings.bottomBarButtonBorderWidth.value.value.toInt()} dp") {
@@ -161,7 +164,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
 // --- BADGE SCALE ---
             DevSettingCard(title = "Badge Scale: ${"%.2f".format(GameSettings.bottomBarBadgeScale.value)}") {
@@ -175,16 +178,16 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
 
 
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(sdp(0.03f)))
 
             // === DRAG & DROP OFFSET CONTROLS ===
             Text(
                 text = "🎯 DRAG & DROP ALIGNMENT",
                 color = Pink_Jackie,
-                fontSize = 18.sp,
+                fontSize = ssp(0.02f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = sdp(0.008f))
             )
 
             DevSettingCard(title = "Visual Drag Offset Y: ${GameSettings.visualDragOffsetY.floatValue.toInt()} dp (How far ABOVE finger)") {
@@ -195,7 +198,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "Visual Drag Offset X: ${GameSettings.visualDragOffsetX.floatValue.toInt()} dp (How far RIGHT of finger)") {
                 Slider(
@@ -205,7 +208,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "Matching Drag Offset Y: ${GameSettings.matchingDragOffsetY.floatValue.toInt()} dp (Ghost Y alignment)") {
                 Slider(
@@ -215,7 +218,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "Matching Drag Offset X: ${GameSettings.matchingDragOffsetX.floatValue.toInt()} dp (Ghost X alignment)") {
                 Slider(
@@ -226,24 +229,24 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(sdp(0.03f)))
 
             // === BLOCK PLACEMENT FINE-TUNING ===
             Text(
                 text = "🎯 PLACEMENT CORRECTION (Ghost → Drop Fix)",
                 color = Color(0xFFFF5722), // Orange/Red for emphasis
-                fontSize = 18.sp,
+                fontSize = ssp(0.02f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = sdp(0.008f))
             )
 
             Text(
                 text = "Use these to fix misalignment when ghost is green but block won't place",
                 color = LightText.copy(alpha = 0.7f),
-                fontSize = 12.sp,
+                fontSize = ssp(0.012f),
                 fontFamily = Oswald,
-                modifier = Modifier.padding(bottom = 8.dp)
+                modifier = Modifier.padding(bottom = sdp(0.008f))
             )
 
             DevSettingCard(title = "🔧 Placement Correction X: ${GameSettings.blockPlacementCorrectionX.floatValue.toInt()} dp") {
@@ -254,7 +257,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "🔧 Placement Correction Y: ${GameSettings.blockPlacementCorrectionY.floatValue.toInt()} dp") {
                 Slider(
@@ -265,16 +268,16 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(sdp(0.03f)))
 
             // === INVENTORY TESTING CONTROLS ===
             Text(
                 text = "🎁 INVENTORY TESTING",
                 color = Pink_Jackie,
-                fontSize = 18.sp,
+                fontSize = ssp(0.02f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = sdp(0.008f))
             )
 
             DevSettingCard(title = "Rainbow Wipe Count: ${GameSettings.testRainbowCount.value}") {
@@ -285,7 +288,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "Color Wipe Count: ${GameSettings.testColorWipeCount.value}") {
                 Slider(
@@ -295,7 +298,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     colors = devSliderColors()
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             DevSettingCard(title = "Coins: ${GameSettings.testCoins.value}") {
                 Slider(
@@ -306,7 +309,7 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
 
             // === SCORE TEXT FIELD ===
             DevSettingCard(title = "Current Game Score") {
@@ -336,17 +339,19 @@ fun DeveloperScreen(onBackClicked: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(sdp(0.008f)))
 
                 Text(
                     text = "💡 Tip: This will update the current game score when you return to the game",
                     color = LightText.copy(alpha = 0.7f),
-                    fontSize = 12.sp,
+                    fontSize = ssp(0.012f),
                     fontFamily = Oswald
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(sdp(0.02f))
+
+            )
 
 
             }
@@ -374,8 +379,8 @@ fun DevSettingCard(title: String, content: @Composable () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = DeepBlue),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = title, color = LightText, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 8.dp))
+        Column(modifier = Modifier.padding(sdp(0.03f))) {
+            Text(text = title, color = LightText, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = sdp(0.008f)))
             content()
         }
     }
@@ -387,3 +392,14 @@ fun devSliderColors() = SliderDefaults.colors(
     activeTrackColor = Pink_Jackie,
     inactiveTrackColor = Color.Gray
 )
+
+@Preview(
+    name = "Tablet – Portrait",
+    showBackground = true,
+    showSystemUi = true,
+    device = "spec:width=800dp,height=1280dp,dpi=480"
+)
+@Composable
+fun DeveloperScreenPreview() {
+    DeveloperScreen(onBackClicked = {})
+}
