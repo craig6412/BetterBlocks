@@ -156,69 +156,110 @@ fun GameScreen(
         ghostPosition != null && block != null &&
                 isValidPlacement(uiState.board, block, ghostPosition)
     }
+    // ✅ Capture during composition
+    val screenW = sw(1f)
+    val screenH = sh(1f)
+    val densityValue = LocalDensity.current.density
 
-
+    LaunchedEffect(Unit) {
+        Log.e(
+            "FOLD_DEBUG",
+            """
+        SCREEN METRICS
+        sw(1f) = $screenW
+        sh(1f) = $screenH
+        density = $densityValue
+        """.trimIndent()
+        )
+    }
     @Composable
     fun maxBoardHeight(): Dp {
         return sh(1f) * 0.55f
     }
-    @Composable
-    fun deviceCategory(): DeviceClass {
-        val w = sw(1f)
-        val h = sh(1f)
-
-        val smallest = minOf(w, h)
-        val largest = maxOf(w, h)
+    fun classifyDevice(
+        widthDp: Dp,
+        heightDp: Dp
+    ): DeviceClass {
+        val smallest = minOf(widthDp, heightDp)
+        val largest = maxOf(widthDp, heightDp)
         val aspect = largest / smallest
 
         return when {
-            // REAL unfolded foldables (Galaxy Z Fold / Pixel Fold)
-            smallest in 700.dp..900.dp && aspect > 1.15f ->
-                DeviceClass.Foldable
+            // ✅ REAL unfolded foldables (Galaxy Z Fold, Pixel Fold)
+            smallest >= 600.dp && aspect < 1.35f -> DeviceClass.Foldable
 
-            // Tablets (portrait or landscape)
-            smallest >= 600.dp ->
-                DeviceClass.Tablet
+            // Tablets (wide + not square-ish)
+            smallest >= 600.dp -> DeviceClass.Tablet
 
-            else ->
-                DeviceClass.Phone
+            else -> DeviceClass.Phone
         }
     }
 
+    @Composable
+    fun deviceCategory(forcePreviewFold: Boolean = false): DeviceClass {
+        if (forcePreviewFold) {
+            Log.e("FOLD_DEBUG", "FORCED PREVIEW FOLD")
+            return DeviceClass.Foldable
+        }
+
+        val width = sw(1f)
+        val height = sh(1f)
+
+        val category = classifyDevice(width, height)
+
+        Log.e(
+            "FOLD_DEBUG",
+            """
+        deviceCategory()
+        widthDp = $width
+        heightDp = $height
+        RESULT = $category
+        """.trimIndent()
+        )
+
+        return category
+    }
 
     @Composable
     fun boardSize(forcePreviewFold: Boolean = false): Dp {
-        val category =
-            if (forcePreviewFold) DeviceClass.Foldable
-            else deviceCategory()
-
+        val category = deviceCategory(forcePreviewFold)
         val smallest = minOf(sw(1f), sh(1f))
-        val baseSize = when (category) {
+
+        val rawSize = when (category) {
             DeviceClass.Phone -> smallest * 0.95f
             DeviceClass.Tablet -> smallest * 0.80f
-            DeviceClass.Foldable -> smallest * 0.40f
+            DeviceClass.Foldable -> smallest * 0.50f
         }
 
-        // 🔒 Fold-only vertical safety clamp
-        return if (category == DeviceClass.Foldable) {
-            minOf(baseSize, sh(1f) * 0.55f)
-        } else {
-            baseSize
-        }
+        val finalSize =
+            if (category == DeviceClass.Foldable)
+                minOf(rawSize, sh(1f) * 0.55f) // 👈 the FIX
+            else
+                rawSize
+
+        Log.e(
+            "FOLD_DEBUG",
+            """
+        boardSize()
+        category = $category
+        rawSize = $rawSize
+        finalSize = $finalSize
+        """.trimIndent()
+        )
+
+        return finalSize
     }
-
+    @Composable
+    fun gridVerticalOffset(forcePreviewFold: Boolean = false): Dp =
+        when (deviceCategory(forcePreviewFold)) {
+            DeviceClass.Phone -> sh(-0.07f)
+            DeviceClass.Tablet -> sh(-0.04f)
+            DeviceClass.Foldable -> sh(-0.07f)
+        }
 
     @Composable
-    fun gridVerticalOffset(): Dp {
-        return when (deviceCategory()) {
-            DeviceClass.Phone -> sh(-0.07f)   // what you already use
-            DeviceClass.Foldable -> sh(-0.07f) // foldables need less lift
-            DeviceClass.Tablet -> sh(-0.04f)   // tablets need BIGGER lift
-        }
-    }
-    @Composable
-    fun availableBlocksOffset(): Dp =
-        when (deviceCategory()) {
+    fun availableBlocksOffset(forcePreviewFold: Boolean = false): Dp =
+        when (deviceCategory(forcePreviewFold)) {
             DeviceClass.Phone -> sh(-0.05f)
             DeviceClass.Tablet -> sh(-0.08f)
             DeviceClass.Foldable -> sh(-0.05f)
@@ -358,13 +399,26 @@ fun GameScreen(
                         // AVAILABLE BLOCKS ROW
                         // =====================
                         // Defensive clamp: ensure height is non-negative (developer knobs can set negatives)
-                        val safeAvailableBlocksHeight = GameSettings.availableBlocksRowHeight.value.coerceAtLeast(0f).dp
+                        @Composable
+                        fun availableBlocksRowHeight(forcePreviewFold: Boolean = false): Dp {
+                            val category = deviceCategory(forcePreviewFold)
+                            val base = GameSettings.availableBlocksRowHeight.value.dp
+
+                            return when (category) {
+                                DeviceClass.Foldable -> base * 0.85f   // 👈 shrink ONLY on fold
+                                else -> base
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(safeAvailableBlocksHeight)
+                                .height(
+                                    GameSettings.availableBlocksRowHeight.value
+                                        .coerceAtLeast(0f)
+                                        .dp
+                                )
                                 .padding(horizontal = SCREEN_HORIZONTAL_PADDING)
-                                .offset(y = availableBlocksOffset()), // move available blocks row up by ~5% of screen height
+                                .offset(y = availableBlocksOffset()),
                             contentAlignment = Alignment.Center
                         ) {
                             AvailableBlocks(
