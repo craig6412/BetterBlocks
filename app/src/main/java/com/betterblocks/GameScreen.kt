@@ -159,6 +159,10 @@ fun GameScreen(
 
 
     @Composable
+    fun maxBoardHeight(): Dp {
+        return sh(1f) * 0.55f
+    }
+    @Composable
     fun deviceCategory(): DeviceClass {
         val w = sw(1f)
         val h = sh(1f)
@@ -168,16 +172,18 @@ fun GameScreen(
         val aspect = largest / smallest
 
         return when {
-            // TRUE foldables: VERY wide, VERY large
-            smallest > 1350.dp && aspect > 1.35f -> DeviceClass.Foldable
+            // REAL unfolded foldables (Galaxy Z Fold / Pixel Fold)
+            smallest in 700.dp..900.dp && aspect > 1.15f ->
+                DeviceClass.Foldable
 
-            // Tablets: smallest dimension over 600dp, but not insane aspect ratios
-            smallest > 600.dp -> DeviceClass.Tablet
+            // Tablets (portrait or landscape)
+            smallest >= 600.dp ->
+                DeviceClass.Tablet
 
-            else -> DeviceClass.Phone
+            else ->
+                DeviceClass.Phone
         }
     }
-
 
 
     @Composable
@@ -187,37 +193,36 @@ fun GameScreen(
             else deviceCategory()
 
         val smallest = minOf(sw(1f), sh(1f))
+        val baseSize = when (category) {
+            DeviceClass.Phone -> smallest * 0.95f
+            DeviceClass.Tablet -> smallest * 0.80f
+            DeviceClass.Foldable -> smallest * 0.40f
+        }
 
-        return when (category) {
-            DeviceClass.Phone -> smallest * 1f   // FULL SIZE
-            DeviceClass.Tablet -> smallest * 0.75f
-            DeviceClass.Foldable -> smallest * 0.45f
+        // 🔒 Fold-only vertical safety clamp
+        return if (category == DeviceClass.Foldable) {
+            minOf(baseSize, sh(1f) * 0.55f)
+        } else {
+            baseSize
         }
     }
+
 
     @Composable
     fun gridVerticalOffset(): Dp {
         return when (deviceCategory()) {
             DeviceClass.Phone -> sh(-0.07f)   // what you already use
-            DeviceClass.Foldable -> sh(-0.04f) // foldables need less lift
+            DeviceClass.Foldable -> sh(-0.07f) // foldables need less lift
             DeviceClass.Tablet -> sh(-0.04f)   // tablets need BIGGER lift
         }
     }
     @Composable
-    fun availableBlocksOffset(): Dp {
-        return when (deviceCategory()) {
-
-            DeviceClass.Phone ->
-                sh(-0.05f)   // your existing value
-
-            DeviceClass.Foldable ->
-                sh(-0.03f)   // foldables have plenty of vertical room
-
-            DeviceClass.Tablet ->
-                sh(-0.02f)   // tablets need the most upward adjustment
+    fun availableBlocksOffset(): Dp =
+        when (deviceCategory()) {
+            DeviceClass.Phone -> sh(-0.05f)
+            DeviceClass.Tablet -> sh(-0.08f)
+            DeviceClass.Foldable -> sh(-0.05f)
         }
-    }
-
     @Composable
     fun cellSize(): Dp = boardSize() / 9
 
@@ -753,9 +758,10 @@ private fun ColorWheelDialog(
     )
 }
 
+
 @Preview(
-    name = "Galaxy Z Fold (Unfolded)",
-    device = "spec:width=2208dp,height=1760dp,dpi=420",
+    name = "Galaxy Z Fold 5 (Unfolded)",
+    device = "spec:width=930dp,height=775dp,dpi=374",
     showSystemUi = true,
     showBackground = true
 )
@@ -764,45 +770,7 @@ fun GameScreenPreview_Fold() {
     val vm = PreviewGameViewModel()
     GameScreen(
         uiState = vm.uiState.collectAsState().value,
-        forcePreviewFold = true,  // ONLY FOR THIS ONE
-        onGridCellClicked = { _, _ -> },
-        onSelectBlock = {},
-        onRotateBlock = {},
-        onSelectRainbow = {},
-        onReset = {},
-        onGoToMenu = {},
-        onLastChanceUsed = {},
-        onLastChanceDeclined = {},
-        onToggleSound = {},
-        onToggleMusic = {},
-        onUseRainbowImmediately = {},
-        onColorWipeSpinResult = {},
-        onDismissTierPromotion = {},
-        onShareTier = {},
-        onDismissRainbowEarned = {},
-        onDismissFirstGameOver = {},
-        onDismissPurchaseSuccess = {},
-        onClearCoinAnimation = {},
-        onDismissShopBubble = {},
-        onWatchAd = {},
-        onGoToShop = {},
-        onDismissZeroCoins = {},
-        onClearAnimationFinished = {}
-    )
-}
-
-@Preview(
-    name = "Tablet – Portrait",
-    device = "spec:width=800dp,height=1280dp,dpi=480",
-    showSystemUi = true,
-    showBackground = true
-)
-@Composable
-fun GameScreenPreview_Tablet() {
-    val vm = PreviewGameViewModel()
-    GameScreen(
-        uiState = vm.uiState.collectAsState().value,
-        forcePreviewFold = false,   // TABLET SHOULD USE REAL CATEGORY DETECTION
+        forcePreviewFold = true,
         onGridCellClicked = { _, _ -> },
         onSelectBlock = {},
         onRotateBlock = {},
