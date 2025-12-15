@@ -37,7 +37,8 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
+import androidx.compose.foundation.border
+import android.util.Log
 import com.betterblocks.R
 import com.betterblocks.GameUiState
 import com.betterblocks.GameViewModel
@@ -46,10 +47,18 @@ import com.betterblocks.DeepBlue
 import com.betterblocks.LightText
 import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
+import androidx.compose.ui.zIndex
 import com.betterblocks.SpecialPurple
 import com.betterblocks.SuccessGreen
 import com.betterblocks.PreviewGameViewModel
 import com.betterblocks.ads.AdManager
+import com.betterblocks.PREFS_NAME
+import com.betterblocks.KEY_PLAYER_NAME
+import com.betterblocks.KEY_PLAYER_NAME_PROMPTED
+import com.betterblocks.KEY_FIREBASE_USER_ID
+import com.betterblocks.KEY_HIGH_SCORE
+import com.betterblocks.KEY_LIFETIME_COINS
+import com.betterblocks.PlayerNameDialog
 
 
 // Gradient colors for background
@@ -63,6 +72,101 @@ data class ViewModelCallbacks(
     val dismissZeroCoins: () -> Unit = {},
     val checkDailyReward: () -> Unit = {}
 )
+
+// -----------------------
+// Device helpers + FreeCoinsButton
+// Use the shared `DeviceClass` enum declared in GameScreen.kt (same package).
+// -----------------------
+
+private fun classifyDevice(widthDp: Dp, heightDp: Dp): DeviceClass {
+    val smallest = minOf(widthDp, heightDp)
+    val largest = maxOf(widthDp, heightDp)
+    val aspect = largest / smallest
+
+    return when {
+        smallest >= 600.dp && aspect < 1.35f -> DeviceClass.Foldable
+        smallest >= 600.dp -> DeviceClass.Tablet
+        else -> DeviceClass.Phone
+    }
+}
+
+@Composable
+private fun deviceCategory(forcePreviewFold: Boolean = false): DeviceClass {
+    if (forcePreviewFold) return DeviceClass.Foldable
+    val width = sw(1f)
+    val height = sh(1f)
+    return classifyDevice(width, height)
+}
+
+@Composable
+fun FreeCoinsButton(
+    viewModelBackedCallbacks: ViewModelCallbacks,
+    onGoToShop: () -> Unit,
+    forcePreviewFold: Boolean = false
+) {
+    val ctx = LocalContext.current
+    val category = deviceCategory(forcePreviewFold)
+
+    val sizeDp = when (category) {
+        DeviceClass.Phone -> sw(0.14f)
+        DeviceClass.Tablet -> sw(0.11f)
+        DeviceClass.Foldable -> sw(0.16f)
+    }
+    val topPad = when (category) {
+        DeviceClass.Phone -> sh(0.02f)
+        DeviceClass.Tablet -> sh(0.035f)
+        DeviceClass.Foldable -> sh(0.02f)
+    }
+    val endPad = when (category) {
+        DeviceClass.Phone -> sw(0.03f)
+        DeviceClass.Tablet -> sw(0.04f)
+        DeviceClass.Foldable -> sw(0.03f)
+    }
+
+    // Move down by an additional 10% of the screen height to avoid overlap with top UI
+    val extraVerticalOffset = sh(0.10f)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(top = topPad + extraVerticalOffset, end = endPad)
+            .size(sizeDp)
+            .border(width = 1.dp, color = Color.Red, shape = RoundedCornerShape(4.dp)) // DEBUG border
+            .zIndex(1000f)
+        ) {
+            Log.d("FreeCoinsButton", "composed: category=$category size=$sizeDp topPad=${topPad + extraVerticalOffset} endPad=$endPad")
+            val activity = remember { (ctx as? Activity) }
+            Image(
+                painter = painterResource(id = R.drawable.free_coins),
+                contentDescription = "Free Coins",
+                modifier = Modifier
+                    .size(sizeDp)
+                    .clickable(
+                        indication = LocalIndication.current,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        val act = activity
+                        if (act == null) {
+                            // Preload for later if no activity available
+                            com.betterblocks.ads.AdManager.preloadDoubleRewarded(ctx)
+                            onGoToShop()
+                            return@clickable
+                        }
+
+                        if (com.betterblocks.ads.AdManager.isRewardedLoaded.value) {
+                            com.betterblocks.ads.AdManager.showDoubleRewarded(
+                                act,
+                                onCompletedBoth = { try { viewModelBackedCallbacks.addCoins(com.betterblocks.ads.AdManager.DOUBLE_REWARD_COINS) } catch (_: Throwable) {} },
+                                onFailed = { com.betterblocks.ads.AdManager.preloadDoubleRewarded(ctx); onGoToShop() }
+                            )
+                        } else {
+                            com.betterblocks.ads.AdManager.preloadDoubleRewarded(ctx)
+                        }
+                    }
+            )
+        }
+    }
+}
 
 @Composable
 fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
@@ -254,6 +358,15 @@ private fun MainMenuScreenContent(
         } catch (_: Throwable) {}
     }
 
+    // Preload double-rewarded ads proactively so the Free Coins flow can show immediately
+    LaunchedEffect(Unit) {
+        try {
+            com.betterblocks.ads.AdManager.preloadDoubleRewarded(context)
+        } catch (_: Throwable) {
+            // ignore — preload is best-effort
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color.Transparent
@@ -385,7 +498,7 @@ private fun MainMenuScreenContent(
 
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 
-                // banner?.invoke()
+                banner?.invoke()
 
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 
@@ -415,44 +528,65 @@ private fun MainMenuScreenContent(
                         onClaimReward = { try { viewModelBackedCallbacks.claimDailyReward() } catch (_: Throwable) {} }
                     )
                 }
+
+                // Player Name Onboarding: show after daily reward completes or on first run
+                val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                val savedPlayerName = prefs.getString(KEY_PLAYER_NAME, null)
+                val prompted = prefs.getBoolean(KEY_PLAYER_NAME_PROMPTED, false)
+
+                // If there's no saved name and we haven't prompted yet, show dialog after daily reward is not visible
+                var showPlayerNameDialog by remember { mutableStateOf(false) }
+
+                // Keep a snapshot of whether daily reward was showing so we can show name dialog after it finishes
+                var dailyWasShowing by remember { mutableStateOf(uiState.showDailyRewardDialog) }
+                LaunchedEffect(uiState.showDailyRewardDialog) {
+                    // If daily dialog just finished (was showing and now not), and name not prompted, show name dialog
+                    if (dailyWasShowing && !uiState.showDailyRewardDialog && !prompted && savedPlayerName.isNullOrBlank()) {
+                        showPlayerNameDialog = true
+                    }
+                    dailyWasShowing = uiState.showDailyRewardDialog
+                    // Also, if daily reward never needed and we haven't prompted, show immediately on first launch
+                    if (!uiState.showDailyRewardDialog && !prompted && savedPlayerName.isNullOrBlank()) {
+                        showPlayerNameDialog = true
+                    }
+                }
+
+                if (!LocalInspectionMode.current && showPlayerNameDialog) {
+                    PlayerNameDialog(
+                        currentName = null,
+                        onSave = { chosenName ->
+                            val finalName = chosenName
+                            prefs.edit().putString(KEY_PLAYER_NAME, finalName).putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
+                            showPlayerNameDialog = false
+                            // Optionally attempt leaderboard update if user id exists
+                            val userId = prefs.getString(KEY_FIREBASE_USER_ID, null)
+                            val currentScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+                            if (!userId.isNullOrBlank()) {
+                                try {
+                                    com.betterblocks.FirestoreManager.updateLeaderboard(userId = userId, score = currentScore, tier = com.betterblocks.model.getPlayerTier(currentScore, prefs.getInt(KEY_LIFETIME_COINS, 0), prefs), playerNameOverride = finalName)
+                                } catch (_: Throwable) {}
+                            }
+                        },
+                        onCancel = {
+                            // Mark as prompted so we don't annoy the user again
+                            prefs.edit().putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
+                            showPlayerNameDialog = false
+                        }
+                    )
+                }
+
+                val config = LocalConfiguration.current
+                val screenWidth = config.screenWidthDp.dp
+                val screenHeight = config.screenHeightDp.dp
+
+                // Free Coins floating overlay (device-aware placement)
             }
 
-
-            val config = LocalConfiguration.current
-            val screenWidth = config.screenWidthDp.dp
-            val screenHeight = config.screenHeightDp.dp
-
-            // Free Coins floating overlay (absolute top-right over everything)
-            Image(
-                painter = painterResource(id = R.drawable.free_coins),
-                contentDescription = "Free Coins",
-                modifier = Modifier
-                    .size(sw(0.15f))
-                    .offset(
-                        // place near 95% of screen width; subtract half the icon width so it's visually near the edge
-                        x = screenWidth * 0.90f - sw(0.06f),
-                        y = screenHeight * 0.22f   // 22% from top
-                    )
-                    .zIndex(1000f)
-                    .clickable(
-                        indication = LocalIndication.current,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
-                        val activity = context as? Activity
-                        try {
-                            viewModelBackedCallbacks.addCoins(50)
-                        } catch (_: Throwable) {}
-
-                        if (AdManager.isRewardedLoaded.value && activity != null) {
-                            AdManager.showDoubleRewarded(
-                                activity,
-                                onCompletedBoth = { try { viewModelBackedCallbacks.addCoins(50) } catch (_: Throwable) {} },
-                                onFailed = { AdManager.preloadDoubleRewarded(context) }
-                            )
-                        } else {
-                            AdManager.preloadDoubleRewarded(context)
-                        }
-                    }
+            // Place FreeCoinsButton as sibling to the main Column so it can align to the
+            // outer full-screen Box and use TopEnd alignment reliably.
+            FreeCoinsButton(
+                viewModelBackedCallbacks = viewModelBackedCallbacks,
+                onGoToShop = onShopClicked
             )
         }
     }

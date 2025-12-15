@@ -11,6 +11,9 @@ const val KEY_FIREBASE_USER_ID = "firebase_user_id"
 // Player chosen display name (from HighScoreActivity)
 const val KEY_PLAYER_NAME = "player_name"
 
+// New: track whether we've already prompted for a player name (onboarding)
+const val KEY_PLAYER_NAME_PROMPTED = "player_name_prompted"
+
 
 
 // Haptic Feedback

@@ -58,8 +58,8 @@ const val KEY_PREFS_SCHEMA_VERSION = "prefs_schema_version"
 // --- GAME VIEWMODEL ---
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
-
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val shopRepo: ShopRepository = ShopRepository.get(application.applicationContext)
     // Keep in-memory UI state in sync with direct SharedPreferences writes from other Activities
     private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
         try {
@@ -99,6 +99,49 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } catch (t: Throwable) {
             Log.w("GameViewModel", "prefsListener error for key=$key: ${t.message}")
         }
+    }
+
+    /**
+     * Apply schema-based migration only. This will NOT overwrite existing values
+     * based on their numeric value. It only initializes missing keys for fresh
+     * installs and advances the stored schema version. Future schema bumps
+     * should be handled here with explicit, versioned transformations.
+     */
+    private fun migratePrefsIfNeeded(prefs: SharedPreferences) {
+        val storedSchema = prefs.getInt(KEY_PREFS_SCHEMA_VERSION, 0)
+        if (storedSchema >= PREFS_SCHEMA_VERSION) return
+
+        val editor = prefs.edit()
+
+        // For schema == 0 (no schema recorded), treat this as either a fresh install or
+        // a legacy install. Do NOT overwrite existing values — only set defaults for
+        // keys that are absent.
+        if (storedSchema == 0) {
+            if (!prefs.contains(KEY_COINS)) editor.putInt(KEY_COINS, DEV_INITIAL_COINS)
+            if (!prefs.contains(KEY_RAINBOW_COUNT)) editor.putInt(KEY_RAINBOW_COUNT, DEV_INITIAL_RAINBOW)
+            if (!prefs.contains(KEY_COLOR_WIPE_COUNT)) editor.putInt(KEY_COLOR_WIPE_COUNT, DEV_INITIAL_COLOR_WIPE)
+            // Keep other existing keys untouched.
+        }
+
+        // Placeholder for future incremental migrations from older storedSchema -> PREFS_SCHEMA_VERSION
+        // Use a when chain so each step can migrate safely and intentionally.
+        var v = storedSchema
+        while (v < PREFS_SCHEMA_VERSION) {
+            when (v) {
+                0 -> {
+                    // migration from 0 -> 1 (example placeholder)
+                    // No destructive changes; only add new keys if absent
+                }
+                1 -> {
+                    // migration from 1 -> 2
+                }
+                // add more cases as schema evolves
+            }
+            v++
+        }
+
+        editor.putInt(KEY_PREFS_SCHEMA_VERSION, PREFS_SCHEMA_VERSION)
+        editor.apply()
     }
 
     private val scoreAnimator = ScoreAnimator(viewModelScope)
@@ -143,28 +186,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * Creates the initial state for a new game, loading saved data.
      */
     private fun createInitialState(): GameUiState {
-        // Schema bump OR truly fresh install: ensure developer defaults are applied to prefs
+        // Perform schema-based migration only. This will initialize missing keys for
+        // fresh installs and advance the schema version without overwriting existing
+        // user progress based on numeric heuristics.
+        migratePrefsIfNeeded(prefs)
+
         val storedSchema = prefs.getInt(KEY_PREFS_SCHEMA_VERSION, 0)
         val isFreshInstall = !prefs.contains(KEY_COINS)
-        // DEBUG: Log current prefs state
-        val currentCoins = prefs.getInt(KEY_COINS, -1)  // -1 to detect if key exists
+        // DEBUG: Log current prefs state (values could be absent for a fresh install)
+        val currentCoins = prefs.getInt(KEY_COINS, -1)
         val currentRainbow = prefs.getInt(KEY_RAINBOW_COUNT, -1)
         val currentColorWipe = prefs.getInt(KEY_COLOR_WIPE_COUNT, -1)
         Log.d("GameViewModel", "createInitialState: storedSchema=$storedSchema isFreshInstall=$isFreshInstall currentCoins=$currentCoins currentRainbow=$currentRainbow currentColorWipe=$currentColorWipe")
-
-        // FORCE OVERWRITE if values are below defaults (handles backup restore on "fresh" install)
-        val forceOverwrite = currentCoins < DEV_INITIAL_COINS || currentRainbow < DEV_INITIAL_RAINBOW || currentColorWipe < DEV_INITIAL_COLOR_WIPE
-        if (storedSchema < PREFS_SCHEMA_VERSION || isFreshInstall || forceOverwrite) {
-            Log.d("GameViewModel", "createInitialState: Overwriting defaults (schema bump or fresh install or forceOverwrite=$forceOverwrite)")
-            prefs.edit()
-                .putInt(KEY_COINS, DEV_INITIAL_COINS)
-                .putInt(KEY_RAINBOW_COUNT, DEV_INITIAL_RAINBOW)
-                .putInt(KEY_COLOR_WIPE_COUNT, DEV_INITIAL_COLOR_WIPE)
-                .putInt(KEY_PREFS_SCHEMA_VERSION, PREFS_SCHEMA_VERSION)
-                .apply()
-        } else {
-            Log.d("GameViewModel", "createInitialState: Skipping overwrite (schema up-to-date and not fresh)")
-        }
 
         val savedHighScore = prefs.getInt(KEY_HIGH_SCORE, 0)
         val savedCoins = prefs.getInt(KEY_COINS, DEV_INITIAL_COINS)
@@ -256,32 +289,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // --- Persistence Helpers ---
 
     private fun saveHighScore(score: Int) {
+        Log.d("GameViewModel", "Persisting high score -> $score")
         prefs.edit().putInt(KEY_HIGH_SCORE, score).apply()
     }
 
     private fun saveCoins(coins: Int) {
-        val prev = prefs.getInt(KEY_COINS, -9999)
-        prefs.edit().putInt(KEY_COINS, coins).apply()
-        Log.d("GameViewModel", "saveCoins: prev=$prev -> new=$coins")
+        // delegate to shopRepo to centralize writes and keep flows in sync
+        shopRepo.setCoins(coins)
+        Log.d("GameViewModel", "saveCoins -> delegated to ShopRepository: new=$coins")
     }
 
     private fun saveLifetimeCoinsIfHigher(totalCoins: Int) {
-        val previous = prefs.getInt(KEY_LIFETIME_COINS, totalCoins)
-        if (totalCoins > previous) {
-            prefs.edit().putInt(KEY_LIFETIME_COINS, totalCoins).apply()
-        }
+        shopRepo.setLifetimeIfHigher(totalCoins)
     }
 
     private fun saveRainbowCount(count: Int) {
-        val prev = prefs.getInt(KEY_RAINBOW_COUNT, -9999)
-        prefs.edit().putInt(KEY_RAINBOW_COUNT, count).apply()
-        Log.d("GameViewModel", "saveRainbowCount: prev=$prev -> new=$count")
+        shopRepo.setRainbowCount(count)
+        Log.d("GameViewModel", "saveRainbowCount -> delegated to ShopRepository: new=$count")
     }
 
     private fun saveColorWipeCount(count: Int) {
-        val prev = prefs.getInt(KEY_COLOR_WIPE_COUNT, -9999)
-        prefs.edit().putInt(KEY_COLOR_WIPE_COUNT, count).apply()
-        Log.d("GameViewModel", "saveColorWipeCount: prev=$prev -> new=$count")
+        shopRepo.setColorWipeCount(count)
+        Log.d("GameViewModel", "saveColorWipeCount -> delegated to ShopRepository: new=$count")
     }
 
     private fun saveSoundEnabled(enabled: Boolean) {
@@ -763,6 +792,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isGameOver = post.isGameOver,
             isLastChance = post.isLastChance
         )
+        // Ensure high score is evaluated and persisted immediately for this finalization path
+        finalizeHighScoreIfNeeded(finalScore = post.score)
     }
 
     // Public API to immediately use one rainbow wipe (from dialogs / quick actions)
@@ -1052,7 +1083,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Re-evaluate persisted flag at call time to handle ViewModel recreation
         val persistedFlag = prefs.getBoolean(KEY_LAST_CHANCE_OFFERED, false)
         val alreadyOffered = lastChanceOfferedThisGame || persistedFlag
-        Log.d("GameViewModel", "checkGameOverOrLastChance -> state.rainbow=${state.rainbowBlockCount} lastChanceThisGame=$lastChanceOfferedThisGame persistedLastChance=$persistedFlag isLastChance=${state.isLastChance} isGameOver=${state.isGameOver}")
+        Log.d("GameViewModel", "checkGameOverOrLastChance -> state.rainbow=${'$'}{state.rainbowBlockCount} lastChanceThisGame=$lastChanceOfferedThisGame persistedLastChance=$persistedFlag isLastChance=${'$'}{state.isLastChance} isGameOver=${'$'}{state.isGameOver}")
 
         val updated = if (state.rainbowBlockCount > 0 && !alreadyOffered) {
             // Offer last-chance once per game
@@ -1063,7 +1094,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             state.copy(isLastChance = true, selectedBlock = null)
         } else {
             // Either no rainbows, or we've already offered the last chance this game; finalize game over
-            Log.d("GameViewModel", "checkGameOverOrLastChance -> FINALIZE game over (alreadyOffered=$alreadyOffered rainbow=${state.rainbowBlockCount})")
+            Log.d("GameViewModel", "checkGameOverOrLastChance -> FINALIZE game over (alreadyOffered=$alreadyOffered rainbow=${'$'}{state.rainbowBlockCount})")
             state.copy(isGameOver = true, selectedBlock = null)
         }
 
@@ -1082,6 +1113,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isGameOver = updated.isGameOver,
             isLastChance = updated.isLastChance
         )
+
+        // If we just finalized game over, ensure high score persistence and immediate UI update
+        if (updated.isGameOver) {
+            finalizeHighScoreIfNeeded(finalScore = updated.score)
+            // Show game summary dialog immediately
+            _uiState.update { it.copy(showGameSummaryDialog = true) }
+        }
 
         // FIRST-TIME GAME OVER: award 3 free rainbow wipes on initial install and show dialog
         try {
@@ -1207,9 +1245,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // persist free rotations immediately so survives process death
                 saveFreeRotations(newFreeRotations)
             } else if (newCoins >= ROTATION_COST) {
+                // Atomic spend via ShopRepository to avoid race conditions
+                val spent = shopRepo.useCoins(ROTATION_COST)
+                if (!spent) {
+                    // If spend failed concurrenty, show zero-coins dialog
+                    _uiState.update { it.copy(showZeroCoinsDialog = true) }
+                    return
+                }
                 newCoins -= ROTATION_COST
-                saveCoins(newCoins)
-                saveLifetimeCoinsIfHigher(newCoins)
+                // maintain lifetime if higher (original behaviour)
+                shopRepo.setLifetimeIfHigher(newCoins)
             } else {
                 // No free rotations and not enough coins — show the zero-coins dialog prompting shop or ad
                 _uiState.update { it.copy(showZeroCoinsDialog = true) }
@@ -1281,9 +1326,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /** Add coins to player (used for rewards / ads). */
     fun addCoins(amount: Int) {
         if (amount <= 0) return
+        // Use central repository to add coins atomically and record lifetime
+        shopRepo.addCoins(amount)
+        shopRepo.recordLifetimeCoins(amount)
         val newTotal = _uiState.value.coins + amount
-        saveCoins(newTotal)
-        saveLifetimeCoinsIfHigher(newTotal)
         _uiState.update { it.copy(coins = newTotal, coinsEarnedThisUpdate = amount) }
     }
 
@@ -1303,4 +1349,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(showFirstInstallFreeCoinsDialog = false) }
     }
 
+    // --- GAME OVER FINALIZATION ---
+
+    /**
+     * Check and finalize high score if the current score exceeds the stored high score.
+     * This is called when the game ends to ensure the high score is updated immediately.
+     */
+    private fun finalizeHighScoreIfNeeded(finalScore: Int) {
+        val currentHighScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+        if (finalScore > currentHighScore) {
+            Log.d("GameViewModel", "New high score! $finalScore (previous: $currentHighScore)")
+            // Update high score in prefs
+            saveHighScore(finalScore)
+            // Update in UI state and trigger high score animation/flags so dialogs show correct info
+            scoreToBeat = finalScore
+            _uiState.update { it.copy(highScore = finalScore, showHighScoreAnim = true) }
+        } else {
+            // Ensure UI reflects persisted high score even when not beaten
+            _uiState.update { it.copy(highScore = currentHighScore) }
+        }
+    }
 }

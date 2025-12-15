@@ -74,8 +74,7 @@ fun getPlayerTier(bestScore: Int, coins: Int, prefs: SharedPreferences): TrophyT
     val previousOrdinal = prefs.getInt(KEY_HIGHEST_TIER_UNLOCKED, TrophyTier.UNRANKED.ordinal)
     val previouslyUnlocked = TrophyTier.fromOrdinalSafe(previousOrdinal)
     val newTier = determineUnlockedTier(bestScore, coins, previouslyUnlocked)
-    if (newTier.ordinal > previouslyUnlocked.ordinal) {
-        prefs.edit().putInt(KEY_HIGHEST_TIER_UNLOCKED, newTier.ordinal).apply()
-    }
+    // NOTE: This function is pure now and does NOT persist tier changes. Callers
+    // that need to persist an unlocked tier should call ShopRepository.unlockTier(newTier.ordinal).
     return newTier
 }

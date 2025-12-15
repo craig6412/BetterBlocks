@@ -75,7 +75,8 @@ fun HighscoreScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     val savedName = prefs.getString(KEY_PLAYER_NAME, null)
-    var showNameDialog by remember { mutableStateOf(savedName == null) }
+    val prompted = prefs.getBoolean(KEY_PLAYER_NAME_PROMPTED, false)
+    var showNameDialog by remember { mutableStateOf(savedName == null && !prompted) }
     var playerName by remember { mutableStateOf(savedName ?: "") }
 
     val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, 0)
@@ -226,7 +227,7 @@ fun HighscoreScreen(onBack: () -> Unit) {
             onSave = { chosenName ->
                 val finalName = chosenName.ifBlank { generateFallbackPlayerName() }
                 playerName = finalName
-                prefs.edit().putString(KEY_PLAYER_NAME, finalName).apply()
+                prefs.edit().putString(KEY_PLAYER_NAME, finalName).putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
                 showNameDialog = false
 
                 val userId = prefs.getString(KEY_FIREBASE_USER_ID, null)
@@ -476,126 +477,6 @@ fun LeaderboardRow(rank: Int, entry: FirestoreManager.LeaderboardEntry, tier: Tr
             )
         }
     }
-}
-
-// ---------------------------------------------------------
-// PLAYER NAME DIALOG
-// ---------------------------------------------------------
-
-@Composable
-fun PlayerNameDialog(
-    currentName: String?,
-    onSave: (String) -> Unit,
-    onCancel: () -> Unit
-) {
-    var name by rememberSaveable(currentName) { mutableStateOf(currentName ?: "") }
-    var errorText by remember { mutableStateOf<String?>(null) }
-    val focusRequester = remember { FocusRequester() }
-    // Capture inspection mode at composition time so it can be used from coroutines safely
-    val isInPreview = LocalInspectionMode.current
-
-    fun attemptSave() {
-        val trimmed = name.trim()
-        if (trimmed.isEmpty()) {
-            errorText = null
-            onSave(generateFallbackPlayerName())
-            return
-        }
-        when {
-            trimmed.length < 3 || trimmed.length > 16 -> {
-                errorText = "Name must be 3–16 characters"
-            }
-            !PLAYER_NAME_REGEX.matches(trimmed) -> {
-                errorText = "Only letters, numbers, spaces allowed"
-            }
-            else -> {
-                errorText = null
-                onSave(trimmed)
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = {
-            Text(
-                "Choose Display Name",
-                fontFamily = Oswald,
-                fontWeight = FontWeight.Bold,
-                color = LightText
-            )
-        },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        if (errorText != null) errorText = null
-                        name = it
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                    textStyle = TextStyle(fontFamily = Oswald, color = LightText),
-                    singleLine = true,
-                    placeholder = {
-                        Text("Player Name", fontFamily = Oswald, color = LightText.copy(alpha = 0.6f))
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(onDone = { attemptSave() }),
-                    isError = errorText != null
-                )
-                if (errorText != null) {
-                    Text(
-                        errorText!!,
-                        color = MaterialTheme.colorScheme.error,
-                        fontFamily = Oswald,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = { attemptSave() }) {
-                Text("Save", fontFamily = Oswald)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text("Cancel", fontFamily = Oswald)
-            }
-        }
-    )
-
-    LaunchedEffect(Unit) {
-        if (isInPreview) return@LaunchedEffect
-        // Try to request focus a few times with short delays — AlertDialog's internals may not have
-        // attached the focus target yet when this effect first runs. This avoids the crash seen in logs.
-        repeat(6) { attempt ->
-            try {
-                focusRequester.requestFocus()
-                return@LaunchedEffect
-            } catch (e: IllegalStateException) {
-                // Not ready yet; wait a short time and retry
-                kotlinx.coroutines.delay(50L)
-            }
-        }
-        // Last attempt without catching to surface unexpected issues
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Throwable) {
-            // Swallow to avoid crash — focus is optional for dialog correctness
-        }
-    }
-}
-
-private fun generateFallbackPlayerName(): String {
-    val digits = Random.nextInt(0, 10_000)
-    return "Player%04d".format(digits)
 }
 
 // ---------------------------------------------------------

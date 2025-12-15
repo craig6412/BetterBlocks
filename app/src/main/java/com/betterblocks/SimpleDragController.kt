@@ -41,6 +41,13 @@ class SimpleDragController {
     var ghostCenterPx: Offset? by mutableStateOf(null)
         private set
 
+    //New drag and drop feature that saves last grid position when finger leaves grid and updates that state when returning to grid
+
+    private var lastValidGhostPosition: Pair<Int, Int>? = null
+    private var lastValidGhostTopLeftPx: Offset? = null
+    private var lastValidGhostCenterPx: Offset? = null
+
+
     fun setGridMetrics(topLeft: Offset, totalGridPx: Float, cellPx: Float, visualOffset: Offset = Offset.Zero) {
         gridTopLeft = topLeft
         gridSizePx = totalGridPx
@@ -98,6 +105,11 @@ class SimpleDragController {
         ghostPosition = null
         ghostTopLeftPx = null
         ghostCenterPx = null
+
+        lastValidGhostPosition = null
+        lastValidGhostTopLeftPx = null
+        lastValidGhostCenterPx = null
+
         liftOffset = 0f
     }
 
@@ -112,9 +124,9 @@ class SimpleDragController {
     private fun updateGhost() {
         val block = draggedBlock
         if (block == null || !isDragging || gridSizePx <= 0f || cellSizePx <= 0f) {
-            ghostPosition = null
-            ghostTopLeftPx = null
-            ghostCenterPx = null
+            ghostPosition = lastValidGhostPosition
+            ghostTopLeftPx = lastValidGhostTopLeftPx
+            ghostCenterPx = lastValidGhostCenterPx
             return
         }
 
@@ -134,10 +146,9 @@ class SimpleDragController {
 
         // Quick out-of-bounds if center is fully outside extended grid bounds
         if (relX < -cellSizePx || relY < -cellSizePx || relX > gridSizePx + cellSizePx || relY > gridSizePx + cellSizePx) {
-            ghostPosition = null
-            ghostTopLeftPx = null
-            ghostCenterPx = null
-            Log.d("SimpleDrag", "updateGhost: center well out of bounds -> null")
+            ghostPosition = lastValidGhostPosition
+            ghostTopLeftPx = lastValidGhostTopLeftPx
+            ghostCenterPx = lastValidGhostCenterPx
             return
         }
 
@@ -156,13 +167,9 @@ class SimpleDragController {
         val maxRow = 9 - block.boundingBoxHeight
 
         if (row < 0 || col < 0 || row > maxRow || col > maxCol) {
-            ghostPosition = null
-            ghostTopLeftPx = null
-            ghostCenterPx = null
-            Log.d(
-                "SimpleDrag",
-                "updateGhost: computed origin out of bounds row=$row col=$col maxRow=$maxRow maxCol=$maxCol -> null"
-            )
+            ghostPosition = lastValidGhostPosition
+            ghostTopLeftPx = lastValidGhostTopLeftPx
+            ghostCenterPx = lastValidGhostCenterPx
             return
         }
 
@@ -185,6 +192,10 @@ class SimpleDragController {
             "SimpleDrag",
             "Ghost updated: origin=($snappedRow,$snappedCol) originFloat=($originRowFloat,$originColFloat) ghostTopLeftPx=$ghostTopLeftPx ghostCenterPx=$ghostCenterPx"
         )
+        lastValidGhostPosition = ghostPosition
+        lastValidGhostTopLeftPx = ghostTopLeftPx
+        lastValidGhostCenterPx = ghostCenterPx
+
     }
 
     private fun isValidPlacement(board: GameGrid, block: Block, origin: Pair<Int, Int>): Boolean {
@@ -206,6 +217,7 @@ class SimpleDragController {
     // Rotate the currently dragged block clockwise (90 degrees) and update the ghost.
     fun rotateDraggedBlockClockwise() {
         draggedBlock = draggedBlock?.rotate()
+        updateGhost()
         Log.d("SimpleDragController", "rotateDraggedBlockClockwise -> draggedBlock now=${draggedBlock?.id}")
     }
 }

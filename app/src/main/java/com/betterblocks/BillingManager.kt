@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Manages Google Play Billing connection, purchase flow, and acknowledgement.
@@ -21,26 +20,37 @@ class BillingManager(
     private val onCoinsPurchased: (Int) -> Unit // Callback to give coins to user
 ) {
 
+    // Exposed product details for UI
     private val _productDetailsMap = MutableStateFlow<Map<String, ProductDetails>>(emptyMap())
     val productDetailsMap = _productDetailsMap.asStateFlow()
 
-    // Defined Product IDs from Google Play Console
+    // Product IDs (must EXACTLY match Play Console)
     private val productIds = listOf(
         "coins_small",
         "coins_medium",
         "coins_large",
-        "coins_mega" // NEW
+        "coins_mega"
     )
-
+    object CoinPacks {
+        val amounts = mapOf(
+            "coins_small" to 3_000,
+            "coins_medium" to 25_000,
+            "coins_large" to 100_000,
+            "coins_mega" to 400_000
+        )
+    }
+    // Purchase update listener
     private val purchasesUpdatedListener = PurchasesUpdatedListener { billingResult, purchases ->
-        if (billingResult.responseCode == BillingResponseCode.OK && purchases != null) {
-            for (purchase in purchases) {
-                handlePurchase(purchase)
+        when (billingResult.responseCode) {
+            BillingResponseCode.OK -> {
+                purchases?.forEach { handlePurchase(it) }
             }
-        } else if (billingResult.responseCode == BillingResponseCode.USER_CANCELED) {
-            Log.d(TAG, "User canceled the purchase.")
-        } else {
-            Log.e(TAG, "Purchase failed: ${billingResult.debugMessage}")
+            BillingResponseCode.USER_CANCELED -> {
+                Log.d(TAG, "User canceled purchase")
+            }
+            else -> {
+                Log.e(TAG, "Purchase failed: ${billingResult.debugMessage}")
+            }
         }
     }
 
@@ -49,110 +59,126 @@ class BillingManager(
         .enablePendingPurchases()
         .build()
 
+    // -----------------------------
+    // CONNECTION
+    // -----------------------------
+
     fun startConnection() {
         billingClient.startConnection(object : BillingClientStateListener {
+
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingResponseCode.OK) {
-                    Log.d(TAG, "Billing connected successfully.")
+                    Log.d(TAG, "Billing connected")
                     queryAvailableProducts()
+                    queryExistingPurchases() // 🔒 CRITICAL FIX
                 } else {
-                    Log.e(TAG, "Billing connection failed: ${billingResult.debugMessage}")
+                    Log.e(TAG, "Billing setup failed: ${billingResult.debugMessage}")
                 }
             }
 
             override fun onBillingServiceDisconnected() {
-                Log.w(TAG, "Billing disconnected. Retrying...")
-                // Logic to retry connection could go here
+                Log.w(TAG, "Billing service disconnected")
             }
         })
     }
 
-    /**
-     * Queries Google Play for the details (price, name) of our coin packs.
-     */
+    fun endConnection() {
+        billingClient.endConnection()
+    }
+
+    // -----------------------------
+    // PRODUCT QUERIES
+    // -----------------------------
+
     private fun queryAvailableProducts() {
-        val productList = productIds.map { productId ->
+        val products = productIds.map {
             QueryProductDetailsParams.Product.newBuilder()
-                .setProductId(productId)
+                .setProductId(it)
                 .setProductType(BillingClient.ProductType.INAPP)
                 .build()
         }
 
         val params = QueryProductDetailsParams.newBuilder()
-            .setProductList(productList)
+            .setProductList(products)
             .build()
 
-        billingClient.queryProductDetailsAsync(params) { billingResult, productDetailsList ->
-            if (billingResult.responseCode == BillingResponseCode.OK) {
-                // Map Product ID -> Details for easy lookup
-                val newMap = productDetailsList.associateBy { it.productId }
-                _productDetailsMap.value = newMap
-                Log.d(TAG, "Found ${productDetailsList.size} products.")
+        billingClient.queryProductDetailsAsync(params) { result, list ->
+            if (result.responseCode == BillingResponseCode.OK) {
+                _productDetailsMap.value = list.associateBy { it.productId }
+                Log.d(TAG, "Loaded ${list.size} product details")
             } else {
-                Log.e(TAG, "Failed to query products: ${billingResult.debugMessage}")
+                Log.e(TAG, "Product query failed: ${result.debugMessage}")
             }
         }
     }
 
     /**
-     * Launches the official Google Play purchase sheet.
+     * Handles purchases that already exist (crash recovery / reinstall safety)
      */
+    private fun queryExistingPurchases() {
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(BillingClient.ProductType.INAPP)
+            .build()
+
+        billingClient.queryPurchasesAsync(params) { result, purchases ->
+            if (result.responseCode == BillingResponseCode.OK) {
+                purchases.forEach { handlePurchase(it) }
+            }
+        }
+    }
+
+    // -----------------------------
+    // PURCHASE FLOW
+    // -----------------------------
+
     fun launchPurchaseFlow(activity: Activity, productId: String) {
         val productDetails = _productDetailsMap.value[productId]
         if (productDetails == null) {
-            Log.e(TAG, "Product details not found for: $productId")
+            Log.e(TAG, "No ProductDetails for $productId")
             return
         }
 
-        val productDetailsParamsList = listOf(
-            BillingFlowParams.ProductDetailsParams.newBuilder()
-                .setProductDetails(productDetails)
-                .build()
-        )
-
-        val billingFlowParams = BillingFlowParams.newBuilder()
-            .setProductDetailsParamsList(productDetailsParamsList)
+        val params = BillingFlowParams.newBuilder()
+            .setProductDetailsParamsList(
+                listOf(
+                    BillingFlowParams.ProductDetailsParams.newBuilder()
+                        .setProductDetails(productDetails)
+                        .build()
+                )
+            )
             .build()
 
-        billingClient.launchBillingFlow(activity, billingFlowParams)
+        billingClient.launchBillingFlow(activity, params)
     }
 
-    /**
-     * Processes a successful purchase. VERY IMPORTANT: Must Acknowledge!
-     */
+    // -----------------------------
+    // PURCHASE HANDLING
+    // -----------------------------
+
     private fun handlePurchase(purchase: Purchase) {
-        if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-            if (!purchase.isAcknowledged) {
-                val acknowledgePurchaseParams = AcknowledgePurchaseParams.newBuilder()
-                    .setPurchaseToken(purchase.purchaseToken)
-                    .build()
+        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
+        if (purchase.isAcknowledged) return // 🔒 DOUBLE-REWARD GUARD
 
-                billingClient.acknowledgePurchase(acknowledgePurchaseParams) { billingResult ->
-                    if (billingResult.responseCode == BillingResponseCode.OK) {
-                        Log.d(TAG, "Purchase acknowledged successfully.")
+        val acknowledgeParams = AcknowledgePurchaseParams.newBuilder()
+            .setPurchaseToken(purchase.purchaseToken)
+            .build()
 
-                        // REWARD THE USER
-                        val coinsToAdd = when (purchase.products.firstOrNull()) {
-                            "coins_small" -> 1000
-                            "coins_medium" -> 7500
-                            "coins_large" -> 15000
-                            "coins_mega" -> 75000
-                            else -> 0
-                        }
+        billingClient.acknowledgePurchase(acknowledgeParams) { result ->
+            if (result.responseCode == BillingResponseCode.OK) {
+                Log.d(TAG, "Purchase acknowledged")
 
-                        if (coinsToAdd > 0) {
-                            coroutineScope.launch(Dispatchers.Main) {
-                                onCoinsPurchased(coinsToAdd)
-                            }
-                        }
+                val productId = purchase.products.firstOrNull()
+                val coins = CoinPacks.amounts[productId] ?: 0
+
+                if (coins > 0) {
+                    coroutineScope.launch(Dispatchers.Main) {
+                        onCoinsPurchased(coins)
                     }
                 }
+            } else {
+                Log.e(TAG, "Acknowledge failed: ${result.debugMessage}")
             }
         }
-    }
-
-    fun endConnection() {
-        billingClient.endConnection()
     }
 
     companion object {
