@@ -192,3 +192,43 @@ fun generateDifficultyAdjustedPreview(
     return adjustedPool.shuffled().take(3)
 }
 
+/**
+ * Non-mutating theoretical placement check for Block (runtime Block).
+ * Returns true if given Block can be placed anywhere on `board`.
+ */
+fun canPlaceBlock(board: GameGrid, block: Block): Boolean {
+    val size = board.size
+    if (size == 0) return false
+
+    for (row in 0 until size) {
+        for (col in 0 until size) {
+            var fits = true
+            for (offset in block.shape) {
+                val r = row + offset.row
+                val c = col + offset.col
+                if (r !in 0 until size || c !in 0 until size || board[r][c] != null) {
+                    fits = false
+                    break
+                }
+            }
+            if (fits) return true
+        }
+    }
+
+    return false
+}
+
+/**
+ * Attempts up to [maxAttempts] to generate a 3-block inventory where at least one
+ * block is placeable somewhere on the board. Falls back to a random inventory
+ * if no such inventory can be generated (allowing legitimate game-over).
+ */
+fun getSmartInventory(board: GameGrid, allBlocks: List<Block>, maxAttempts: Int = 12): List<Block> {
+    repeat(maxAttempts) {
+        val inventory = allBlocks.shuffled().take(3)
+        if (inventory.any { canPlaceBlock(board, it) }) return inventory
+    }
+
+    // Fallback: return a random inventory (may be unplaceable -> true game-over)
+    return allBlocks.shuffled().take(3)
+}

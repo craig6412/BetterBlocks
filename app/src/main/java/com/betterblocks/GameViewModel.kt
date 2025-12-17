@@ -280,10 +280,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * @return List of 3 blocks optimized for current board state
      */
     private fun generateNewBlocks(board: GameGrid): List<Block> {
-        return generateSmartPreview(
-            board = board,
-            allBlocks = BLOCK_MANAGER
-        )
+        // Use a bounded retry smart inventory generator: prefers inventories where at least one block fits
+        return getSmartInventory(board = board, allBlocks = BLOCK_MANAGER, maxAttempts = 12)
     }
 
     // --- Persistence Helpers ---
