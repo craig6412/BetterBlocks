@@ -107,6 +107,39 @@ object SweepEngine {
         )
     }
 
+    // New helper: produce a smoothed gradient by sampling rainbowColorAt across a small window
+    fun smoothRainbowSamples(centerProgress: Float, spread: Float = 0.25f, samples: Int = 9, desaturate: Float = 0f): List<Color> {
+        if (samples <= 1) return listOf(rainbowColorAt(centerProgress))
+        val out = mutableListOf<Color>()
+        val step = (spread * 2f) / (samples - 1)
+        for (i in 0 until samples) {
+            val p = (centerProgress - spread) + i * step
+            // wrap progress to 0..1
+            var wrapped = p
+            while (wrapped < 0f) wrapped += 1f
+            while (wrapped > 1f) wrapped -= 1f
+            val c = rainbowColorAt(wrapped)
+            out += if (desaturate > 0f) desaturateColor(c, desaturate) else c
+        }
+        return out
+    }
+
+    // Simple desaturation: lerp toward a neutral gray and slightly reduce saturation by mixing toward average
+    private fun desaturateColor(c: Color, amount: Float): Color {
+        val gray = (c.red + c.green + c.blue) / 3f
+        val r = c.red + (gray - c.red) * amount
+        val g = c.green + (gray - c.green) * amount
+        val b = c.blue + (gray - c.blue) * amount
+        // Slightly bias away from pure extremes to avoid neon spikes
+        val blend = 0.92f
+        return Color(
+            red = (r * blend + 0.08f * 0.5f).coerceIn(0f, 1f),
+            green = (g * blend + 0.08f * 0.5f).coerceIn(0f, 1f),
+            blue = (b * blend + 0.08f * 0.5f).coerceIn(0f, 1f),
+            alpha = c.alpha
+        )
+    }
+
     fun createSweepBrush(
         sweepProgress: Float,
         isRow: Boolean,
@@ -124,6 +157,37 @@ object SweepEngine {
                 colors = RAINBOW_COLORS,
                 start = Offset(0f, totalPixels * sweepProgress - sweepLength),
                 end = Offset(0f, totalPixels * sweepProgress + sweepLength)
+            )
+        }
+    }
+
+    // New: create a soft, wide outer glow brush for the sweep that samples the rainbow smoothly
+    fun createSoftOuterGlowBrush(
+        sweepProgress: Float,
+        isRow: Boolean,
+        totalPixels: Float,
+        cellPixelSize: Float
+    ): Brush {
+        // Make glow extend well beyond the board edges and be significantly wider than the sweep
+        val glowExtent = cellPixelSize * 4f + totalPixels * 0.08f
+        val centerPx = sweepProgress * totalPixels
+        val startPx = centerPx - glowExtent - totalPixels * 0.25f
+        val endPx = centerPx + glowExtent + totalPixels * 0.25f
+
+        // Sample a set of colors around the sweep center to produce a smooth, blended gradient
+        // Use slightly stronger desaturation and slightly fewer samples to avoid neon spikes
+        val samples = smoothRainbowSamples(sweepProgress, spread = 0.4f, samples = 9, desaturate = 0.5f)
+        return if (isRow) {
+            Brush.linearGradient(
+                colors = samples,
+                start = Offset(startPx, 0f),
+                end = Offset(endPx, 0f)
+            )
+        } else {
+            Brush.linearGradient(
+                colors = samples,
+                start = Offset(0f, startPx),
+                end = Offset(0f, endPx)
             )
         }
     }
@@ -432,6 +496,107 @@ class LineClearAnimator {
         fadeOutParticles(particles, lineInfo, targetCells, updateState)
     }
 
+
+    @Composable
+    fun SweepGlowLayer(
+        state: LineClearAnimationState,
+        cellPixelSize: Float,
+        gridSize: Int,
+        modifier: Modifier = Modifier.fillMaxSize()
+    ) {
+        val line = state.activeLine ?: return
+        if (state.sweepProgress <= 0f) return
+
+        Canvas(modifier) {
+            val totalSizePx = gridSize * cellPixelSize
+            val sweepPos = state.sweepProgress * totalSizePx
+
+            // WIDER than the line (this is the key)
+            val glowThickness = cellPixelSize * 2.4f
+
+            // Compute band bounds so the glow is constrained to the cleared row/column
+            if (line.isRow) {
+                val centerY = line.index * cellPixelSize + cellPixelSize / 2f
+                val top = (centerY - glowThickness).coerceAtLeast(0f)
+                val bandHeight = (glowThickness * 2f).coerceAtMost(size.height - top)
+
+                // Outer soft glow (smoothed rainbow, desaturated)
+                try {
+                    val outerBrush = SweepEngine.createSoftOuterGlowBrush(
+                        sweepProgress = state.sweepProgress,
+                        isRow = true,
+                        totalPixels = totalSizePx,
+                        cellPixelSize = cellPixelSize
+                    )
+                    drawRect(
+                        brush = outerBrush,
+                        topLeft = Offset(0f, top),
+                        size = androidx.compose.ui.geometry.Size(size.width, bandHeight),
+                        blendMode = BlendMode.Screen,
+                        alpha = 0.45f
+                    )
+                } catch (_: Exception) {
+                }
+
+                // Inner brighter sweep band (narrower) — keep additive feel
+                val innerBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.White.copy(alpha = 0.22f),
+                        Color.Transparent
+                    ),
+                    startY = sweepPos - glowThickness,
+                    endY = sweepPos + glowThickness
+                )
+                drawRect(
+                    brush = innerBrush,
+                    topLeft = Offset(0f, top),
+                    size = androidx.compose.ui.geometry.Size(size.width, bandHeight),
+                    blendMode = BlendMode.Plus
+                )
+
+            } else {
+                val centerX = line.index * cellPixelSize + cellPixelSize / 2f
+                val left = (centerX - glowThickness).coerceAtLeast(0f)
+                val bandWidth = (glowThickness * 2f).coerceAtMost(size.width - left)
+
+                // Outer soft glow (smoothed rainbow, desaturated)
+                try {
+                    val outerBrush = SweepEngine.createSoftOuterGlowBrush(
+                        sweepProgress = state.sweepProgress,
+                        isRow = false,
+                        totalPixels = totalSizePx,
+                        cellPixelSize = cellPixelSize
+                    )
+                    drawRect(
+                        brush = outerBrush,
+                        topLeft = Offset(left, 0f),
+                        size = androidx.compose.ui.geometry.Size(bandWidth, size.height),
+                        blendMode = BlendMode.Screen,
+                        alpha = 0.45f
+                    )
+                } catch (_: Exception) {
+                }
+
+                // Inner brighter sweep band (narrower) — keep additive feel
+                val innerBrush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color.White.copy(alpha = 0.22f),
+                        Color.Transparent
+                    ),
+                    startX = sweepPos - glowThickness,
+                    endX = sweepPos + glowThickness
+                )
+                drawRect(
+                    brush = innerBrush,
+                    topLeft = Offset(left, 0f),
+                    size = androidx.compose.ui.geometry.Size(bandWidth, size.height),
+                    blendMode = BlendMode.Plus
+                )
+            }
+        }
+    }
     private suspend fun fadeOutParticles(
         particles: MutableList<Particle>,
         lineInfo: LineInfo,

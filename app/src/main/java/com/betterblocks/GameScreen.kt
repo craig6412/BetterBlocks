@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowDropUp
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -37,6 +38,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
+import android.app.Activity
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import com.betterblocks.ui.sw
@@ -117,13 +119,14 @@ fun GameScreen(
     onDismissFirstGameOver: () -> Unit = {},
     onDismissPurchaseSuccess: () -> Unit = {},
     onClearCoinAnimation: () -> Unit = {},
-    onDismissShopBubble: () -> Unit = {},
+    onDismissShopBubble: () -> Unit,
     onWatchAd: () -> Unit,
     onGoToShop: () -> Unit,
     onDismissZeroCoins: () -> Unit = {},
     onClearAnimationFinished: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = remember { context as? Activity }
     val density = LocalDensity.current
     // Haptic feedback: use a safe no-op so builds/previews don't fail if platform API is unavailable.
     val performHaptic: (HapticFeedbackType) -> Unit = { /* no-op (device may still have haptics) */ }
@@ -674,8 +677,41 @@ fun GameScreen(
             )
         }
 
-        // Show Game Over summary dialog when ViewModel marks the game over OR explicitly requests the summary
-        if (!LocalInspectionMode.current && (uiState.isGameOver || uiState.showGameSummaryDialog)) {
+        // ----------------------------------------------------------------------
+        // Game Over flow: run animator, then show summary dialog (root GameScreen)
+        // ----------------------------------------------------------------------
+        val gameOverAnimator = remember { com.betterblocks.animation.GameOverAnimator() }
+        var gameOverAnimState by remember { mutableStateOf(com.betterblocks.animation.GameOverAnimationState()) }
+        var showGameOverDialogLocal by remember { mutableStateOf(false) }
+
+        // Persisted counter for games played to gate interstitials
+        var gamesPlayed by rememberSaveable { mutableStateOf(0) }
+
+        LaunchedEffect(uiState.isGameOver, uiState.showGameSummaryDialog) {
+            showGameOverDialogLocal = false
+            if (uiState.isGameOver || uiState.showGameSummaryDialog) {
+                // Run animation; update local state and show dialog only after completion
+                gameOverAnimator.run(
+                    update = { st -> gameOverAnimState = st },
+                    onComplete = { showGameOverDialogLocal = true }
+                )
+            } else {
+                gameOverAnimState = com.betterblocks.animation.GameOverAnimationState()
+            }
+        }
+
+        // Render overlay above board but beneath dialogs
+        if (gameOverAnimState.isRunning || gameOverAnimState.progress > 0f || gameOverAnimState.dimAlpha > 0f || gameOverAnimState.glowAlpha > 0f) {
+            com.betterblocks.animation.GameOverOverlay(
+                state = gameOverAnimState,
+                cellDp = cellDp,
+                gridSize = 9,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // Show Game Over summary dialog only after the animation finished
+        if (!LocalInspectionMode.current && (uiState.isGameOver || uiState.showGameSummaryDialog) && showGameOverDialogLocal) {
             Log.d("GameScreen", "Showing GameOverSummaryDialog -> isGameOver=${uiState.isGameOver} showGameSummaryDialog=${uiState.showGameSummaryDialog}")
             GameOverSummaryDialog(
                 finalScore = uiState.score,
@@ -685,16 +721,22 @@ fun GameScreen(
                 trophyTier = uiState.trophyTier,
                 isNewHighScore = uiState.showHighScoreAnim,
                 onPlayAgain = {
-                    // Restart the game via provided callback
+                    // Play again handler — increment games counter and show interstitial every 3rd completed game
+                    gamesPlayed += 1
+                    val shouldShowAd = (gamesPlayed % 3 == 0)
+                    if (shouldShowAd && activity != null) {
+                        // Defer to AdManager to show interstitial; ensure it doesn't run during animation
+                        try {
+                            com.betterblocks.ads.AdManager.tryShowInterstitial(activity)
+                        } catch (t: Throwable) {
+                            Log.w("GameScreen", "Failed to show interstitial: ${t.message}")
+                        }
+                    }
+                    // Reset game via provided callback
                     onReset()
                 },
-                onMainMenu = {
-                    onGoToMenu()
-                },
-                onShare = {
-                    // Use helper from GameOverSummaryDialog to create a share intent
-                    shareGameResults(context, uiState.score, uiState.trophyTier)
-                }
+                onMainMenu = { onGoToMenu() },
+                onShare = { shareGameResults(context, uiState.score, uiState.trophyTier) }
             )
         }
 

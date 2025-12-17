@@ -66,6 +66,94 @@ fun SweepOverlay(
         val cellSizePx = cellDp.toPx()
         val totalSize = gridSize * cellSizePx
 
+        // Safety guard: only render sweep glow when progress is > 0
+        if (progress <= 0f) return@Canvas
+
+        // Draw a subtle, wide outer glow behind the sweep to make it feel cinematic.
+        // This glow uses a smoothed, slightly desaturated rainbow and should be constrained to the cleared band.
+        try {
+            val glowThickness = cellSizePx * 2.6f // ~2.5-3.0x cell height as requested
+            if (isRow) {
+                val centerY = (lineIndex + 0.5f) * cellSizePx
+                val top = (centerY - glowThickness).coerceAtLeast(0f)
+                val bandHeight = ((glowThickness * 2f).coerceAtMost(size.height - top)).coerceAtLeast(0f)
+
+                // Rainbow runs along X (sweep axis); brush provided by SweepEngine is horizontal when isRow=true
+                val outerBrush = SweepEngine.createSoftOuterGlowBrush(
+                    sweepProgress = progress,
+                    isRow = true,
+                    totalPixels = totalSize,
+                    cellPixelSize = cellSizePx
+                )
+
+                // Draw the rainbow band (Screen to be subtle)
+                drawRect(
+                    brush = outerBrush,
+                    topLeft = Offset(0f, top),
+                    size = androidx.compose.ui.geometry.Size(size.width, bandHeight),
+                    blendMode = BlendMode.Screen,
+                    alpha = 0.45f
+                )
+
+                // Perpendicular alpha feather: strongest in center, transparent at edges
+                val maskBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.Black.copy(alpha = 0f),
+                        Color.Black.copy(alpha = 1f),
+                        Color.Black.copy(alpha = 0f)
+                    ),
+                    startY = top,
+                    endY = top + bandHeight
+                )
+                // Use DstIn so this mask multiplies the existing rainbow band's alpha
+                drawRect(
+                    brush = maskBrush,
+                    topLeft = Offset(0f, top),
+                    size = androidx.compose.ui.geometry.Size(size.width, bandHeight),
+                    blendMode = BlendMode.DstIn
+                )
+
+            } else {
+                val centerX = (lineIndex + 0.5f) * cellSizePx
+                val left = (centerX - glowThickness).coerceAtLeast(0f)
+                val bandWidth = ((glowThickness * 2f).coerceAtMost(size.width - left)).coerceAtLeast(0f)
+
+                // Rainbow runs along Y for columns (SweepEngine handles vertical gradients when isRow=false)
+                val outerBrush = SweepEngine.createSoftOuterGlowBrush(
+                    sweepProgress = progress,
+                    isRow = false,
+                    totalPixels = totalSize,
+                    cellPixelSize = cellSizePx
+                )
+
+                drawRect(
+                    brush = outerBrush,
+                    topLeft = Offset(left, 0f),
+                    size = androidx.compose.ui.geometry.Size(bandWidth, size.height),
+                    blendMode = BlendMode.Screen,
+                    alpha = 0.45f
+                )
+
+                val maskBrush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Black.copy(alpha = 0f),
+                        Color.Black.copy(alpha = 1f),
+                        Color.Black.copy(alpha = 0f)
+                    ),
+                    startX = left,
+                    endX = left + bandWidth
+                )
+                drawRect(
+                    brush = maskBrush,
+                    topLeft = Offset(left, 0f),
+                    size = androidx.compose.ui.geometry.Size(bandWidth, size.height),
+                    blendMode = BlendMode.DstIn
+                )
+            }
+        } catch (_: Exception) {
+            // no-op; keep stable if helper isn't available
+        }
+
         // Multi-phase animation for dramatic effect
         val earlyProgress = (progress * 1.3f).coerceIn(0f, 1f)
         val lateProgress = ((progress - 0.3f) * 1.5f).coerceIn(0f, 1f)
@@ -99,9 +187,9 @@ fun SweepOverlay(
                 val trailBrush = Brush.horizontalGradient(
                     colors = listOf(
                         Color(0x00000000),
-                        Color(0xFF00B0FF).copy(alpha = 0.6f),
-                        Color(0xFF00E5FF).copy(alpha = 0.8f),
-                        Color(0xFFFFFFFF).copy(alpha = 0.9f)
+                        Color(0xFF00B0FF).copy(alpha = 0.5f),
+                        Color(0xFF00E5FF).copy(alpha = 0.6f),
+                        Color(0xFFFFFFFF).copy(alpha = 0.7f)
                     ),
                     startX = trailStart - cellSizePx * 3f,
                     endX = arcPosition
@@ -185,9 +273,9 @@ fun SweepOverlay(
                 val trailBrush = Brush.verticalGradient(
                     colors = listOf(
                         Color(0x00000000),
-                        Color(0xFF00B0FF).copy(alpha = 0.6f),
-                        Color(0xFF00E5FF).copy(alpha = 0.8f),
-                        Color(0xFFFFFFFF).copy(alpha = 0.9f)
+                        Color(0xFF00B0FF).copy(alpha = 0.5f),
+                        Color(0xFF00E5FF).copy(alpha = 0.6f),
+                        Color(0xFFFFFFFF).copy(alpha = 0.7f)
                     ),
                     startY = trailStart - cellSizePx * 3f,
                     endY = arcPosition
@@ -439,7 +527,17 @@ fun AnimatedGameBoard(
         onAnimationComplete = onClearAnimationFinished
     )
 
-    val previewClearLines = uiState.previewClearIndices
+    // Always derive preview lines from the ghost placement so preview appears while dragging.
+    val previewClearLinesSet: Set<Int> = remember(board, ghostBlock, ghostOrigin, uiState.previewIsRow) {
+        computePreviewClearLinesFromGhost(
+            board = board,
+            gridSize = gridSize,
+            ghostBlock = ghostBlock,
+            ghostOrigin = ghostOrigin,
+            previewIsRow = uiState.previewIsRow
+        )
+    }
+    val previewClearLines = previewClearLinesSet.toList()
     val previewTintColor = pickTintColor(uiState.moveNumber)
 
     var boardWindowPos by remember { mutableStateOf(Offset.Zero) }
@@ -495,9 +593,7 @@ fun AnimatedGameBoard(
                 // Ghost block tint suppressed here — handled by dedicated ghost layer.
                 val ghostColor = Color.Transparent
 
-                val isPreviewTinted = !isClearing &&
-                        if (uiState.previewIsRow) (r in previewClearLines)
-                        else (c in previewClearLines)
+                val isPreviewTinted = if (uiState.previewIsRow) (r in previewClearLines) else (c in previewClearLines)
 
                 AnimatedBoardCell(
                     cell = cell,
@@ -591,25 +687,87 @@ fun AnimatedGameBoard(
             )
         )
 
-        for (lineIndex in previewClearLines) {
-            Canvas(Modifier.fillMaxSize()) {
-                val cellPx = cellDp.toPx()
-                val glowColor = previewTintColor.copy(alpha = pulseAlpha)
+        // Render preview glow only when ghost exists and is valid; computation above still runs so preview is available immediately during drag
+        if (ghostBlock != null && ghostOrigin != null && isGhostValid && previewClearLines.isNotEmpty()) {
+            for (lineIndex in previewClearLines) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val cellPx = cellDp.toPx()
+                    // Slightly desaturate preview color (mix toward gray)
+                    val c = previewTintColor
+                    val gray = (c.red + c.green + c.blue) / 3f
+                    val desatFactor = 0.22f
+                    val desatColor = Color(
+                        red = c.red + (gray - c.red) * desatFactor,
+                        green = c.green + (gray - c.green) * desatFactor,
+                        blue = c.blue + (gray - c.blue) * desatFactor,
+                        alpha = c.alpha
+                    )
 
-                if (uiState.previewIsRow) {
-                    val y = lineIndex * cellPx
-                    drawRect(
-                        color = glowColor,
-                        topLeft = Offset(0f, y),
-                        size = androidx.compose.ui.geometry.Size(size.width, cellPx)
-                    )
-                } else {
-                    val x = lineIndex * cellPx
-                    drawRect(
-                        color = glowColor,
-                        topLeft = Offset(x, 0f),
-                        size = androidx.compose.ui.geometry.Size(cellPx, size.height)
-                    )
+                    // Pulse modulation: pulseAlpha is ~0.20..0.30; center is 0.25 -> map to ±10% modulation
+                    val modulation = 1f + (pulseAlpha - 0.25f) * 2f // ±0.1 range
+
+                    // Glow sizing
+                    val extension = cellPx * 0.4f // feather extends ~0.4 cell beyond the line
+                    val glowThickness = cellPx // base band equals cell height/width
+
+                    if (uiState.previewIsRow) {
+                        val y = lineIndex * cellPx
+                        val center = y + cellPx * 0.5f
+                        val top = (center - glowThickness / 2f - extension).coerceAtLeast(0f)
+                        val bandHeight = ((glowThickness + extension * 2f).coerceAtMost(size.height - top)).coerceAtLeast(0f)
+
+                        // Layer A: subtle base fill (very low alpha)
+                        val baseFillAlpha = (0.12f * modulation).coerceIn(0f, 0.2f)
+                        drawRect(
+                            color = desatColor.copy(alpha = baseFillAlpha),
+                            topLeft = Offset(0f, top),
+                            size = androidx.compose.ui.geometry.Size(size.width, bandHeight)
+                        )
+
+                        // Layer B: perpendicular feather (vertical gradient) centered on band
+                        val edgeAlpha = (0.45f * modulation).coerceIn(0f, 0.6f)
+                        val mask = Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.5f to desatColor.copy(alpha = edgeAlpha),
+                            1f to Color.Transparent,
+                            startY = top,
+                            endY = top + bandHeight
+                        )
+                        drawRect(
+                            brush = mask,
+                            topLeft = Offset(0f, top),
+                            size = androidx.compose.ui.geometry.Size(size.width, bandHeight)
+                        )
+
+                    } else {
+                        val x = lineIndex * cellPx
+                        val center = x + cellPx * 0.5f
+                        val left = (center - glowThickness / 2f - extension).coerceAtLeast(0f)
+                        val bandWidth = ((glowThickness + extension * 2f).coerceAtMost(size.width - left)).coerceAtLeast(0f)
+
+                        // Layer A: subtle base fill (very low alpha)
+                        val baseFillAlpha = (0.12f * modulation).coerceIn(0f, 0.2f)
+                        drawRect(
+                            color = desatColor.copy(alpha = baseFillAlpha),
+                            topLeft = Offset(left, 0f),
+                            size = androidx.compose.ui.geometry.Size(bandWidth, size.height)
+                        )
+
+                        // Layer B: perpendicular feather (horizontal gradient) centered on band
+                        val edgeAlpha = (0.45f * modulation).coerceIn(0f, 0.6f)
+                        val mask = Brush.horizontalGradient(
+                            0f to Color.Transparent,
+                            0.5f to desatColor.copy(alpha = edgeAlpha),
+                            1f to Color.Transparent,
+                            startX = left,
+                            endX = left + bandWidth
+                        )
+                        drawRect(
+                            brush = mask,
+                            topLeft = Offset(left, 0f),
+                            size = androidx.compose.ui.geometry.Size(bandWidth, size.height)
+                        )
+                    }
                 }
             }
         }
@@ -831,3 +989,49 @@ private data class FragmentSpec(
 )
 
 private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+private fun computePreviewClearLinesFromGhost(
+    board: GameGrid,
+    gridSize: Int,
+    ghostBlock: Block?,
+    ghostOrigin: Pair<Int, Int>?,
+    previewIsRow: Boolean
+): Set<Int> {
+    if (ghostBlock == null || ghostOrigin == null) return emptySet()
+
+    val flat = board.flatten()
+    // snapshot current board into a nullable Int grid
+    val snapshot = Array(gridSize) { r ->
+        MutableList<Int?>(gridSize) { c ->
+            flat.getOrNull(r * gridSize + c)
+        }
+    }
+
+    // stamp ghost block into snapshot using a non-null marker (-1)
+    for (shapeCell in ghostBlock.shape) {
+        val r = ghostOrigin.first + shapeCell.row
+        val c = ghostOrigin.second + shapeCell.col
+        if (r in 0 until gridSize && c in 0 until gridSize) {
+            snapshot[r][c] = -1
+        }
+    }
+
+    val rows = mutableSetOf<Int>()
+    val cols = mutableSetOf<Int>()
+
+    // full rows
+    for (r in 0 until gridSize) {
+        if (snapshot[r].all { it != null }) rows.add(r)
+    }
+
+    // full columns
+    for (c in 0 until gridSize) {
+        var full = true
+        for (r in 0 until gridSize) {
+            if (snapshot[r][c] == null) { full = false; break }
+        }
+        if (full) cols.add(c)
+    }
+
+    return if (previewIsRow) rows else cols
+}

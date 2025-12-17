@@ -501,9 +501,9 @@ private fun MainMenuScreenContent(
                 banner?.invoke()
 
                 Spacer(modifier = Modifier.height(sh(0.01f)))
-
+//version number location
                 Text(
-                    text = "v1.0",
+                    text = "v1.5",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald

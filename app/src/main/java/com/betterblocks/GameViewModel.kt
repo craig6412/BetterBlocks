@@ -623,6 +623,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val points = currentState.clearingCells.size * 50
 
+            // Compute number of distinct rows affected by the rainbow full-board clear
+            val rowsClearedCount = currentState.clearingCells.map { it.row }.toSet().size
+
             _uiState.update {
                 it.copy(
                     board = clearedBoard,
@@ -631,7 +634,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     clearingCells = emptySet(),
                     isRainbowWipeActive = false,
                     isColorWipeAnimating = false,
-                    selectedBlock = null
+                    selectedBlock = null,
+                    linesClearedThisGame = it.linesClearedThisGame + rowsClearedCount
                 )
             }
 
@@ -672,6 +676,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val newBoard = board.map { it.clone() }.toTypedArray()
         var cleared = 0
+        var rowCleared = 0
+        var colCleared = 0
+        // detect whether row/col had any occupied cells
+        for (c in 0 until GRID_SIZE) {
+            if (newBoard[row][c] != null) { rowCleared = 1; break }
+        }
+        for (r in 0 until GRID_SIZE) {
+            if (newBoard[r][col] != null) { colCleared = 1; break }
+        }
+
         for (c in 0 until GRID_SIZE) {
             if (newBoard[row][c] != null) {
                 newBoard[row][c] = null
@@ -693,6 +707,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             newBoard = newBoard,
             clearSelection = true
         )
+
+        // Update the lines-cleared counter: count row and column if they had any cells cleared
+        if (rowCleared + colCleared > 0) {
+            _uiState.update { it.copy(linesClearedThisGame = it.linesClearedThisGame + rowCleared + colCleared) }
+        }
     }
 
     private fun updateScoreAndState(
@@ -998,6 +1017,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 selectedBlock = null,
                 score = it.score + points,
                 clearingCells = cellsToClear  // drive line-clear animation
+                ,
+                // Update the single source-of-truth counter for lines cleared this run.
+                // Use rowsToClear.size + colsToClear.size (counts unique cleared lines)
+                linesClearedThisGame = it.linesClearedThisGame + (rowsToClear.size + colsToClear.size)
             )
         }
 

@@ -6,8 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -154,54 +157,45 @@ fun HighscoreScreen(onBack: () -> Unit) {
 
         Spacer(Modifier.height(16.dp))
 
-        // 3. SCROLLABLE TABS (Fixes the vertical text issue)
-        ScrollableTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = Color.Transparent,
-            contentColor = LightText,
-            edgePadding = 16.dp, // Adds spacing at the start so first tab isn't smashed
-            divider = {}, // Removes the default line
-            indicator = { tabPositions ->
-                val current = tabPositions.getOrNull(pagerState.currentPage)
-                if (current != null) {
-                    Box(
-                        Modifier
-                            .wrapContentSize(unbounded = true)
-                            .offset { IntOffset(current.left.roundToPx(), 0) }
-                            .width(current.width)
-                            .height(4.dp)
-                            .background(
-                                trophyColorForIndex(pagerState.currentPage),
-                                RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                            )
+        // 3. TIER SELECTOR (Pill-style using LazyRow, replaces ScrollableTabRow)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            itemsIndexed(tiers) { index: Int, tier: TrophyTier ->
+                val isSelected = pagerState.currentPage == index
+
+                // Pill container
+                Box(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .padding(horizontal = 0.dp)
+                        .then(
+                            if (isSelected) Modifier
+                                .background(trophyColorForTier(tier).copy(alpha = 0.25f), shape = RoundedCornerShape(50))
+                                .border(1.dp, trophyColorForTier(tier), shape = RoundedCornerShape(50))
+                            else Modifier
+                                .background(Color.Transparent, shape = RoundedCornerShape(50))
+                                .border(1.dp, LightText.copy(alpha = 0.25f), shape = RoundedCornerShape(50))
+                        )
+                        .clickable {
+                            coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                            prefs.edit().putString(KEY_SELECTED_TROPHY_TAB, tier.name).apply()
+                        }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tier.name,
+                        fontFamily = Oswald,
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) trophyColorForTier(tier) else LightText.copy(alpha = 0.6f)
                     )
                 }
             }
-        ) {
-            tiers.forEachIndexed { index, tier ->
-                val isSelected = pagerState.currentPage == index
-                val color = if (isSelected) trophyColorForTier(tier) else LightText.copy(alpha = 0.5f)
-
-                Tab(
-                    selected = isSelected,
-                    onClick = {
-                        coroutineScope.launch { pagerState.animateScrollToPage(index) }
-                        prefs.edit().putString(KEY_SELECTED_TROPHY_TAB, tier.name).apply()
-                    },
-                    text = {
-                        Text(
-                            text = tier.name,
-                            fontFamily = Oswald, // Assuming you have this font variable
-                            fontSize = 14.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = color
-                        )
-                    }
-                )
-            }
         }
-
-        Divider(color = LightText.copy(alpha = 0.1f), thickness = 1.dp)
 
         // 4. PAGER CONTENT
         HorizontalPager(

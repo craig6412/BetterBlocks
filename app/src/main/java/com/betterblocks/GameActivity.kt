@@ -36,13 +36,8 @@ class GameActivity : ComponentActivity() {
                     val viewModel: GameViewModel = viewModel()
                     val uiState by viewModel.uiState.collectAsState()
 
-                    // React to game over transitions and attempt to show interstitials from the Activity
-                    androidx.compose.runtime.LaunchedEffect(uiState.isGameOver) {
-                        if (uiState.isGameOver) {
-                            // Try to show an interstitial on game over (AdManager handles load/show and counters)
-                            AdManager.tryShowInterstitial(this@GameActivity)
-                        }
-                    }
+                    // Note: interstitials are intentionally not auto-shown here.
+                    // Ads are gated and shown from the GameScreen when the user taps Play Again (every Nth game).
 
                     GameScreen(
                         uiState = uiState,
