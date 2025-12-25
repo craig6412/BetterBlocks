@@ -52,3 +52,6 @@ const val KEY_FIRST_GAME_OVER_SHOWN = "first_game_over_shown"
 
 // Track whether the last-chance rainbow dialog has been offered for the current game session
 const val KEY_LAST_CHANCE_OFFERED = "last_chance_offered"
+
+// One-time update gift marker: used to record that a special release gift was applied
+const val KEY_UPDATE_GIFTS_APPLIED = "update_gifts_applied"

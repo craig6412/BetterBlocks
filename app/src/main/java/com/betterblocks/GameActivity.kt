@@ -15,7 +15,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.betterblocks.ads.AdManager
-import com.betterblocks.ui.GameScreen
+import com.betterblocks.GameScreen
 import com.betterblocks.ui.theme.BetterBlocksTheme
 
 class GameActivity : ComponentActivity() {

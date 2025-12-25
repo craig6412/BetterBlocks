@@ -20,27 +20,20 @@ suspend fun PointerInputScope.detectSimpleDragOrTap(
     onTap: () -> Unit
 ) {
     awaitEachGesture {
-        // Wait for initial touch
         val down = awaitFirstDown(requireUnconsumed = false)
         val downPosition = down.position
 
-        Log.d("SimpleGesture", "Touch down at: $downPosition")
-
-        var totalDrag = Offset.Zero
+        var totalDragY = 0f
         var hasDragged = false
 
-        // Start tracking immediately
-        onDragStart(downPosition)
-
-        // Track all pointer movements
-        val success = drag(down.id) { change ->
+        val dragSuccess = drag(down.id) { change ->
             val delta = change.positionChange()
-            totalDrag += delta
+            totalDragY += delta.y
 
-            // Consider it a drag if moved more than 5 pixels
-            if (!hasDragged && (abs(totalDrag.x) > 5f || abs(totalDrag.y) > 5f)) {
+            // ✅ Y-axis ONLY threshold (tune this value if needed)
+            if (!hasDragged && abs(totalDragY) > 12f) {
                 hasDragged = true
-                Log.d("SimpleGesture", "Started dragging")
+                onDragStart(downPosition)
             }
 
             if (hasDragged) {
@@ -50,11 +43,9 @@ suspend fun PointerInputScope.detectSimpleDragOrTap(
         }
 
         if (hasDragged) {
-            Log.d("SimpleGesture", "Drag ended, success=$success")
             onDragEnd()
         } else {
-            Log.d("SimpleGesture", "Detected as tap")
-            onDragEnd() // Clean up drag state
+            // Clean exit, no drag ever started
             onTap()
         }
     }

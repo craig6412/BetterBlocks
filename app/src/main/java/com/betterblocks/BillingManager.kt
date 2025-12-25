@@ -17,7 +17,8 @@ import kotlinx.coroutines.launch
 class BillingManager(
     private val context: Context,
     private val coroutineScope: CoroutineScope,
-    private val onCoinsPurchased: (Int) -> Unit // Callback to give coins to user
+    private val onCoinsPurchased: (Int) -> Unit, // Callback to give coins to user
+    private val isTestMode: Boolean = BuildConfig.DEBUG // Debug-only bypass for local testing
 ) {
 
     // Exposed product details for UI
@@ -132,6 +133,20 @@ class BillingManager(
     // -----------------------------
 
     fun launchPurchaseFlow(activity: Activity, productId: String) {
+        // Test-mode bypass: immediately grant coins without contacting Play Billing
+        if (isTestMode) {
+            val coins = CoinPacks.amounts[productId] ?: 0
+            Log.d(TAG, "Test mode: granting $coins coins for $productId")
+            coroutineScope.launch(Dispatchers.Main) {
+                try {
+                    if (coins > 0) onCoinsPurchased(coins)
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Error granting test coins for $productId", ex)
+                }
+            }
+            return
+        }
+
         val productDetails = _productDetailsMap.value[productId]
         if (productDetails == null) {
             Log.e(TAG, "No ProductDetails for $productId")
@@ -157,27 +172,59 @@ class BillingManager(
 
     private fun handlePurchase(purchase: Purchase) {
         if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
-        if (purchase.isAcknowledged) return // 🔒 DOUBLE-REWARD GUARD
 
-        val acknowledgeParams = AcknowledgePurchaseParams.newBuilder()
-            .setPurchaseToken(purchase.purchaseToken)
-            .build()
+        val productId = purchase.products.firstOrNull()
+        if (productId == null) {
+            Log.e(TAG, "Purchased product id missing")
+            return
+        }
 
-        billingClient.acknowledgePurchase(acknowledgeParams) { result ->
-            if (result.responseCode == BillingResponseCode.OK) {
-                Log.d(TAG, "Purchase acknowledged")
+        val coins = CoinPacks.amounts[productId] ?: 0
 
-                val productId = purchase.products.firstOrNull()
-                val coins = CoinPacks.amounts[productId] ?: 0
+        // If this is a coin pack (consumable), consume it then grant coins in the consume callback.
+        if (coins > 0) {
+            // Even if purchase.isAcknowledged is true, consumables should be consumed to allow repurchase.
+            val consumeParams = ConsumeParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
 
-                if (coins > 0) {
+            billingClient.consumeAsync(consumeParams) { result, _ ->
+                if (result.responseCode == BillingResponseCode.OK) {
+                    Log.d(TAG, "Consumed purchase $productId -> granting $coins coins")
                     coroutineScope.launch(Dispatchers.Main) {
-                        onCoinsPurchased(coins)
+                        try {
+                            onCoinsPurchased(coins)
+                        } catch (ex: Exception) {
+                            Log.e(TAG, "Error delivering coins for $productId", ex)
+                        }
                     }
+                } else {
+                    Log.e(TAG, "Consume failed for $productId: ${result.debugMessage}")
                 }
-            } else {
-                Log.e(TAG, "Acknowledge failed: ${result.debugMessage}")
             }
+
+            return
+        }
+
+        // Non-consumable / entitlement handling: acknowledge if not already acknowledged
+        if (!purchase.isAcknowledged) {
+            val acknowledgeParams = AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
+
+            billingClient.acknowledgePurchase(acknowledgeParams) { result ->
+                if (result.responseCode == BillingResponseCode.OK) {
+                    Log.d(TAG, "Purchase acknowledged")
+
+                    // If there is any non-consumable entitlement side-effect, handle it here
+                    // (e.g., unlock feature). For now we only log.
+                    Log.d(TAG, "Non-consumable purchase processed: $productId")
+                } else {
+                    Log.e(TAG, "Acknowledge failed: ${result.debugMessage}")
+                }
+            }
+        } else {
+            Log.d(TAG, "Purchase already acknowledged for $productId")
         }
     }
 

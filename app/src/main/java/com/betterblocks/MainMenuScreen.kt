@@ -59,6 +59,7 @@ import com.betterblocks.KEY_FIREBASE_USER_ID
 import com.betterblocks.KEY_HIGH_SCORE
 import com.betterblocks.KEY_LIFETIME_COINS
 import com.betterblocks.PlayerNameDialog
+import com.betterblocks.DeviceClass
 
 
 // Gradient colors for background
@@ -503,7 +504,7 @@ private fun MainMenuScreenContent(
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 //version number location
                 Text(
-                    text = "v1.5",
+                    text = "v1.8",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald

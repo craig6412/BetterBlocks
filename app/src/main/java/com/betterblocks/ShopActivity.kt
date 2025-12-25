@@ -69,13 +69,17 @@ class ShopActivity : ComponentActivity() {
         window.navigationBarColor = "#1E214A".toColorInt()
 
         // 2. Initialize Billing Manager
-        billingManager = BillingManager(this, lifecycleScope) { coinsPurchased ->
-            // This callback runs when a purchase is SUCCESSFUL
-            // Centralize updates through ShopRepository
-            shopRepo.addCoins(coinsPurchased)
-            purchasedCoins = coinsPurchased
-            showPurchaseSuccessDialog = true
-        }
+        billingManager = BillingManager(
+            this,
+            lifecycleScope,
+            onCoinsPurchased = { coinsPurchased ->
+                // This callback runs when a purchase is SUCCESSFUL
+                // Centralize updates through ShopRepository
+                shopRepo.addCoins(coinsPurchased)
+                purchasedCoins = coinsPurchased
+                showPurchaseSuccessDialog = true
+            }
+        )
         billingManager.startConnection()
 
         // repository singleton
@@ -600,7 +604,7 @@ fun CompactTrophyCard(
                     Text(
                         text = "UNLOCK",
                         fontSize = 11.sp,
-                        color = LightText
+                        color = Color.Black
                     )
                 }
             }

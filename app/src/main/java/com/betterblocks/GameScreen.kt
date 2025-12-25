@@ -1,4 +1,4 @@
-package com.betterblocks.ui
+package com.betterblocks
 
 //calling Game REady for closed testing
 
@@ -32,6 +32,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.betterblocks.BLOCK_MANAGER
+import com.betterblocks.BLOCK_DRAWABLES
 import com.betterblocks.Block
 import com.betterblocks.BlockGrid
 import com.betterblocks.BottomBar
@@ -78,6 +81,13 @@ import com.betterblocks.model.TrophyTier
 import com.betterblocks.trophyColorForTier
 import kotlin.times
 
+// Add the missing UI helper imports and TextStyle/Shadow here near the top
+import com.betterblocks.ui.AvailableBlocks
+import com.betterblocks.ui.GameOverSummaryDialog
+import com.betterblocks.ui.shareGameResults
+import com.betterblocks.ui.ZeroCoinsDialog
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Shadow
 
 //song lyrics because I am getting somewhere finally
 
@@ -768,90 +778,194 @@ private fun ColorWheelDialog(
     onDismiss: () -> Unit,
     onSpinFinished: (Int) -> Unit
 ) {
-    // 8-segment wheel
-    val segments = 8
-    val segmentColors = listOf(
-        Color(0xFF2196F3), // Blue
-        Color(0xFF4CAF50), // Green
-        Color(0xFFE91E63), // Pink
-        Color(0xFFFF9800), // Orange
-        Color(0xFF9C27B0), // Purple
-        Color(0xFFF44336), // Red
-        Color(0xFFFFEB3B), // Yellow
-        Color(0xFF00BCD4)  // Teal
-    )
+    // Use dedicated COLOR_WIPE_DRAWABLES (single source-of-truth) and force 7 segments
+    val segments = COLOR_WIPE_DRAWABLES.size.coerceAtMost(7)
 
+    // Map the drawable IDs to approximate display colors for the wheel visuals.
+    // IMPORTANT: This list must match the order of COLOR_WIPE_DRAWABLES exactly (index -> drawable id).
+    val wheelColors = COLOR_WIPE_DRAWABLES.map { drawableRes ->
+        when (drawableRes) {
+            R.drawable.blue -> Color(0xFF1976D2)
+            R.drawable.green -> Color(0xFF43A047)
+            R.drawable.pink -> Color(0xFFE91E63)
+            R.drawable.pumpkin_orange -> Color(0xFFFF6D00)
+            R.drawable.purple -> Color(0xFF8E24AA)
+            R.drawable.red -> Color(0xFFE53935)
+            R.drawable.yellow -> Color(0xFFFFEE58)
+            else -> Color(0xFF111217)
+        }
+    }
+
+    // UI state
     var spinning by remember { mutableStateOf(false) }
+    var winningIndex by remember { mutableStateOf<Int?>(null) }
     val rotation = remember { androidx.compose.animation.core.Animatable(0f) }
     val random = java.util.Random()
     val coroutineScope = rememberCoroutineScope()
 
-    AlertDialog(
-        onDismissRequest = { if (!spinning) onDismiss() },
-        title = { Text(text = "Color Wheel", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.size(sw(0.35f)), contentAlignment = Alignment.Center) {
+    // Visual constants
+    val sweep = 360f / segments
+    val neon = Color(0xFF00E5FF)
+    val panelBg = Color(0xFF0E0F14).copy(alpha = 0.82f)
+
+    // Use Dialog + Surface for perfect centering and proper overlay semantics
+    androidx.compose.ui.window.Dialog(onDismissRequest = { if (!spinning) onDismiss() }) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = panelBg,
+            tonalElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .wrapContentHeight()
+                .padding(16.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                // Title
+                Text(
+                    text = "Color Wheel",
+                    color = neon,
+                    fontFamily = Oswald,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 20.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+
+                // Wheel container — use Box with fixed aspect ratio to ensure perfect centering.
+                Box(modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1f), contentAlignment = Alignment.Center) {
+
+                    // Glow rim behind wheel
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        val radius = size.minDimension / 2f
-                        val center = center
-                        val sweep = 360f / segments
-                        var start = rotation.value % 360f
-                        // Draw segments
-                        for (i in 0 until segments) {
-                            drawArc(
-                                color = segmentColors[i % segmentColors.size],
-                                startAngle = -start + i * sweep,
-                                sweepAngle = sweep,
-                                useCenter = true,
-                                topLeft = center - androidx.compose.ui.geometry.Offset(radius, radius),
-                                size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2)
-                            )
-                        }
-                        // Draw center circle
-                        drawCircle(color = DarkBackground, radius = radius * 0.28f, center = center)
-                    }
-                    // Pointer at top
-                    Box(modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .offset(y = sdp(-0.012f))) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropUp,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(sdp(0.03f))
+                        val r = size.minDimension / 2f
+                        drawCircle(
+                            brush = Brush.radialGradient(listOf(neon.copy(alpha = 0.26f), Color.Transparent)),
+                            radius = r * 1.1f,
+                            center = center
                         )
                     }
+
+                    // Wheel drawing — rotation measured in degrees; 0deg as-drawn corresponds to 3 o'clock.
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val radius = size.minDimension / 2f
+                        val cx = center.x
+                        val cy = center.y
+
+                        // Current rotation normalized to 0..360
+                        val rot = rotation.value % 360f
+
+                        // Draw exactly `segments` arcs in the order of COLOR_WIPE_DRAWABLES.
+                        // Note: drawArc startAngle is measured from 3 o'clock and positive is clockwise.
+                        for (i in 0 until segments) {
+                            val startAngle = -rot + i * sweep
+                            drawArc(
+                                color = wheelColors[i % wheelColors.size],
+                                startAngle = startAngle,
+                                sweepAngle = sweep,
+                                useCenter = true,
+                                topLeft = androidx.compose.ui.geometry.Offset(cx - radius, cy - radius),
+                                size = androidx.compose.ui.geometry.Size(radius * 2f, radius * 2f)
+                            )
+                        }
+
+                        // Draw inner glass hole
+                        drawCircle(color = DarkBackground, radius = radius * 0.28f, center = center)
+
+                        // Rim stroke glow
+                        drawCircle(
+                            color = neon.copy(alpha = 0.22f),
+                            radius = radius * 0.98f,
+                            style = Stroke(width = radius * 0.06f)
+                        )
+
+                        // If a winning segment is set, softly highlight it
+                        winningIndex?.let { win ->
+                            val highlightStart = -rot + win * sweep
+                            drawArc(
+                                color = neon.copy(alpha = 0.14f),
+                                startAngle = highlightStart,
+                                sweepAngle = sweep,
+                                useCenter = true,
+                                topLeft = androidx.compose.ui.geometry.Offset(cx - radius, cy - radius),
+                                size = androidx.compose.ui.geometry.Size(radius * 2f, radius * 2f)
+                            )
+                        }
+                    }
+
+                    // Fixed pointer at 12 o'clock (top) — this is the selection reference (0 degrees)
+                    Box(modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .offset(y = (-6).dp)) {
+                        Canvas(modifier = Modifier.size(28.dp)) {
+                            val w = size.width
+                            val h = size.height
+                            val path = androidx.compose.ui.graphics.Path().apply {
+                                moveTo(w / 2f, 0f)
+                                lineTo(w, h * 0.75f)
+                                lineTo(0f, h * 0.75f)
+                                close()
+                            }
+                            drawPath(path, color = Color.White.copy(alpha = 0.92f))
+                            drawPath(path, color = neon.copy(alpha = 0.4f), style = Stroke(width = 2f))
+                        }
+                    }
                 }
-                Spacer(modifier = Modifier.height(sdp(0.01f)))
-                Text(text = if (spinning) "Spinning..." else "Tap Spin to try your luck!", color = LightText)
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (spinning) return@TextButton
-                spinning = true
-                // Spin asynchronously using coroutineScope
-                val extraRotations = 5 + random.nextInt(6) // between 5..10 full rotations
-                val targetDegrees = extraRotations * 360f + random.nextFloat() * 360f
-                coroutineScope.launch {
-                    rotation.animateTo(targetDegrees, animationSpec = androidx.compose.animation.core.tween(durationMillis = 2400))
-                    // Compute final index — pointer at top (0 degrees) maps to segment index
-                    val finalAngle = (rotation.value % 360f + 360f) % 360f
-                    val sweep = 360f / segments
-                    val index = (((360f - finalAngle + sweep / 2f) / sweep).toInt()).mod(segments)
-                    spinning = false
-                    onSpinFinished(index)
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(text = if (spinning) "Spinning..." else "Tap Spin to pick a color", color = Color(0xFFBFC5D0))
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { if (!spinning) onDismiss() }) {
+                        Text("Cancel", color = Color(0xFFBFC5D0))
+                    }
+
+                    Button(onClick = {
+                        if (spinning) return@Button
+                        spinning = true
+                        winningIndex = null
+
+                        // Choose random target index between 0..segments-1
+                        val targetIndex = random.nextInt(segments)
+
+                        // Math explanation (center-pointer alignment):
+                        // - Each segment i occupies angular interval [i*sweep, i*sweep + sweep) measured from 3 o'clock
+                        // - Segment center (unrotated) = i*sweep + sweep/2
+                        // - We draw arcs with startAngle = -rotation + ... so after rotating by r degrees,
+                        //   the visual center of segment i becomes (i*sweep + sweep/2) - r (measured from 3 o'clock)
+                        // - Pointer at top corresponds to angle -90 degrees (12 o'clock). For the segment center to match pointer:
+                        //     (i*sweep + sweep/2) - r == -90  =>  r == i*sweep + sweep/2 + 90
+                        // - So target rotation r should land at r = centerOfTarget + 90 (plus whole rotations for spin effect).
+
+                        val centerOfTarget = targetIndex * sweep + sweep / 2f
+                        val extraRotations = 6 + random.nextInt(6) // 6..11 full spins for pleasing length
+                        val targetDegrees = extraRotations * 360f + centerOfTarget + 90f
+
+                        coroutineScope.launch {
+                            rotation.animateTo(targetDegrees, animationSpec = androidx.compose.animation.core.tween(durationMillis = 2400))
+                            val finalIndex = targetIndex % segments
+                            Log.d("ColorWheel", "targetDegrees=$targetDegrees finalIndex=$finalIndex")
+
+                            // Show winning highlight immediately, keep dialog visible for a short pause
+                            winningIndex = finalIndex
+
+                            // Pause so the user can visually register the winning segment (1 second)
+                            kotlinx.coroutines.delay(1000L)
+
+                            // Finalize spin state and notify the caller with direct index mapping to COLOR_WIPE_DRAWABLES
+                            spinning = false
+
+                            onSpinFinished(finalIndex)
+                        }
+                    }, enabled = !spinning) {
+                        Text(text = if (spinning) "Spinning..." else "Spin", fontWeight = FontWeight.Bold)
+                    }
                 }
-            }) {
-                Text(if (spinning) "Spinning..." else "Spin")
             }
-        },
-        dismissButton = {
-            TextButton(onClick = { if (!spinning) onDismiss() }) { Text("Cancel") }
-        },
-        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = !spinning, dismissOnBackPress = !spinning)
-    )
+        }
+    }
 }
 
 

@@ -2,6 +2,7 @@ package com.betterblocks
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -225,14 +226,10 @@ fun HighscoreScreen(onBack: () -> Unit) {
                 showNameDialog = false
 
                 val userId = prefs.getString(KEY_FIREBASE_USER_ID, null)
-                val currentScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+                // Do not read/write score from here. Only update display name.
                 if (!userId.isNullOrBlank()) {
-                    FirestoreManager.updateLeaderboard(
-                        userId = userId,
-                        score = currentScore,
-                        tier = playerTier,
-                        playerNameOverride = finalName
-                    )
+                    Log.d("HighScoreActivity", "User changed name -> userId=$userId name=$finalName")
+                    FirestoreManager.updatePlayerNameOnly(userId, finalName)
                 }
             },
             onCancel = { showNameDialog = false }

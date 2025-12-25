@@ -39,7 +39,12 @@ object FirestoreManager {
     // ----------------------------------------------------
     // WRITE / UPDATE SCORE
     // ----------------------------------------------------
-    fun updateLeaderboard(userId: String, score: Int, tier: TrophyTier, playerNameOverride: String? = null) {
+    fun updateLeaderboard(
+        userId: String,
+        score: Int,
+        tier: TrophyTier,
+        playerNameOverride: String? = null
+    ) {
         try {
             val now = System.currentTimeMillis()
             val playerName = playerNameOverride?.takeIf { it.isNotBlank() } ?: currentPlayerName()
@@ -53,6 +58,8 @@ object FirestoreManager {
                 "updatedAt_fallback" to now
             )
 
+            Log.d("FirestoreManager", "updateLeaderboard payload for user=$userId score=$score tier=${tier.name} name=$playerName")
+
             db.collection(COLLECTION)
                 .document(userId)
                 .set(data, SetOptions.merge())
@@ -65,11 +72,39 @@ object FirestoreManager {
         }
     }
 
+    /**
+     * Update only the player's display name. This intentionally does not touch the 'score' field
+     * so UI actions that change name won't accidentally write a 0 score.
+     */
+    fun updatePlayerNameOnly(userId: String, playerName: String) {
+        try {
+            if (playerName.isBlank()) return
+            val now = System.currentTimeMillis()
+            val data = hashMapOf(
+                "userId" to userId,
+                "playerName" to playerName,
+                "updatedAt" to FieldValue.serverTimestamp(),
+                "updatedAt_fallback" to now
+            )
+            Log.d("FirestoreManager", "updatePlayerNameOnly payload for user=$userId name=$playerName")
+            db.collection(COLLECTION)
+                .document(userId)
+                .set(data, SetOptions.merge())
+                .addOnFailureListener {
+                    Log.e("FirestoreManager", "Failed to update player name", it)
+                }
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Exception in updatePlayerNameOnly()", e)
+        }
+    }
+
     fun updateLeaderboardForCurrentPlayer(score: Int) {
+        val high = prefs.getInt(KEY_HIGH_SCORE, 0)
+        if (high <= 0) return
         val userId = prefs.getString(KEY_FIREBASE_USER_ID, null) ?: return
         val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, 0)
-        val tier = getPlayerTier(score, lifetimeCoins, prefs)
-        updateLeaderboard(userId, score, tier)
+        val tier = getPlayerTier(high, lifetimeCoins, prefs)
+        updateLeaderboard(userId, high, tier)
     }
 
     // ----------------------------------------------------
@@ -88,7 +123,8 @@ object FirestoreManager {
                 .limit(100)
                 .get()
                 .addOnSuccessListener { snapshot ->
-                    val list = snapshot.documents.mapNotNull { it.toObject(LeaderboardEntry::class.java) }
+                    val list =
+                        snapshot.documents.mapNotNull { it.toObject(LeaderboardEntry::class.java) }
                     onResult(list)
                 }
                 .addOnFailureListener { error ->
@@ -117,7 +153,8 @@ object FirestoreManager {
                 .limit(100)
                 .get()
                 .addOnSuccessListener { snapshot ->
-                    val list = snapshot.documents.mapNotNull { it.toObject(LeaderboardEntry::class.java) }
+                    val list =
+                        snapshot.documents.mapNotNull { it.toObject(LeaderboardEntry::class.java) }
                     onResult(list)
                 }
                 .addOnFailureListener { error ->

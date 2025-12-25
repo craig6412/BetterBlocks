@@ -35,6 +35,12 @@ val BLOCK_DRAWABLES = listOf(
     R.drawable.rainbow         // 7 (Rainbow Texture)
 )
 
+// COLOR_WIPE_DRAWABLES: Single source of truth for the color-wipe wheel order.
+// This intentionally contains EXACTLY the 7 playable colors (indices 0..6 of BLOCK_DRAWABLES)
+// and excludes the rainbow/baby-blue texture. The wheel and game logic should use this
+// list when mapping wheel segments to drawable IDs.
+val COLOR_WIPE_DRAWABLES: List<Int> = BLOCK_DRAWABLES.subList(0, 7)
+
 /**
  * Represents a single block shape and texture.
  * @param colorResId The Drawable Resource ID (Int) for the block's texture.
@@ -146,84 +152,8 @@ val RAINBOW_BLOCK = Block(
     isSpecial = true
 )
 
-val BLOCK_MANAGER: List<Block> = listOf(
-    // 1-Cell
-    Block(1, "1x1 Dot", BLOCK_DRAWABLES[5], listOf(Coord(0, 0))),
-    // 2-Cell
-    Block(2, "1x2 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1))),
-    // 3-Cell
-    Block(3, "1x3 Bar", BLOCK_DRAWABLES[1], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2))),
-    Block(4, "L Triomino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0), Coord(1, 1))),
-    // 4-Cell
-    Block(5, "1x4 Bar", BLOCK_DRAWABLES[2], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3))),
-    Block(6, "Square", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 0), Coord(1, 1))),
-   // Block(7, "L Tetromino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(2, 1))),
-   // Block(8, "J Tetromino", BLOCK_DRAWABLES[4], listOf(Coord(0, 1), Coord(1, 1), Coord(2, 1), Coord(2, 0))),
-    //Block(9, "T Tetromino", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
-    //Block(10, "S Tetromino", BLOCK_DRAWABLES[1], listOf(Coord(0, 1), Coord(0, 2), Coord(1, 0), Coord(1, 1))),
-    //Block(11, "Z Tetromino", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(0, 1), Coord(1, 1), Coord(1, 2))),
-    // 5-Cell
-    Block(12, "1x5 Bar", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(0, 3), Coord(0, 4))),
-   // Block(13, "L Pentomino", BLOCK_DRAWABLES[3], listOf(Coord(0, 0), Coord(1, 0), Coord(2, 0), Coord(3, 0), Coord(3, 1))),
-    Block(14, "Plus Pentomino", BLOCK_DRAWABLES[2], listOf(Coord(0, 1), Coord(1, 0), Coord(1, 1), Coord(1, 2), Coord(2, 1))),
-    Block(15, "U Pentomino", BLOCK_DRAWABLES[4], listOf(Coord(0, 0), Coord(0, 2), Coord(1, 0), Coord(1, 1), Coord(1, 2))),
-    //Block(16, "Wide T", BLOCK_DRAWABLES[5], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1), Coord(2, 1))),
-    // 9-Cell
-    Block(17, "3x3 Square", BLOCK_DRAWABLES[1], listOf(
-        Coord(0, 0), Coord(0, 1), Coord(0, 2),
-        Coord(1, 0), Coord(1, 1), Coord(1, 2),
-        Coord(2, 0), Coord(2, 1), Coord(2, 2)
-    )),
-    // Misc
-    Block(18, "Small L", BLOCK_DRAWABLES[6], listOf(Coord(0, 0), Coord(1, 0))),
-
-    Block(19, "Small T", BLOCK_DRAWABLES[0], listOf(Coord(0, 0), Coord(0, 1), Coord(0, 2), Coord(1, 1))),
-
-    //new blocks we are addding to mimick most style games like this.
-
-    Block(
-        21, "3x2 Rectangle", BLOCK_DRAWABLES[3],
-        listOf(
-            Coord(0,0), Coord(0,1),
-            Coord(1,0), Coord(1,1),
-            Coord(2,0), Coord(2,1)
-        )
-    ),
-    Block(
-        22, "2x4 Rectangle", BLOCK_DRAWABLES[1],
-        listOf(
-            Coord(0,0), Coord(0,1), Coord(0,2), Coord(0,3),
-            Coord(1,0), Coord(1,1), Coord(1,2), Coord(1,3)
-        )
-    ),
-            Block(
-            23, "4x2 Rectangle", BLOCK_DRAWABLES[4],
-    listOf(
-        Coord(0,0), Coord(0,1),
-        Coord(1,0), Coord(1,1),
-        Coord(2,0), Coord(2,1),
-        Coord(3,0), Coord(3,1)
-    )
-),
-    Block(
-        24, "2x2 Diagonal", BLOCK_DRAWABLES[6],
-        listOf(
-            Coord(0,0),
-            Coord(1,0), Coord(1,1)
-        )
-    ),
-
-    Block(
-        25, "2x2 Reverse Diagonal", BLOCK_DRAWABLES[5],
-        listOf(
-            Coord(0,1),
-            Coord(1,0), Coord(1,1)
-        )
-    )
-
-
-
-)
+// Generate runtime BLOCK_MANAGER from BlockDefinitions catalog so block shapes are authored in one place.
+val BLOCK_MANAGER: List<Block> = BlockManager.toGameBlocks(startingId = 1)
 
 fun getBlockById(id: Int): Block? {
     return BLOCK_MANAGER.firstOrNull { it.id == id }

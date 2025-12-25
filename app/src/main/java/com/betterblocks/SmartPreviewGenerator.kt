@@ -223,12 +223,36 @@ fun canPlaceBlock(board: GameGrid, block: Block): Boolean {
  * block is placeable somewhere on the board. Falls back to a random inventory
  * if no such inventory can be generated (allowing legitimate game-over).
  */
-fun getSmartInventory(board: GameGrid, allBlocks: List<Block>, maxAttempts: Int = 12): List<Block> {
+fun getSmartInventory(
+    board: GameGrid,
+    allBlocks: List<Block>,
+    maxAttempts: Int = 12
+): List<Block> {
+
+    // 1️⃣ Normal behavior: try random inventories first
     repeat(maxAttempts) {
         val inventory = allBlocks.shuffled().take(3)
-        if (inventory.any { canPlaceBlock(board, it) }) return inventory
+        if (inventory.any { canPlaceBlock(board, it) }) {
+            return inventory
+        }
     }
 
-    // Fallback: return a random inventory (may be unplaceable -> true game-over)
+    // 2️⃣ Board is likely crowded — attempt Guaranteed-Fit helper
+    val fittingBlocks = allBlocks.filter { canPlaceBlock(board, it) }
+
+    if (fittingBlocks.isNotEmpty()) {
+        // Pick ONE guaranteed-fit block
+        val guaranteed = fittingBlocks.random()
+
+        // Fill remaining slots randomly (excluding the guaranteed one)
+        val others = allBlocks
+            .filterNot { it.id == guaranteed.id }
+            .shuffled()
+            .take(2)
+
+        return listOf(guaranteed) + others
+    }
+
+    // 3️⃣ Absolute fallback: no blocks fit (true game over)
     return allBlocks.shuffled().take(3)
 }

@@ -28,6 +28,8 @@ const val ACTION_DEV_SETTINGS_CHANGED = "com.betterblocks.ACTION_DEV_SETTINGS_CH
 // Animation Timing Constants
 const val BLOCK_CLEAR_DELAY_MS = LineClearAnimator.SWEEP_DURATION.toLong()
 const val ANIMATION_DURATION_MS = (LineClearAnimator.SWEEP_DURATION + LineClearAnimator.PARTICLE_FADE_DURATION).toLong()
+const val UPDATE_GIFT_RAINBOWS = 10
+const val UPDATE_GIFT_COLORWIPES = 10
 
 // Color Wipe Animation Speed Control
 // Set this to slow down the color wipe animation (2.0 = twice as slow, 1.5 = 50% slower, etc.)
@@ -175,6 +177,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             checkDailyReward()
             checkSeasonStart()
+        }
+
+        // --- One-time update gift application ---
+        // This block gives a temporary one-time gift (UPDATE_GIFT_RAINBOWS and UPDATE_GIFT_COLORWIPES)
+        // to all existing players on first run after the update. It sets a prefs flag so it's only applied once.
+        try {
+            val applied = prefs.getBoolean(KEY_UPDATE_GIFTS_APPLIED, false)
+            if (!applied) {
+                // Apply gifts to persisted counters
+                val prevRainbow = prefs.getInt(KEY_RAINBOW_COUNT, INITIAL_RAINBOW_COUNT)
+                val prevColorWipe = prefs.getInt(KEY_COLOR_WIPE_COUNT, DEV_INITIAL_COLOR_WIPE)
+                val newRainbow = prevRainbow + UPDATE_GIFT_RAINBOWS
+                val newColorWipe = prevColorWipe + UPDATE_GIFT_COLORWIPES
+
+                prefs.edit()
+                    .putInt(KEY_RAINBOW_COUNT, newRainbow)
+                    .putInt(KEY_COLOR_WIPE_COUNT, newColorWipe)
+                    .putBoolean(KEY_UPDATE_GIFTS_APPLIED, true)
+                    .apply()
+
+                // Reflect immediately in UI state
+                _uiState.update { it.copy(rainbowBlockCount = newRainbow, colorWipeCount = newColorWipe) }
+
+                Log.d("GameViewModel", "Applied one-time update gifts: rainbows=$UPDATE_GIFT_RAINBOWS colorWipes=$UPDATE_GIFT_COLORWIPES (newRainbow=$newRainbow newColorWipe=$newColorWipe)")
+            }
+        } catch (t: Throwable) {
+            Log.w("GameViewModel", "Failed to apply update gifts: ${t.message}")
         }
     }
     override fun onCleared() {
@@ -510,11 +539,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         saveSelectedBlockId(_uiState.value.selectedBlock?.id)
         Log.d("GameViewModel", "Color wipe consumed -> newCount=$newCount")
 
-        // 2. Find all matching blocks
+        // Use COLOR_WIPE_DRAWABLES as the single source of truth for mapping wheel index -> drawable id
         val targetDrawableId = try {
-            BLOCK_DRAWABLES[colorIndex]
+            COLOR_WIPE_DRAWABLES[colorIndex]
         } catch (t: Throwable) {
-            Log.e("GameViewModel", "Invalid colorIndex=$colorIndex", t)
+            Log.e("GameViewModel", "Invalid colorIndex=$colorIndex for COLOR_WIPE_DRAWABLES", t)
             return
         }
 
@@ -531,51 +560,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             if (cellsToClear.isNotEmpty()) {
-                // Make a deep copy snapshot of the board to avoid aliasing with the live UI state.
-                val boardSnapshot: GameGrid = currentState.board.map { it.clone() }.toTypedArray()
-
-                // 3. Keep the board state unchanged during animation; set effect layer using the snapshot.
+                // For LineClearAnimator integration we set clearingCells and let the animator + onClearAnimationFinished handle
+                // the visual sweep and the final board mutation. This keeps animations consistent with normal clears.
                 _uiState.update {
                     it.copy(
-                        board = boardSnapshot,         // use the copy so UI/logic don't share references
-                        effectCells = cellsToClear,
-                        isColorWipeAnimating = true
+                        // Keep the live board intact during animation; LineClearAnimator will read `clearingCells`
+                        clearingCells = cellsToClear,
+                        isColorWipeAnimating = true,
+                        // Ensure rainbow flag is false for color wipe
+                        isRainbowWipeActive = false,
+                        selectedBlock = null
                     )
                 }
-                Log.d("GameViewModel", "Effect layer set; starting color wipe animation for ${cellsToClear.size} cells")
+                Log.d("GameViewModel", "Color wipe started: handing off ${cellsToClear.size} cells to LineClearAnimator via clearingCells")
 
-                // Use slower animation duration for color wipe
-                val colorWipeDelay = (BLOCK_CLEAR_DELAY_MS * COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER).toLong()
-                delay(colorWipeDelay)
-
-                // 4. Remove from the snapshot after animation (not the original array)
-                val newBoard = boardSnapshot.map { it.clone() }.toTypedArray()
-                for (cell in cellsToClear) {
-                    newBoard[cell.row][cell.col] = null
-                }
-
-                // 5. Score: 50 points per block
-                val points = cellsToClear.size * 50
-
-                Log.d("GameViewModel", "Applying board changes: cleared=${cellsToClear.size} points=$points")
-                updateScoreAndState(
-                    currentState = currentState,
-                    newAvailableBlocks = currentState.availableBlocks,
-                    finalBlocks = currentState.availableBlocks,
-                    pointsToAdd = points,
-                    newBoard = newBoard,
-                    clearSelection = true
-                )
-
-                // Clear effect layer and color wipe flag after state update
-                _uiState.update { it.copy(effectCells = emptySet(), isColorWipeAnimating = false) }
-                Log.d("GameViewModel", "Color wipe finished; effect layer cleared")
-                checkGameOverOrLastChance()
+                // No manual delays or board mutation here — onClearAnimationFinished will be called by the UI after the animation
+                // completes and will perform the actual board changes and scoring. This ensures we reuse the existing sweep
+                // timing and particle effects implemented in LineClearAnimator.
             } else {
-                // No matching cells — nothing to animate; already consumed an item above.
+                // Nothing to clear but item is consumed; ensure flags reset
                 Log.d("GameViewModel", "No matching blocks found for colorIndex=$colorIndex; nothing cleared")
-                // Ensure UI isn't left in animating state
-                _uiState.update { it.copy(effectCells = emptySet(), isColorWipeAnimating = false) }
+                _uiState.update { it.copy(clearingCells = emptySet(), isColorWipeAnimating = false) }
             }
         }
     }
@@ -654,6 +659,43 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             // After clearing, check for game over
+            checkGameOverOrLastChance()
+        } else if (currentState.isColorWipeAnimating && currentState.clearingCells.isNotEmpty()) {
+            // Color wipe: clear only the affected cells, score, and let the normal flow continue.
+            val newBoard = currentState.board.map { it.clone() }.toTypedArray()
+            for (cell in currentState.clearingCells) {
+                newBoard[cell.row][cell.col] = null
+            }
+
+            val points = currentState.clearingCells.size * 50
+            val rowsClearedCount = currentState.clearingCells.map { it.row }.toSet().size
+
+            updateScoreAndState(
+                currentState = currentState,
+                newAvailableBlocks = currentState.availableBlocks,
+                finalBlocks = currentState.availableBlocks,
+                pointsToAdd = points,
+                newBoard = newBoard,
+                clearSelection = true
+            )
+
+            _uiState.update { it.copy(clearingCells = emptySet(), isColorWipeAnimating = false, selectedBlock = null, linesClearedThisGame = it.linesClearedThisGame + rowsClearedCount) }
+
+            persistGameSnapshot(
+                board = _uiState.value.board,
+                blocks = _uiState.value.availableBlocks,
+                coins = _uiState.value.coins,
+                rainbowCount = _uiState.value.rainbowBlockCount,
+                colorWipeCount = _uiState.value.colorWipeCount,
+                score = _uiState.value.score,
+                meterValue = _uiState.value.specialMeterValue,
+                freeRotations = _uiState.value.freeRotations,
+                lastRotatedBlockId = _uiState.value.lastRotatedBlockId,
+                selectedBlockId = null,
+                isGameOver = false,
+                isLastChance = false
+            )
+
             checkGameOverOrLastChance()
         } else {
             // For normal line clears, just reset the flags
@@ -1377,17 +1419,43 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      * This is called when the game ends to ensure the high score is updated immediately.
      */
     private fun finalizeHighScoreIfNeeded(finalScore: Int) {
-        val currentHighScore = prefs.getInt(KEY_HIGH_SCORE, 0)
-        if (finalScore > currentHighScore) {
-            Log.d("GameViewModel", "New high score! $finalScore (previous: $currentHighScore)")
-            // Update high score in prefs
-            saveHighScore(finalScore)
-            // Update in UI state and trigger high score animation/flags so dialogs show correct info
-            scoreToBeat = finalScore
-            _uiState.update { it.copy(highScore = finalScore, showHighScoreAnim = true) }
-        } else {
-            // Ensure UI reflects persisted high score even when not beaten
-            _uiState.update { it.copy(highScore = currentHighScore) }
+        // Run async to avoid blocking the UI thread and to reliably fetch the cached/anonymous UID
+        viewModelScope.launch {
+            val currentHighScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+
+            // Ensure we have a UID (try cached prefs, otherwise request from AuthManager)
+            val uidFromPrefs = prefs.getString(KEY_FIREBASE_USER_ID, null)
+            val uid = if (!uidFromPrefs.isNullOrBlank()) {
+                uidFromPrefs
+            } else {
+                runCatching { AuthManager.getOrCreateUserId(getApplication()) }.getOrNull() ?: "UNKNOWN_USER"
+            }
+
+            Log.d("GameViewModel", "Game over: finalScore=$finalScore uid=$uid")
+
+            try {
+                val lifetimeCoins = prefs.getInt(KEY_LIFETIME_COINS, 0)
+                if (finalScore > currentHighScore) {
+                    // New high score: persist locally, update UI and write to Firestore
+                    Log.d("GameViewModel", "New high score! $finalScore (previous: $currentHighScore)")
+                    saveHighScore(finalScore)
+                    scoreToBeat = finalScore
+                    _uiState.update { it.copy(highScore = finalScore, showHighScoreAnim = true) }
+
+                    val tier = getPlayerTier(finalScore, lifetimeCoins, prefs)
+                    Log.d("GameViewModel", "Preparing Firestore write (new high): userId=$uid score=$finalScore tier=${tier.name} playerName=${prefs.getString(KEY_PLAYER_NAME, "")}")
+                    FirestoreManager.updateLeaderboard(uid, finalScore, tier)
+                } else {
+                    // Not a new high score: ensure UI reflects persisted high score and ensure Firestore has storedHigh
+                    _uiState.update { it.copy(highScore = currentHighScore) }
+
+                    val tier = getPlayerTier(currentHighScore, lifetimeCoins, prefs)
+                    Log.d("GameViewModel", "Preparing Firestore write (ensure stored high): userId=$uid score=$currentHighScore tier=${tier.name} playerName=${prefs.getString(KEY_PLAYER_NAME, "")}")
+                    FirestoreManager.updateLeaderboard(uid, currentHighScore, tier)
+                }
+            } catch (t: Throwable) {
+                Log.e("GameViewModel", "finalizeHighScoreIfNeeded failed", t)
+            }
         }
     }
 }

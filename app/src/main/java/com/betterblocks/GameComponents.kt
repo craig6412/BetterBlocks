@@ -505,44 +505,80 @@ fun ColorWipeButton(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
+fun RotationButtonWithCost(
+    uiState: GameUiState,
+    onRotateBlock: () -> Unit
+) {
     val selectedBlock = uiState.selectedBlock
     val isRotationEnabled = selectedBlock != null
-
-    val rotationIconTint = if (isRotationEnabled) LightText else LightText.copy(alpha = 0.4f)
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
+        // ---------- TOP BADGE ----------
         Surface(
             color = Pink_Jackie,
             shape = RoundedCornerShape(50),
             modifier = Modifier.zIndex(2f)
         ) {
-            Text(
-                text = "x${uiState.freeRotations}",
-                color = DarkBackground,
-                fontSize = ssp(0.025f),
-                fontWeight = FontWeight.Bold,
-                fontFamily = Oswald,
-                modifier = Modifier.padding(horizontal = sdp(0.015f), vertical = sdp(0.003f))
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(
+                    horizontal = sdp(0.015f),
+                    vertical = sdp(0.003f)
+                )
+            ) {
+                if (uiState.freeRotations > 0) {
+                    Text(
+                        text = "x${uiState.freeRotations}", // ✅ FIXED
+                        color = DarkBackground,
+                        fontSize = ssp(0.025f),
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = Oswald
+                    )
+                } else {
+                    Text(
+                        text = ROTATION_COST.toString(),
+                        color = DarkBackground,
+                        fontSize = ssp(0.025f),
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = Oswald
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Image(
+                        painter = painterResource(id = R.drawable.shop_coins_small),
+                        contentDescription = "Coins",
+                        modifier = Modifier.size(14.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(sdp(0.004f)))
 
+        // ---------- BUTTON ----------
         Box(
             modifier = Modifier
                 .size(GameSettings.bottomBarButtonSize.value.coerceAtLeast(1).dp)
                 .scale(GameSettings.bottomBarIconScale.value.coerceAtLeast(0.1f))
                 .clip(RoundedCornerShape(sdp(0.02f)))
-                .background(Color(0xFF311B92)) // Power-up Buttons: Deep Indigo
+                .background(
+                    if (isRotationEnabled)
+                        Color(0xFF311B92)
+                    else
+                        Color(0xFF311B92).copy(alpha = 0.4f) // ✅ Disabled clarity
+                )
                 .border(
                     width = sdp(0.003f),
-                    color = Color(0x407F5AF0),   // Faint Lavender edge
+                    color = Color(0x407F5AF0),
                     shape = RoundedCornerShape(sdp(0.02f))
                 )
-                .safeClickable { if (isRotationEnabled) onRotateBlock() },
+                .safeClickable {
+                    if (isRotationEnabled) onRotateBlock()
+                },
             contentAlignment = Alignment.Center
         ) {
 
@@ -552,8 +588,8 @@ fun RotationButtonWithCost(uiState: GameUiState, onRotateBlock: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize(0.75f)
                     .aspectRatio(1f),
-                colorFilter = tint(rotationIconTint),
                 contentScale = ContentScale.Fit
+                // ❌ NO tint — prevents washed-out PNG bug
             )
         }
     }
