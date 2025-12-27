@@ -3,15 +3,13 @@ package com.betterblocks
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
 import com.betterblocks.PREFS_NAME
 import com.betterblocks.KEY_SOUND_ENABLED
-import com.betterblocks.ui.theme.BetterBlocksTheme
+import com.betterblocks.KEY_HAPTIC_ENABLED
+import com.betterblocks.KEY_DARK_THEME
+import com.betterblocks.KEY_HIGHSCORE_NOTIFICATIONS
+import com.betterblocks.notifications.NotificationManagerHelper
 
 
 class SettingsActivity : ComponentActivity() {
@@ -23,6 +21,8 @@ class SettingsActivity : ComponentActivity() {
         val initialSoundEnabled = prefs.getBoolean(KEY_SOUND_ENABLED, true)
         val initialHapticEnabled = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
         val initialDarkTheme = prefs.getBoolean(KEY_DARK_THEME, false)
+        // Highscore notifications default to ON (per latest request)
+        val initialHighscoreNotifications = prefs.getBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true)
 
         setContent {
             MaterialTheme {
@@ -30,6 +30,7 @@ class SettingsActivity : ComponentActivity() {
                     initialSoundEnabled = initialSoundEnabled,
                     initialHapticEnabled = initialHapticEnabled,
                     initialDarkTheme = initialDarkTheme,
+                    initialHighscoreNotifications = initialHighscoreNotifications,
                     onToggleSound = {
                         val newValue = !prefs.getBoolean(KEY_SOUND_ENABLED, true)
                         prefs.edit().putBoolean(KEY_SOUND_ENABLED, newValue).apply()
@@ -43,6 +44,20 @@ class SettingsActivity : ComponentActivity() {
                         prefs.edit().putBoolean(KEY_DARK_THEME, newValue).apply()
                         // Recreate activity to apply the theme change immediately
                         recreate()
+                    },
+                    onToggleHighscoreNotifications = {
+                        val current = prefs.getBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true)
+                        val newValue = !current
+                        prefs.edit().putBoolean(KEY_HIGHSCORE_NOTIFICATIONS, newValue).apply()
+
+                        if (newValue) {
+                            // Enable notification subsystem and schedule a default daily reminder (20:00).
+                            // TODO: request POST_NOTIFICATIONS permission from Activity if on Android 13+ before enabling.
+                            NotificationManagerHelper.enableNotifications(applicationContext)
+                            NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
+                        } else {
+                            NotificationManagerHelper.disableNotifications(applicationContext)
+                        }
                     },
                     onBack = { finish() }
                 )

@@ -100,6 +100,8 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-crashlytics")
+    // Messaging (FCM) for topic broadcasts and receiving messages
+    implementation("com.google.firebase:firebase-messaging-ktx")
 
     // XML-based UI dependencies
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")

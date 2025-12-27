@@ -190,6 +190,18 @@ class BillingManager(
 
             billingClient.consumeAsync(consumeParams) { result, _ ->
                 if (result.responseCode == BillingResponseCode.OK) {
+                    val token = purchase.purchaseToken
+                    val prefs = context.getSharedPreferences("billing_prefs", Context.MODE_PRIVATE)
+
+                    // 🔒 Prevent duplicate coin grants
+                    if (prefs.getBoolean(token, false)) {
+                        Log.w(TAG, "Purchase already processed, skipping grant: $productId")
+                        return@consumeAsync
+                    }
+
+                    // Mark as processed BEFORE granting coins
+                    prefs.edit().putBoolean(token, true).apply()
+
                     Log.d(TAG, "Consumed purchase $productId -> granting $coins coins")
                     coroutineScope.launch(Dispatchers.Main) {
                         try {
@@ -202,6 +214,7 @@ class BillingManager(
                     Log.e(TAG, "Consume failed for $productId: ${result.debugMessage}")
                 }
             }
+
 
             return
         }

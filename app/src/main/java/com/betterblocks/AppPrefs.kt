@@ -55,3 +55,7 @@ const val KEY_LAST_CHANCE_OFFERED = "last_chance_offered"
 
 // One-time update gift marker: used to record that a special release gift was applied
 const val KEY_UPDATE_GIFTS_APPLIED = "update_gifts_applied"
+
+// NEW: Highscore notifications toggle (controls whether the app will use local notifications
+// to notify the player about highscores / leaderboard updates). Default should be ON.
+const val KEY_HIGHSCORE_NOTIFICATIONS = "highscore_notifications"

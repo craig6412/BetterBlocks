@@ -7,6 +7,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Runtime permission required on Android 13+; request from an Activity when the user enables notifications in UI -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -73,6 +75,23 @@
             android:exported="false"
             android:label="Developer Menu"
             android:screenOrientation="portrait" />
+
+        <!-- Notification receiver: receives AlarmManager broadcasts even when app is not running -->
+        <receiver
+            android:name="com.betterblocks.notifications.NotificationReceiver"
+            android:exported="true" />
+
+        <!-- FCM messaging service to receive topic broadcasts for highscores -->
+        <service
+            android:name=".HighscoreFirebaseService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- TODO: If you want reminders to survive device reboot, add a BootReceiver and the
+             RECEIVE_BOOT_COMPLETED permission here. -->
 
     </application>
 </manifest>

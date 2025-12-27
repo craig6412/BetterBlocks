@@ -16,14 +16,17 @@ fun SettingsScreen(
     initialSoundEnabled: Boolean,
     initialHapticEnabled: Boolean,
     initialDarkTheme: Boolean,
+    initialHighscoreNotifications: Boolean,
     onToggleSound: () -> Unit,
     onToggleHaptic: () -> Unit,
     onToggleTheme: () -> Unit,
+    onToggleHighscoreNotifications: () -> Unit,
     onBack: () -> Unit
 ) {
     var soundEnabled by remember { mutableStateOf(initialSoundEnabled) }
     var hapticEnabled by remember { mutableStateOf(initialHapticEnabled) }
     var darkTheme by remember { mutableStateOf(initialDarkTheme) }
+    var highscoreNotifications by remember { mutableStateOf(initialHighscoreNotifications) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -115,6 +118,29 @@ fun SettingsScreen(
                 )
             }
 
+            Spacer(modifier = Modifier.height(sdp(0.02f)))
+
+            // HIGHSCORE NOTIFICATIONS TOGGLE
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Highscore Notifications",
+                    color = LightText,
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                Switch(
+                    checked = highscoreNotifications,
+                    onCheckedChange = {
+                        highscoreNotifications = it
+                        onToggleHighscoreNotifications()
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(sdp(0.04f)))
 
             Button(
@@ -140,9 +166,11 @@ fun SettingsScreenPreview() {
         initialSoundEnabled = vm.isSoundEnabled,
         initialHapticEnabled = vm.isMusicEnabled,
         initialDarkTheme = true,
+        initialHighscoreNotifications = true,
         onToggleSound = {},
         onToggleHaptic = {},
         onToggleTheme = {},
+        onToggleHighscoreNotifications = {},
         onBack = {}
     )
 }

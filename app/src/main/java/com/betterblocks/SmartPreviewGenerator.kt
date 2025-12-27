@@ -58,7 +58,52 @@ fun canBlockFit(board: GameGrid, block: Block): Boolean {
 
     return false
 }
+fun hasPerfectFitForST2(board: GameGrid, block: Block): Boolean {
+    val size = board.size
 
+    // Prevent early / empty-board ST_2
+    val occupied = board.sumOf { row -> row.count { it != null } }
+    if (occupied < 6) return false
+
+    for (row in 0 until size) {
+        for (col in 0 until size) {
+
+            var fits = true
+            for (cell in block.shape) {
+                val r = row + cell.row
+                val c = col + cell.col
+                if (r !in 0 until size || c !in 0 until size || board[r][c] != null) {
+                    fits = false
+                    break
+                }
+            }
+            if (!fits) continue
+
+            var constraints = 0
+            for (cell in block.shape) {
+                val r = row + cell.row
+                val c = col + cell.col
+
+                val neighbors = listOf(
+                    r - 1 to c,
+                    r + 1 to c,
+                    r to c - 1,
+                    r to c + 1
+                )
+
+                for ((nr, nc) in neighbors) {
+                    if (nr !in 0 until size || nc !in 0 until size || board[nr][nc] != null) {
+                        constraints++
+                    }
+                }
+            }
+
+            if (constraints >= 3) return true
+        }
+    }
+    return false
+}
+/* ============================ */
 /**
  * Generates a smart preview of 3 blocks based on the current board state.
  *
@@ -89,7 +134,10 @@ fun generateSmartPreview(board: GameGrid, allBlocks: List<Block>): List<Block> {
     val easyBlocks = allBlocks.filter { it.shape.size <= 4 }
 
     // Find all blocks that can currently fit on the board
-    val fittingBlocks = allBlocks.filter { canBlockFit(board, it) }
+val fittingBlocks = allBlocks.filter { block ->
+    if (!canBlockFit(board, block)) return@filter false
+    if (block.id == ST_2_ID) hasPerfectFitForST2(board, block) else true
+}
 
     // CASE 1: Normal gameplay - plenty of options available
     if (fittingBlocks.size >= 3) {
@@ -164,7 +212,10 @@ fun generateDifficultyAdjustedPreview(
     allBlocks: List<Block>,
     difficulty: Float = 0.5f
 ): List<Block> {
-    val fittingBlocks = allBlocks.filter { canBlockFit(board, it) }
+    val fittingBlocks = allBlocks.filter { block ->
+        if (!canBlockFit(board, block)) return@filter false
+        if (block.id == ST_2_ID) hasPerfectFitForST2(board, block) else true
+    }
 
     if (fittingBlocks.isEmpty()) {
         // Emergency mode - give easiest blocks
@@ -223,6 +274,9 @@ fun canPlaceBlock(board: GameGrid, block: Block): Boolean {
  * block is placeable somewhere on the board. Falls back to a random inventory
  * if no such inventory can be generated (allowing legitimate game-over).
  */
+
+const val ST_2_ID = 7
+
 fun getSmartInventory(
     board: GameGrid,
     allBlocks: List<Block>,
@@ -238,7 +292,11 @@ fun getSmartInventory(
     }
 
     // 2️⃣ Board is likely crowded — attempt Guaranteed-Fit helper
-    val fittingBlocks = allBlocks.filter { canPlaceBlock(board, it) }
+    val fittingBlocks = allBlocks.filter { block ->
+        if (!canBlockFit(board, block)) return@filter false
+        if (block.id == ST_2_ID) hasPerfectFitForST2(board, block) else true
+    }
+
 
     if (fittingBlocks.isNotEmpty()) {
         // Pick ONE guaranteed-fit block

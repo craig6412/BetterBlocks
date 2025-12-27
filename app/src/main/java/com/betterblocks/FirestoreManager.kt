@@ -11,11 +11,13 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import android.content.SharedPreferences
-import com.google.firebase.ktx.app
 
 object FirestoreManager {
 
-    private val db = Firebase.firestore
+    // Do NOT keep Firebase.firestore in a static field; obtain it when needed to avoid holding onto
+    // an Android Context indirectly which can cause leaks in some analyzer tools.
+    private fun db() = Firebase.firestore
+
     private const val COLLECTION = "leaderboards"
     private lateinit var prefs: SharedPreferences
 
@@ -60,7 +62,7 @@ object FirestoreManager {
 
             Log.d("FirestoreManager", "updateLeaderboard payload for user=$userId score=$score tier=${tier.name} name=$playerName")
 
-            db.collection(COLLECTION)
+            db().collection(COLLECTION)
                 .document(userId)
                 .set(data, SetOptions.merge())
                 .addOnFailureListener {
@@ -87,7 +89,7 @@ object FirestoreManager {
                 "updatedAt_fallback" to now
             )
             Log.d("FirestoreManager", "updatePlayerNameOnly payload for user=$userId name=$playerName")
-            db.collection(COLLECTION)
+            db().collection(COLLECTION)
                 .document(userId)
                 .set(data, SetOptions.merge())
                 .addOnFailureListener {
@@ -116,7 +118,7 @@ object FirestoreManager {
         onError: (Exception) -> Unit
     ) {
         try {
-            db.collection(COLLECTION)
+            db().collection(COLLECTION)
                 .whereEqualTo("trophyTier", tier.name)
                 .orderBy("score", Query.Direction.DESCENDING)
                 .orderBy("updatedAt_fallback", Query.Direction.DESCENDING)
@@ -139,14 +141,14 @@ object FirestoreManager {
     }
 
     // ----------------------------------------------------
-    // GET UNRANKED PLAYERS (One-Time Load)
+    // GET UNRANKED PLAYERS (One-Time LOAD)
     // ----------------------------------------------------
     fun getUnranked(
         onResult: (List<LeaderboardEntry>) -> Unit,
         onError: (Exception) -> Unit
     ) {
         try {
-            db.collection(COLLECTION)
+            db().collection(COLLECTION)
                 .whereEqualTo("trophyTier", "UNRANKED")
                 .orderBy("score", Query.Direction.DESCENDING)
                 .orderBy("updatedAt_fallback", Query.Direction.DESCENDING)

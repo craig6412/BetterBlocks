@@ -131,6 +131,57 @@ object BlockManager {
     /**
      * Rotate a shape 90 degrees clockwise around origin (normalize to min row/col = 0)
      */
+
+    //new helper function
+    private fun hasPerfectFitForST2(board: Array<Array<Int?>>): Boolean {
+        val shape = ALL_BLOCK_SHAPES.firstOrNull { it.id == "ST_2" } ?: return false
+        val size = GRID_SIZE
+
+        // Count how full the board is (prevents early-game SC2)
+        val occupiedCount = board.sumOf { row -> row.count { it != null } }
+        if (occupiedCount < 5) return false   // tweakable, but safe
+
+        // Try every position
+        for (row in 0 until size) {
+            for (col in 0 until size) {
+
+                // Check basic placement
+                if (!isShapePlaceableAt(shape, board, row, col)) continue
+
+                // Now check if placement is constrained (perfect-fit logic)
+                var constrainedEdges = 0
+
+                shape.cells.forEach { cell ->
+                    val r = row + cell.row
+                    val c = col + cell.col
+
+                    val neighbors = listOf(
+                        r - 1 to c,
+                        r + 1 to c,
+                        r to c - 1,
+                        r to c + 1
+                    )
+
+                    neighbors.forEach { (nr, nc) ->
+                        if (nr !in 0 until size || nc !in 0 until size) {
+                            // Board edge counts as constraint
+                            constrainedEdges++
+                        } else if (board[nr][nc] != null) {
+                            constrainedEdges++
+                        }
+                    }
+                }
+
+                // Require meaningful constraint
+                if (constrainedEdges >= 3) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
     private fun rotateShape90(shape: List<Pair<Int, Int>>): List<Pair<Int, Int>> {
         val rotated = shape.map { (r, c) -> Pair(c, -r) }
         val minRow = rotated.minOf { it.first }
