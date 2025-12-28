@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,9 +27,13 @@ import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
 import com.betterblocks.SuccessGreen
 import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.drawableRes
 import com.betterblocks.trophyColorForTier
 import kotlinx.coroutines.delay
 import kotlin.random.Random
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 
 /**
  * RAINBOW METER FULL CELEBRATION DIALOG
@@ -318,24 +321,24 @@ fun GlowingTrophy(tier: TrophyTier) {
         modifier = Modifier.size(100.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Glow effect
-        Icon(
-            imageVector = Icons.Default.EmojiEvents,
+        // Glow effect (larger, semi-transparent trophy image tinted by color via layered background)
+        Image(
+            painter = painterResource(com.betterblocks.trophyRes(tier)),
             contentDescription = null,
             modifier = Modifier
                 .size(120.dp)
                 .scale(scale * 1.2f)
                 .alpha(glowAlpha),
-            tint = trophyColorForTier(tier)
+            contentScale = ContentScale.Fit
         )
         // Main trophy
-        Icon(
-            imageVector = Icons.Default.EmojiEvents,
+        Image(
+            painter = painterResource(com.betterblocks.trophyRes(tier)),
             contentDescription = null,
             modifier = Modifier
                 .size(100.dp)
                 .scale(scale),
-            tint = trophyColorForTier(tier)
+            contentScale = ContentScale.Fit
         )
     }
 }
@@ -632,4 +635,3 @@ fun ShopPurchaseBubble(
         }
     }
 }
-

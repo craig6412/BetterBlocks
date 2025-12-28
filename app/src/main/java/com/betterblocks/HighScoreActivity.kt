@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,7 +22,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,8 +31,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -43,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.drawableRes
 import com.betterblocks.model.getPlayerTier
 import com.betterblocks.ui.theme.BetterBlocksTheme
 import kotlinx.coroutines.launch
@@ -267,11 +270,11 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                     .size(56.dp)
                     .background(tierColor.copy(alpha = 0.2f), CircleShape)
             ) {
-                Icon(
-                    imageVector = Icons.Default.EmojiEvents,
-                    contentDescription = null,
-                    tint = tierColor,
-                    modifier = Modifier.size(32.dp)
+                Image(
+                    painter = painterResource(com.betterblocks.trophyRes(playerTier)),
+                    contentDescription = "Trophy",
+                    modifier = Modifier.size(32.dp),
+                    contentScale = ContentScale.Fit
                 )
             }
 
@@ -351,11 +354,11 @@ fun EmptyState(tier: TrophyTier) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(
-            Icons.Default.EmojiEvents,
-            contentDescription = null,
-            tint = LightText.copy(alpha = 0.2f),
-            modifier = Modifier.size(64.dp)
+        Image(
+            painter = painterResource(com.betterblocks.trophyRes(tier)),
+            contentDescription = "Trophy",
+            modifier = Modifier.size(64.dp),
+            contentScale = ContentScale.Fit
         )
         Spacer(Modifier.height(16.dp))
         Text(

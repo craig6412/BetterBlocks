@@ -136,7 +136,24 @@ object NotificationManagerHelper {
         // Use exact alarm where possible to make reminders feel timely. setExactAndAllowWhileIdle
         // helps with Doze; acceptable for once-per-day reminders.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // On Android 12+ exact alarms require special permission/grant. Don't call exact APIs
+                // if the app isn't allowed to schedule exact alarms — fall back to an inexact set().
+                try {
+                    val canExact = alarmManager.canScheduleExactAlarms()
+                    if (canExact) {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+                    } else {
+                        // Fall back to inexact alarm to avoid SecurityException
+                        alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+                    }
+                } catch (t: Throwable) {
+                    // Defensive: if any reflection/remote exception occurs, fall back to safest non-exact call
+                    try { alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pending) } catch (_: Throwable) {}
+                }
+            } else {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+            }
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pending)
         } else {

@@ -9,7 +9,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShoppingCart
@@ -60,6 +59,8 @@ import com.betterblocks.KEY_HIGH_SCORE
 import com.betterblocks.KEY_LIFETIME_COINS
 import com.betterblocks.PlayerNameDialog
 import com.betterblocks.DeviceClass
+import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.drawableRes
 
 
 // Gradient colors for background
@@ -449,13 +450,39 @@ private fun MainMenuScreenContent(
 
                 Spacer(modifier = Modifier.height(sh(0.018f)))
 
-                MenuButton(
-                    text = "HIGH SCORES",
-                    icon = Icons.Default.EmojiEvents,
+                // Replace HIGH SCORES MenuButton with inline Button that uses trophy PNG image
+                Button(
                     onClick = onHighScoresClicked,
-                    containerColor = DeepBlue,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(sh(0.08f)),
+                    shape = RoundedCornerShape(sdp(0.02f)),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = DeepBlue,
+                        contentColor = LightText
+                    ),
                     border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
-                )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = com.betterblocks.trophyRes(com.betterblocks.model.TrophyTier.UNRANKED)),
+                            contentDescription = null,
+                            modifier = Modifier.size(sdp(0.035f)),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(modifier = Modifier.width(sdp(0.015f)))
+                        Text(
+                            text = "HIGH SCORES",
+                            fontSize = ssp(0.025f),
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = Oswald,
+                            letterSpacing = ssp(0.0015f)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(sh(0.018f)))
 
@@ -504,7 +531,7 @@ private fun MainMenuScreenContent(
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 //version number location
                 Text(
-                    text = "v1.8",
+                    text = "v1.9",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald

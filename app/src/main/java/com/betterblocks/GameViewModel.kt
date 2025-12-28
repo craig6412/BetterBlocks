@@ -1189,7 +1189,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val firstShown = prefs.getBoolean(KEY_FIRST_GAME_OVER_SHOWN, false)
             if (updated.isGameOver && !firstShown) {
                 val newCount = updated.rainbowBlockCount + 3
-                saveRainbowCount(newCount)
+               saveRainbowCount(newCount)
                 prefs.edit().putBoolean(KEY_FIRST_GAME_OVER_SHOWN, true).apply()
                 _uiState.update {
                     it.copy(
@@ -1387,14 +1387,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Add coins to player (used for rewards / ads). */
+    // kotlin
     fun addCoins(amount: Int) {
         if (amount <= 0) return
-        // Use central repository to add coins atomically and record lifetime
-        shopRepo.addCoins(amount)
-        shopRepo.recordLifetimeCoins(amount)
+
+        // Compute new total from current UI state, persist via central saveCoins to keep ShopRepository / prefs in sync,
+        // and record lifetime coins. Finally update in-memory UI state.
         val newTotal = _uiState.value.coins + amount
+        saveCoins(newTotal)                      // ensures persistence via ShopRepository
+        shopRepo.recordLifetimeCoins(amount)     // record lifetime separately
         _uiState.update { it.copy(coins = newTotal, coinsEarnedThisUpdate = amount) }
     }
+
 
     /** Hide the zero-coins dialog. */
     fun dismissZeroCoinsDialog() {

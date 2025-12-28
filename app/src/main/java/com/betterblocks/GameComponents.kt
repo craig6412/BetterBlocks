@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MonetizationOn
@@ -64,6 +63,8 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.positionInWindow
 import kotlinx.coroutines.delay
+import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.drawableRes
 
 // --- CONSTANTS & COLORS ---
 val DeepBlue = Color(0xFF0B0123)           // Main Background: Midnight Void
@@ -177,7 +178,7 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             ScoreDisplay(score = uiState.score, label = "CURRENT", modifier = Modifier.weight(1f))
-            ScoreDisplay(score = uiState.highScore, label = "HIGH SCORE", showTrophy = true, trophyTint = Pink_Jackie, modifier = Modifier.weight(1f))
+            ScoreDisplay(score = uiState.highScore, label = "HIGH SCORE", showTrophy = true, trophyTier = uiState.trophyTier, modifier = Modifier.weight(1f))
             Spacer(modifier = Modifier.width(sw(0.09f))) // Balancing spacer
         }
     }
@@ -192,20 +193,20 @@ fun Modifier.safeClickable(onClick: () -> Unit): Modifier =
     )
 
 @Composable
-fun ScoreDisplay(score: Int, label: String, modifier: Modifier = Modifier, showTrophy: Boolean = false, trophyTint: Color = LightText) {
+fun ScoreDisplay(score: Int, label: String, modifier: Modifier = Modifier, showTrophy: Boolean = false, trophyTier: com.betterblocks.model.TrophyTier? = null) {
     Column(
         modifier = modifier.padding(horizontal = sdp(0.005f)),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (showTrophy) {
-                Icon(
-                    imageVector = Icons.Filled.EmojiEvents,
+            if (showTrophy && trophyTier != null) {
+                Image(
+                    painter = painterResource(com.betterblocks.trophyRes(trophyTier)),
                     contentDescription = "Trophy",
-                    tint = trophyTint,
                     modifier = Modifier
                         .size(sdp(0.03f)) // slightly larger trophy icon to match larger score text
-                        .padding(end = sdp(0.0035f))
+                        .padding(end = sdp(0.0035f)),
+                    contentScale = ContentScale.Fit
                 )
             }
             // Make the main score text much larger for readability
@@ -950,11 +951,11 @@ fun GameOverDialog(
                 )
                 Spacer(modifier = Modifier.height(sdp(0.008f)))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.EmojiEvents,
+                    Image(
+                        painter = painterResource(com.betterblocks.trophyRes(com.betterblocks.model.TrophyTier.GOLD)),
                         contentDescription = "High Score",
-                        tint = Pink_Jackie,
-                        modifier = Modifier.size(sdp(0.02f))
+                        modifier = Modifier.size(sdp(0.02f)),
+                        contentScale = ContentScale.Fit
                     )
                     Spacer(modifier = Modifier.width(sdp(0.005f)))
                     Text(
@@ -999,18 +1000,18 @@ fun GameOverDialog(
 
 /**
  * Computes an offset that, when applied to a touch point, visually centers the given block
- * under the users finger regardless of its rotation (bounding box shape).
+ * under the user's finger regardless of its rotation (bounding box shape).
  *
  * @param block The block whose bounding box is used.
  * @param cellSizePx Size of a single grid cell in pixels.
- * @return Offset that can be added to the finger position so the blocks center aligns there.
+ * @return Offset that can be added to the finger position so the block's center aligns there.
  */
 fun calculateDragOffset(block: Block, cellSizePx: Float): Offset {
-    // Blocks bounding box dimensions in pixels
+    // Block's bounding box dimensions in pixels
     val widthPx = block.boundingBoxWidth * cellSizePx
     val heightPx = block.boundingBoxHeight * cellSizePx
 
-    // We want the blocks center to be at the finger; Compose translation is from top-left,
+    // We want the block's center to be at the finger; Compose translation is from top-left,
     // so we shift left/up by half the width/height.
     return Offset(
         x = -widthPx / 2f,

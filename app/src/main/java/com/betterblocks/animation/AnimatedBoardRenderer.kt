@@ -17,12 +17,14 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.betterblocks.*
 import com.betterblocks.BoardBackground
+import androidx.appcompat.content.res.AppCompatResources
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalContext
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.util.Log
@@ -37,9 +39,18 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.res.painterResource
 import kotlin.div
 import kotlin.math.cos
 import kotlin.math.sin
+
+// New imports for fallback drawable->bitmap painter
+import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 
 // Core palette for Cyber-Void theme
 private val GridPurple = Color(0xFF08060B)             // Game Grid / Empty Slots: Abyssal Purple
@@ -828,7 +839,7 @@ fun AnimatedBoardCell(
     val padding = 0.dp
 
     val bgColor = if (isOccupied) Color(0xFF0F0C14) else Color.Transparent
-    val alpha = if (isClearing) 0.4f else 1f
+   // val alpha = if (isClearing) 0.4f else 1f
 
     Box(
         modifier = Modifier
@@ -839,18 +850,78 @@ fun AnimatedBoardCell(
             .safeClickable { onCellClick() },
         contentAlignment = Alignment.Center
     ) {
-        // Draw block texture if present (cellValue holds drawable resource id)
-        if (cellValue != null) {
-            Image(
-                painter = painterResource(id = cellValue),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .scale(com.betterblocks.BLOCK_TEXTURE_SCALE)
-                    .graphicsLayer { this.alpha = alpha }
-            )
+
+        if (cellValue != null && cellValue > 0) {
+            val context = LocalContext.current
+            val resType = remember(cellValue) {
+                try {
+                    context.resources.getResourceTypeName(cellValue)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            if (resType == "drawable") {
+                // Allow only raster or vector images; if painterResource fails (unsupported XML types), fall back to Drawable->Bitmap
+                val painterFallback = remember(cellValue) {
+                    // Attempt to load a Drawable and convert to Bitmap for compose when needed
+                    try {
+                        val dr: Drawable? = AppCompatResources.getDrawable(context, cellValue)
+                        if (dr == null) return@remember null
+
+                        // If it's already a BitmapDrawable use its bitmap else render to bitmap
+                        when (dr) {
+                            is BitmapDrawable -> dr.bitmap
+                            else -> drawableToBitmap(dr)
+                        }
+                    } catch (t: Throwable) {
+                        Log.w("BoardCell", "drawable fallback failed for id=$cellValue", t)
+                        null
+                    }
+                }
+
+                // First try painterResource; it will throw for unsupported XML drawable types
+                // var painter: Painter? = null
+                // try {
+                //     painter = painterResource(id = cellValue)
+                // } catch (iae: IllegalArgumentException) {
+                //     // fallback to bitmap painter if we were able to produce one
+                //     painter = painterFallback?.let { bmp -> BitmapPainter(bmp.asImageBitmap()) }
+                //     Log.w("BoardCell", "painterResource unsupported for id=$cellValue -> falling back to BitmapPainter")
+                // }
+
+                // Compose doesn't allow try/catch around composable invocations like painterResource.
+                // Instead, load the Drawable via AppCompatResources (non-composable) and rasterize it to a BitmapPainter.
+                val painter: Painter? = painterFallback?.let { bmp -> BitmapPainter(bmp.asImageBitmap()) }
+
+                if (painter != null) {
+                    Image(
+                        painter = painter,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .scale(BLOCK_TEXTURE_SCALE)
+                    )
+                } else {
+                    Log.e(
+                        "BoardCellError",
+                        "Invalid drawable used as block texture: ${runCatching {
+                            context.resources.getResourceEntryName(cellValue)
+                        }.getOrNull()}"
+                    )
+                }
+            } else {
+                Log.e(
+                    "BoardCellError",
+                    "Invalid drawable used as block texture: ${runCatching {
+                        context.resources.getResourceEntryName(cellValue)
+                    }.getOrNull()}"
+                )
+            }
         }
+
+
 
         // Preview tint overlay (for previewed clear rows/cols)
         if (isPreviewTinted) {
@@ -905,6 +976,17 @@ private fun CellTintGlowLayer(
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = maxRadius * 0.04f)
         )
     }
+}
+
+// Helper: convert any Drawable into a Bitmap (uses intrinsic size when available, falls back to 1x1)
+private fun drawableToBitmap(drawable: Drawable): Bitmap {
+    val width = (drawable.intrinsicWidth.takeIf { it > 0 } ?: 1)
+    val height = (drawable.intrinsicHeight.takeIf { it > 0 } ?: 1)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val canvas = AndroidCanvas(bitmap)
+    drawable.setBounds(0, 0, canvas.width, canvas.height)
+    drawable.draw(canvas)
+    return bitmap
 }
 
 // --------------------------------------------------------------------------
@@ -1035,3 +1117,9 @@ private fun computePreviewClearLinesFromGhost(
 
     return if (previewIsRow) rows else cols
 }
+
+
+
+
+
+

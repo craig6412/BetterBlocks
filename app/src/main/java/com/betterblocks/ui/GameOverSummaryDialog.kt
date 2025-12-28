@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
@@ -20,6 +19,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,9 +33,12 @@ import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
 import com.betterblocks.SuccessGreen
 import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.drawableRes
 import com.betterblocks.trophyColorForTier
 import kotlinx.coroutines.delay
 import kotlin.random.Random
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
 
 /**
  * GAME OVER SUMMARY DIALOG
@@ -216,11 +219,11 @@ fun GameOverSummaryDialog(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.EmojiEvents,
+                                        Image(
+                                            painter = painterResource(com.betterblocks.trophyRes(trophyTier)),
                                             contentDescription = "Trophy",
-                                            tint = trophyColorForTier(trophyTier),
-                                            modifier = Modifier.size(24.dp)
+                                            modifier = Modifier.size(24.dp),
+                                            contentScale = ContentScale.Fit
                                         )
                                         Text(
                                             text = trophyTier.name,

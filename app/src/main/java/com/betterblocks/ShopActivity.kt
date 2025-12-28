@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -407,7 +406,16 @@ fun ShopScreen(
 
                 // SECTION 3: TROPHY TIERS - Compact
                 if (trophyItems.isNotEmpty()) {
-                    Text("🏆 TROPHY TIERS", color = LightText, fontFamily = Oswald, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = com.betterblocks.trophyRes(TrophyTier.UNRANKED)),
+                            contentDescription = "Trophy",
+                            modifier = Modifier.size(18.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("TROPHY TIERS", color = LightText, fontFamily = Oswald, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
                     Spacer(Modifier.height(4.dp))
                     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         trophyItems.forEach { item ->
