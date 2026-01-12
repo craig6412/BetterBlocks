@@ -18,7 +18,7 @@ object AdManager {
     private const val TAG = "AdManager"
 
     // Public reward constant (coins granted when double rewarded ads complete)
-    const val DOUBLE_REWARD_COINS = 50
+    const val DOUBLE_REWARD_COINS = 100
 
     // Rewarded #1 and Rewarded #2 for double-chain
     private var rewardedAd1: RewardedAd? = null
