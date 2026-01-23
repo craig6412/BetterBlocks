@@ -150,19 +150,19 @@ fun FreeCoinsButton(
                         val act = activity
                         if (act == null) {
                             // Preload for later if no activity available
-                            com.betterblocks.ads.AdManager.preloadDoubleRewarded(ctx)
+                            com.betterblocks.ads.AdManager.preloadRewarded(ctx)
                             onGoToShop()
                             return@clickable
                         }
 
                         if (com.betterblocks.ads.AdManager.isRewardedLoaded.value) {
-                            com.betterblocks.ads.AdManager.showDoubleRewarded(
+                            com.betterblocks.ads.AdManager.showRewarded(
                                 act,
-                                onCompletedBoth = { try { viewModelBackedCallbacks.addCoins(com.betterblocks.ads.AdManager.DOUBLE_REWARD_COINS) } catch (_: Throwable) {} },
-                                onFailed = { com.betterblocks.ads.AdManager.preloadDoubleRewarded(ctx); onGoToShop() }
+                                onRewardEarned = { try { viewModelBackedCallbacks.addCoins(com.betterblocks.ads.AdManager.REWARDED_COINS) } catch (_: Throwable) {} },
+                                onFailed = { com.betterblocks.ads.AdManager.preloadRewarded(ctx); onGoToShop() }
                             )
                         } else {
-                            com.betterblocks.ads.AdManager.preloadDoubleRewarded(ctx)
+                            com.betterblocks.ads.AdManager.preloadRewarded(ctx)
                         }
                     }
             )
@@ -360,13 +360,9 @@ private fun MainMenuScreenContent(
         } catch (_: Throwable) {}
     }
 
-    // Preload double-rewarded ads proactively so the Free Coins flow can show immediately
+    // Preload rewarded ads proactively so the Free Coins flow can show immediately
     LaunchedEffect(Unit) {
-        try {
-            com.betterblocks.ads.AdManager.preloadDoubleRewarded(context)
-        } catch (_: Throwable) {
-            // ignore — preload is best-effort
-        }
+        com.betterblocks.ads.AdManager.preloadRewarded(context)
     }
 
     Surface(
@@ -531,7 +527,7 @@ private fun MainMenuScreenContent(
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 //version number location
                 Text(
-                    text = "v2.0",
+                    text = "v2.1",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald

@@ -13,9 +13,9 @@ android {
         applicationId = "com.betterblocks"
         minSdk = 24
         targetSdk = 35
-        versionCode = 13
-        versionName = "2.0"
-
+        versionCode = 16
+        versionName = "2.1"
+ // need to set to 16 ahead of time for new update coming in with non major issues being changed. as app is ad ready to run.
     }
 
     buildTypes {

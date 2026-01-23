@@ -32,8 +32,8 @@ class BetterBlocksApp : Application() {
             // will be started by MainActivity when permission is granted or when the user enables via UI.
 
             AdManager.initialize(applicationContext)
-            // Preload double rewarded chain as early as possible
-            AdManager.preloadDoubleRewarded(applicationContext)
+            // Preload rewarded ads as early as possible
+            AdManager.preloadRewarded(applicationContext)
             Log.d("BetterBlocksApp", "Initialized FirestoreManager and AdManager")
         } catch (t: Throwable) {
             Log.w("BetterBlocksApp", "Failed to initialize in Application.onCreate: ${t.message}")

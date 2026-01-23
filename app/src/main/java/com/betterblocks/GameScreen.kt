@@ -88,6 +88,7 @@ import com.betterblocks.ui.shareGameResults
 import com.betterblocks.ui.ZeroCoinsDialog
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Shadow
+import com.betterblocks.ads.AdManager
 
 //song lyrics because I am getting somewhere finally
 
@@ -185,6 +186,11 @@ fun GameScreen(
         """.trimIndent()
         )
     }
+
+    // --- Double-ad countdown ticker for testing ---
+    // Countdown ticking is owned by AdManager (main-thread handler). Compose must not mutate countdown state.
+    // (Any previous UI-driven ticker has been removed.)
+
     @Composable
     fun maxBoardHeight(): Dp {
         return sh(1f) * 0.55f
@@ -767,6 +773,36 @@ fun GameScreen(
             Log.d("GameScreen", "GameScreen composed")
             onDispose {
                 Log.d("GameScreen", "GameScreen disposed")
+            }
+        }
+    }
+
+    // Top-right countdown overlay for testing the rewarded-ad flow
+    if (!LocalInspectionMode.current) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(10f)
+        ) {
+            val overlaySeconds = AdManager.rewardedSecondsLeft.value
+            if (overlaySeconds > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 12.dp, end = 12.dp)
+                ) {
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "AD • ${'$'}overlaySeconds s",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = Color.White,
+                            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        )
+                    }
+                }
             }
         }
     }

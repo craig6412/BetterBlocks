@@ -23,12 +23,18 @@ const val SILVER_SCORE = 50_000
 const val GOLD_SCORE = 100_000
 const val PLATINUM_SCORE = 250_000
 const val DIAMOND_SCORE = 500_000
+
+//first person to reach on a natural level was Nana.
+// probably should consider bringing it up some.
 const val ELITE_SCORE = 1_000_000
 
 // Premium Tier Unlock Costs (in coins)
 const val PLATINUM_COINS = 15_625
 const val DIAMOND_COINS = 62_500
 const val ELITE_COINS = 250_000
+
+// fuck those that didn't think we would get here today... we made it my ninja. 
+
 
 /**
  * Determines the player's unlocked tier based on score and lifetime coins.

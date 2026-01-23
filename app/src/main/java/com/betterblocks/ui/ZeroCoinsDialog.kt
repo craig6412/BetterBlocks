@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MonetizationOn
@@ -19,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.betterblocks.ads.AdManager
 
 @Composable
 fun ZeroCoinsDialog(
@@ -26,6 +26,8 @@ fun ZeroCoinsDialog(
     onWatchAd: () -> Unit,
     onGoToShop: () -> Unit
 ) {
+    val isLoaded = AdManager.isRewardedLoaded.value
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -45,14 +47,24 @@ fun ZeroCoinsDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Watch a quick ad to earn bonus coins or restock in the shop.",
+                    text = "Watch an ad to get ${AdManager.REWARDED_COINS} coins.",
                     style = MaterialTheme.typography.bodyMedium
                 )
+
+                if (!isLoaded) {
+                    Text(
+                        text = "Loading ad…",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         },
         confirmButton = {
-            Button(onClick = onWatchAd) {
-                Text(text = "Watch Ad")
+            Button(
+                onClick = onWatchAd,
+                enabled = isLoaded
+            ) {
+                Text(text = "WATCH AD (${AdManager.REWARDED_COINS} COINS)")
             }
         },
         dismissButton = {
@@ -65,4 +77,3 @@ fun ZeroCoinsDialog(
         }
     )
 }
-

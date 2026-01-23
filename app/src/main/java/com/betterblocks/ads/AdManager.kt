@@ -17,28 +17,29 @@ object AdManager {
 
     private const val TAG = "AdManager"
 
-    // Public reward constant (coins granted when double rewarded ads complete)
-    const val DOUBLE_REWARD_COINS = 100
+    // Coins granted when a rewarded ad completes.
+    const val REWARDED_COINS = 100
 
-    // Rewarded #1 and Rewarded #2 for double-chain
-    private var rewardedAd1: RewardedAd? = null
-    private var rewardedAd2: RewardedAd? = null
+    // Countdown (in seconds) for the active rewarded flow; UI can observe this.
+    val rewardedSecondsLeft = mutableStateOf(0)
+
+    // Cancel/replace countdown ticks safely
+    private var countdownRunnable: Runnable? = null
+
+    // Prevent overlapping rewarded flows.
+    private var isRewardedInProgress: Boolean = false
+
+    // Single rewarded ad
+    private var rewardedAd: RewardedAd? = null
 
     // Track loaded state for UI
-    // - isRewardedLoaded: at least one rewarded ad (ad #1) is loaded and clickable
-    // - isDoubleRewardReady: both ads (#1 and #2) are loaded — full double flow available
     val isRewardedLoaded = mutableStateOf(false)
-    val isDoubleRewardReady = mutableStateOf(false)
 
     // Interstitial (for every-other-game-over logic)
     private var interstitialAd: InterstitialAd? = null
     private var gameOverCounter = 0
 
     private val handler = Handler(Looper.getMainLooper())
-
-    // Polling/wait policy for ad2 while user watches ad1
-    private const val AD2_WAIT_MAX_MS = 8000L
-    private const val AD2_POLL_INTERVAL_MS = 300L
 
     val bannerAdUnitId: String
         get() = BuildConfig.BANNER_AD_UNIT_ID
@@ -47,10 +48,39 @@ object AdManager {
         get() = BuildConfig.REWARDED_AD_UNIT_ID
 
     val interstitialAdUnitId: String
-        get() = BuildConfig.INTERSTITIAL_AD_UNIT_ID   // ← Add to BuildConfig
+        get() = BuildConfig.INTERSTITIAL_AD_UNIT_ID
 
     fun initialize(context: Context) {
         MobileAds.initialize(context)
+    }
+
+    // Helper to start and clear the countdown state (ticks once/second on main thread)
+    private fun startRewardedCountdown(totalSeconds: Int) {
+        // Cancel any previous countdown loop
+        countdownRunnable?.let { handler.removeCallbacks(it) }
+        countdownRunnable = null
+
+        rewardedSecondsLeft.value = totalSeconds
+
+        val runnable = object : Runnable {
+            override fun run() {
+                val current = rewardedSecondsLeft.value
+                if (current <= 0) {
+                    countdownRunnable = null
+                    return
+                }
+                rewardedSecondsLeft.value = current - 1
+                handler.postDelayed(this, 1000L)
+            }
+        }
+        countdownRunnable = runnable
+        handler.postDelayed(runnable, 1000L)
+    }
+
+    private fun clearRewardedCountdown() {
+        countdownRunnable?.let { handler.removeCallbacks(it) }
+        countdownRunnable = null
+        rewardedSecondsLeft.value = 0
     }
 
     // -----------------------------
@@ -62,181 +92,122 @@ object AdManager {
     }
 
     // -----------------------------
-    // Rewarded Ads — Load both for 2-Ad Chain
-    // Improved: make ad #1 load quickly and mark UI clickable; ad #2 loads afterwards.
-    // If ad #2 fails to load, we prefer to attempt loading it while ad1 is playing and wait a bit.
+    // Rewarded Ads — single
     // -----------------------------
-    fun preloadDoubleRewarded(context: Context) {
-        // Reset double-ready state but keep isRewardedLoaded false until ad1 loads
-        isDoubleRewardReady.value = false
+    fun preloadRewarded(context: Context) {
         isRewardedLoaded.value = false
 
         val request = AdRequest.Builder().build()
 
-        // Load Ad #1
         RewardedAd.load(
             context,
             rewardedAdUnitId,
             request,
             object : RewardedAdLoadCallback() {
                 override fun onAdLoaded(ad: RewardedAd) {
-                    rewardedAd1 = ad
+                    rewardedAd = ad
                     isRewardedLoaded.value = true
-                    Log.d(TAG, "RewardedAd #1 loaded (at least one ready)")
-
-                    // Load Ad #2 ONLY after #1 is loaded
-                    loadSecondRewarded(context)
+                    Log.d(TAG, "RewardedAd loaded")
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
-                    rewardedAd1 = null
-                    rewardedAd2 = null
+                    rewardedAd = null
                     isRewardedLoaded.value = false
-                    isDoubleRewardReady.value = false
-                    Log.e(TAG, "RewardedAd #1 failed to load: ${error.message}")
+                    Log.e(TAG, "RewardedAd failed to load: ${error.message}")
                 }
             }
         )
     }
 
-    private fun loadSecondRewarded(context: Context) {
-        val request = AdRequest.Builder().build()
-
-        RewardedAd.load(
-            context,
-            rewardedAdUnitId,
-            request,
-            object : RewardedAdLoadCallback() {
-                override fun onAdLoaded(ad: RewardedAd) {
-                    rewardedAd2 = ad
-                    isDoubleRewardReady.value = true
-                    // Keep isRewardedLoaded true (ad1 is also available)
-                    isRewardedLoaded.value = true
-                    Log.d(TAG, "RewardedAd #2 loaded — DOUBLE ADS READY")
-                }
-
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    // If second ad fails, we still keep ad1 if present so users can watch at least one ad
-                    rewardedAd2 = null
-                    isDoubleRewardReady.value = false
-                    // Don't flip isRewardedLoaded to false here — ad1 might still be present
-                    Log.e(TAG, "RewardedAd #2 failed to load: ${error.message}")
-                }
-            }
-        )
-    }
-
-    // ---------------------------------------------------
-    // SHOW DOUBLE REWARDED (User must watch BOTH ads)
-    // Behavior: if both ads are loaded, play ad1 then ad2 immediately.
-    // If only ad1 is loaded, start loading ad2 immediately while user watches ad1,
-    // and wait up to AD2_WAIT_MAX_MS (polling) after ad1 completion for ad2 to be loaded.
-    // If ad2 loads in that window, show it and then call onCompletedBoth.
-    // If ad2 does not load in that window, we call onFailed.
-    // ---------------------------------------------------
-    fun showDoubleRewarded(
+    fun showRewarded(
         activity: Activity,
-        onCompletedBoth: () -> Unit,
+        onRewardEarned: () -> Unit,
         onFailed: (() -> Unit)? = null
     ) {
-        val ad1 = rewardedAd1
-        val ad2 = rewardedAd2
-
-        if (ad1 == null) {
-            Log.e(TAG, "No rewarded ad loaded (ad1 missing)")
+        if (isRewardedInProgress) {
+            Log.w(TAG, "showRewarded: flow already running, ignoring extra call")
             onFailed?.invoke()
             return
         }
 
-        // If both ready, play both immediately
-        if (ad2 != null) {
-            Log.d(TAG, "Playing double rewarded chain: ad1 -> ad2")
-
-            ad1.show(activity) {
-                Log.d(TAG, "User finished rewarded #1")
-
-                ad2.show(activity) {
-                    Log.d(TAG, "User finished rewarded #2 — REWARD NOW (double)")
-                    try {
-                        onCompletedBoth()
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "onCompletedBoth threw", t)
-                    }
-                }
-            }
-
-            // Reset state and preload again
-            rewardedAd1 = null
-            rewardedAd2 = null
-            isRewardedLoaded.value = false
-            isDoubleRewardReady.value = false
-            preloadDoubleRewarded(activity)
-
+        val ad = rewardedAd
+        if (ad == null) {
+            Log.e(TAG, "showRewarded: no rewarded ad loaded")
+            isRewardedInProgress = false
+            clearRewardedCountdown()
+            onFailed?.invoke()
+            preloadRewarded(activity)
             return
         }
 
-        // Only ad1 present: attempt to load ad2 while user watches ad1
-        Log.d(TAG, "Ad1 available but ad2 not yet loaded — will attempt to load ad2 while user watches ad1")
+        Log.d(TAG, "Rewarded flow start")
 
-        // Kick off ad2 load immediately
-        loadSecondRewarded(activity)
+        isRewardedInProgress = true
+        startRewardedCountdown(60)
+        isRewardedLoaded.value = false
 
-        // Play ad1
-        ad1.show(activity) {
-            Log.d(TAG, "User finished rewarded #1 — waiting for ad2 to load up to ${AD2_WAIT_MAX_MS}ms")
+        var earned = false
 
-            // Poll for rewardedAd2 up to AD2_WAIT_MAX_MS
-            val start = System.currentTimeMillis()
+        fun cleanupAndPreload() {
+            Log.d(TAG, "Rewarded flow cleanup")
+            isRewardedInProgress = false
+            clearRewardedCountdown()
 
-            val checkRunnable = object : Runnable {
-                override fun run() {
-                    val current = rewardedAd2
-                    if (current != null) {
-                        Log.d(TAG, "Ad2 became available after ad1; proceeding to show ad2")
-                        current.show(activity) {
-                            Log.d(TAG, "User finished rewarded #2 — REWARD NOW (double, late-loaded)")
-                            try {
-                                onCompletedBoth()
-                            } catch (t: Throwable) {
-                                Log.w(TAG, "onCompletedBoth threw", t)
-                            }
-                        }
+            rewardedAd = null
+            isRewardedLoaded.value = false
 
-                        // Reset and preload
-                        rewardedAd1 = null
-                        rewardedAd2 = null
-                        isRewardedLoaded.value = false
-                        isDoubleRewardReady.value = false
-                        preloadDoubleRewarded(activity)
-
-                        return
-                    }
-
-                    val elapsed = System.currentTimeMillis() - start
-                    if (elapsed >= AD2_WAIT_MAX_MS) {
-                        Log.e(TAG, "Ad2 did not load within ${AD2_WAIT_MAX_MS}ms after ad1 finished — failing double-ad flow")
-                        onFailed?.invoke()
-
-                        // Keep ad1 null/cleared and attempt to preload anew so user can try again
-                        rewardedAd1 = null
-                        rewardedAd2 = null
-                        isRewardedLoaded.value = false
-                        isDoubleRewardReady.value = false
-                        preloadDoubleRewarded(activity)
-
-                        return
-                    }
-
-                    // Not yet loaded, schedule another check
-                    handler.postDelayed(this, AD2_POLL_INTERVAL_MS)
-                }
-            }
-
-            handler.postDelayed(checkRunnable, AD2_POLL_INTERVAL_MS)
+            preloadRewarded(activity)
         }
 
-        // We don't clear rewardedAd1 here — it will be cleared after flow finishes
+        fun failFlow(reason: String) {
+            Log.e(TAG, "Rewarded flow failed: $reason")
+            try {
+                onFailed?.invoke()
+            } catch (t: Throwable) {
+                Log.w(TAG, "onFailed threw", t)
+            } finally {
+                cleanupAndPreload()
+            }
+        }
+
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() {
+                Log.d(TAG, "Rewarded ad dismissed (earned=$earned)")
+                // If user never earned the reward, treat as a failure.
+                if (!earned) {
+                    failFlow("dismissed without reward")
+                    return
+                }
+                // Success path: we already invoked onRewardEarned in the reward listener.
+                cleanupAndPreload()
+            }
+
+            override fun onAdFailedToShowFullScreenContent(adError: AdError) {
+                failFlow("failed to show: ${adError.message}")
+            }
+        }
+
+        ad.show(activity) {
+            earned = true
+            Log.d(TAG, "Reward earned")
+            try {
+                onRewardEarned()
+            } catch (t: Throwable) {
+                Log.w(TAG, "onRewardEarned threw", t)
+            }
+        }
     }
+
+    // Backwards-compatible wrappers (no longer double): keep existing call sites compiling if any remain.
+    @Deprecated("Use preloadRewarded(context)")
+    fun preloadDoubleRewarded(context: Context) = preloadRewarded(context)
+
+    @Deprecated("Use showRewarded(activity, onRewardEarned, onFailed)")
+    fun showDoubleRewarded(
+        activity: Activity,
+        onCompletedBoth: () -> Unit,
+        onFailed: (() -> Unit)? = null
+    ) = showRewarded(activity, onCompletedBoth, onFailed)
 
     // -----------------------------
     // Interstitial – Load

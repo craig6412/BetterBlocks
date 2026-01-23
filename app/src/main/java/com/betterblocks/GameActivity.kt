@@ -67,21 +67,18 @@ class GameActivity : ComponentActivity() {
                         onWatchAd = {
                             val activity = this@GameActivity
                             if (AdManager.isRewardedLoaded.value) {
-                                AdManager.showDoubleRewarded(
+                                AdManager.showRewarded(
                                     activity,
-                                    onCompletedBoth = {
-                                        // Grant coins and dismiss the zero-coins dialog when the user finishes both ads
-                                        viewModel.addCoins(com.betterblocks.ads.AdManager.DOUBLE_REWARD_COINS)
+                                    onRewardEarned = {
+                                        viewModel.addCoins(com.betterblocks.ads.AdManager.REWARDED_COINS)
                                         viewModel.dismissZeroCoinsDialog()
                                     },
                                     onFailed = {
-                                        // If ad failed, try to preload again and keep dialog open (user can choose shop)
-                                        AdManager.preloadDoubleRewarded(activity)
+                                        AdManager.preloadRewarded(activity)
                                     }
                                 )
                             } else {
-                                // Not ready — kick off preload and keep the dialog open so user can still choose the shop
-                                AdManager.preloadDoubleRewarded(activity)
+                                AdManager.preloadRewarded(activity)
                             }
                         },
                         onGoToShop = {
