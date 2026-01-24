@@ -2,6 +2,7 @@ package com.betterblocks.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,9 +32,10 @@ import com.betterblocks.model.drawableRes
 import com.betterblocks.trophyColorForTier
 import kotlinx.coroutines.delay
 import kotlin.random.Random
-import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * RAINBOW METER FULL CELEBRATION DIALOG
@@ -631,6 +633,140 @@ fun ShopPurchaseBubble(
                     fontWeight = FontWeight.Bold,
                     color = LightText
                 )
+            }
+        }
+    }
+}
+
+/**
+ * "What's New" / economy rebalance dialog.
+ *
+ * Shown one-time on first launch after the economy rebalance update.
+ */
+@Composable
+fun EconomyUpdateDialog(
+    onDismiss: () -> Unit,
+    onViewTrophyBoard: (() -> Unit)? = null
+) {
+    // Make back/outside dismiss behave exactly like pressing "Got it".
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = DeepBlue),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(DarkBackground, DeepBlue)
+                        )
+                    )
+                    .padding(24.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Economy Update",
+                        fontFamily = Oswald,
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightText
+                    )
+
+                    Text(
+                        text = "We’ve rebalanced coins, power-ups, and tier unlock costs to keep competition fair.",
+                        fontFamily = Oswald,
+                        fontSize = 16.sp,
+                        color = LightText.copy(alpha = 0.85f)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Two ways to unlock Trophy Board tiers:",
+                        fontFamily = Oswald,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightText
+                    )
+
+                    Text(
+                        text = "• Score Path: reach the required score through gameplay\n" +
+                                "• Instant Unlock Path: unlock tiers using coins (earned or from coin packs)",
+                        fontFamily = Oswald,
+                        fontSize = 15.sp,
+                        color = LightText.copy(alpha = 0.85f)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "What changed:",
+                        fontFamily = Oswald,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = LightText
+                    )
+
+                    Text(
+                        text = "• Coin pack rewards updated\n" +
+                                "• Tier unlock coin costs updated\n" +
+                                "• Power-up prices adjusted for balance",
+                        fontFamily = Oswald,
+                        fontSize = 15.sp,
+                        color = LightText.copy(alpha = 0.85f)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "Important: Your existing leaderboard scores and earned tiers are not reduced.",
+                        fontFamily = Oswald,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Pink_Jackie
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        if (onViewTrophyBoard != null) {
+                            TextButton(onClick = onViewTrophyBoard) {
+                                Text(
+                                    text = "View Trophy Board",
+                                    fontFamily = Oswald,
+                                    fontWeight = FontWeight.Bold,
+                                    color = LightText
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+
+                        Button(
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Text(
+                                text = "Got it",
+                                fontFamily = Oswald,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LightText
+                            )
+                        }
+                    }
+                }
             }
         }
     }

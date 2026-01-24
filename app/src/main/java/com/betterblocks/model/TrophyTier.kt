@@ -2,6 +2,7 @@ package com.betterblocks.model
 
 import android.content.SharedPreferences
 import com.betterblocks.KEY_HIGHEST_TIER_UNLOCKED
+import com.betterblocks.economy.EconomyConfig
 
 enum class TrophyTier {
     UNRANKED,
@@ -17,25 +18,6 @@ enum class TrophyTier {
     }
 }
 
-// Trophy Tier Score Thresholds
-const val BRONZE_SCORE = 1_000
-const val SILVER_SCORE = 50_000
-const val GOLD_SCORE = 100_000
-const val PLATINUM_SCORE = 250_000
-const val DIAMOND_SCORE = 500_000
-
-//first person to reach on a natural level was Nana.
-// probably should consider bringing it up some.
-const val ELITE_SCORE = 1_000_000
-
-// Premium Tier Unlock Costs (in coins)
-const val PLATINUM_COINS = 15_625
-const val DIAMOND_COINS = 62_500
-const val ELITE_COINS = 250_000
-
-// fuck those that didn't think we would get here today... we made it my ninja. 
-
-
 /**
  * Determines the player's unlocked tier based on score and lifetime coins.
  *
@@ -43,7 +25,7 @@ const val ELITE_COINS = 250_000
  * 1. Coins and score are treated as the same "overall progression value"
  * 2. Player gets placed into a tier when they reach the score threshold OR purchase with coins
  * 3. Platinum, Diamond, and Elite must be unlocked IN ORDER (no skipping)
- * 4. Elite tier requires BOTH score >= 1,000,000 AND 250,000 coin purchase (OR just the purchase)
+ * 4. Elite tier requires score >= ELITE_SCORE OR ELITE coin purchase
  */
 fun determineUnlockedTier(
     bestScore: Int,
@@ -53,23 +35,20 @@ fun determineUnlockedTier(
     var tier = previouslyUnlocked
 
     // Free tiers - unlock by score only
-    if (tier == TrophyTier.UNRANKED && bestScore >= BRONZE_SCORE) tier = TrophyTier.BRONZE
-    if (tier >= TrophyTier.BRONZE && bestScore >= SILVER_SCORE) tier = TrophyTier.SILVER
-    if (tier >= TrophyTier.SILVER && bestScore >= GOLD_SCORE) tier = TrophyTier.GOLD
+    if (tier == TrophyTier.UNRANKED && bestScore >= EconomyConfig.BRONZE_SCORE) tier = TrophyTier.BRONZE
+    if (tier >= TrophyTier.BRONZE && bestScore >= EconomyConfig.SILVER_SCORE) tier = TrophyTier.SILVER
+    if (tier >= TrophyTier.SILVER && bestScore >= EconomyConfig.GOLD_SCORE) tier = TrophyTier.GOLD
 
     // Premium tiers - must be unlocked in order, require score OR coin payment
-    // PLATINUM: Must have GOLD first, then reach score or pay coins
-    if (tier >= TrophyTier.GOLD && (bestScore >= PLATINUM_SCORE || lifetimeCoins >= PLATINUM_COINS)) {
+    if (tier >= TrophyTier.GOLD && (bestScore >= EconomyConfig.PLATINUM_SCORE || lifetimeCoins >= EconomyConfig.PLATINUM_COINS)) {
         tier = TrophyTier.PLATINUM
     }
 
-    // DIAMOND: Must have PLATINUM first, then reach score or pay coins
-    if (tier >= TrophyTier.PLATINUM && (bestScore >= DIAMOND_SCORE || lifetimeCoins >= DIAMOND_COINS)) {
+    if (tier >= TrophyTier.PLATINUM && (bestScore >= EconomyConfig.DIAMOND_SCORE || lifetimeCoins >= EconomyConfig.DIAMOND_COINS)) {
         tier = TrophyTier.DIAMOND
     }
 
-    // Elite: Must have DIAMOND first, then reach score or pay coins
-    if (tier >= TrophyTier.DIAMOND && (bestScore >= ELITE_SCORE || lifetimeCoins >= ELITE_COINS)) {
+    if (tier >= TrophyTier.DIAMOND && (bestScore >= EconomyConfig.ELITE_SCORE || lifetimeCoins >= EconomyConfig.ELITE_COINS)) {
         tier = TrophyTier.ELITE
     }
 

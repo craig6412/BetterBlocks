@@ -59,3 +59,7 @@ const val KEY_UPDATE_GIFTS_APPLIED = "update_gifts_applied"
 // NEW: Highscore notifications toggle (controls whether the app will use local notifications
 // to notify the player about highscores / leaderboard updates). Default should be ON.
 const val KEY_HIGHSCORE_NOTIFICATIONS = "highscore_notifications"
+
+// One-time onboarding/update dialogs (versioned so future updates can re-prompt safely)
+const val KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1 = "economy_update_dialog_shown_v1"
+const val KEY_POWERUP_POPUP_SHOWN_V1 = "powerup_popup_shown_v1"

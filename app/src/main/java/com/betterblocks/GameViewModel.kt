@@ -9,6 +9,8 @@ import com.betterblocks.animation.LineClearAnimator
 import com.betterblocks.animation.ScoreAnimator
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.getPlayerTier
+import com.betterblocks.economy.EconomyConfig
+
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,7 +39,6 @@ const val COLOR_WIPE_ANIMATION_SPEED_MULTIPLIER = 2.0f  // ← ADJUST THIS to fi
 
 const val COIN_REWARD_THRESHOLD = 1000 // Points needed for reward
 const val COINS_PER_REWARD = 10 // Coins given per threshold
-const val ROTATION_COST = 10 // Cost to rotate a block
 const val INITIAL_FREE_ROTATIONS = 3
 const val RAINBOW_BLOCK_SCORE = 1000 // Special score for board wipe
 
@@ -45,8 +46,9 @@ const val INITIAL_RAINBOW_COUNT = 3 // Standard start count
 const val SPECIAL_METER_MAX = 50 // Meter fills in 5 combo steps
 
 // --- SHOP COSTS ---
-const val RAINBOW_WIPE_COST = 1000 // Coins to buy a Rainbow Wipe
-const val COLOR_WIPE_COST = 75 // Coins to buy a Color Wipe
+// Centralized in EconomyConfig (do not duplicate tuning values here)
+val RAINBOW_WIPE_COST: Int get() = EconomyConfig.RAINBOW_WIPE_COST
+val COLOR_WIPE_COST: Int get() = EconomyConfig.COLOR_WIPE_COST
 
 // --- DEVELOPER OVERRIDES ---
 private const val DEV_INITIAL_COINS = 150// $9,999 for development
@@ -1307,15 +1309,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 newFreeRotations -= 1
                 // persist free rotations immediately so survives process death
                 saveFreeRotations(newFreeRotations)
-            } else if (newCoins >= ROTATION_COST) {
+            } else if (newCoins >= EconomyConfig.ROTATION_COST) {
                 // Atomic spend via ShopRepository to avoid race conditions
-                val spent = shopRepo.useCoins(ROTATION_COST)
+                val spent = shopRepo.useCoins(EconomyConfig.ROTATION_COST)
                 if (!spent) {
                     // If spend failed concurrenty, show zero-coins dialog
                     _uiState.update { it.copy(showZeroCoinsDialog = true) }
                     return
                 }
-                newCoins -= ROTATION_COST
+                newCoins -= EconomyConfig.ROTATION_COST
                 // maintain lifetime if higher (original behaviour)
                 shopRepo.setLifetimeIfHigher(newCoins)
             } else {

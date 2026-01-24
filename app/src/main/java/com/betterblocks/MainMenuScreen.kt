@@ -61,6 +61,9 @@ import com.betterblocks.PlayerNameDialog
 import com.betterblocks.DeviceClass
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.drawableRes
+import com.betterblocks.KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1
+import com.betterblocks.KEY_POWERUP_POPUP_SHOWN_V1
+import com.betterblocks.ui.EconomyUpdateDialog
 
 
 // Gradient colors for background
@@ -349,10 +352,6 @@ private fun MainMenuScreenContent(
 ) {
     val context = LocalContext.current
 
-    var showPopup by remember {
-        mutableStateOf(!hasShownPowerUpPopup(context))
-    }
-
     // Check daily reward on first composition — call through the provided callbacks if available
     LaunchedEffect(Unit) {
         try {
@@ -527,23 +526,61 @@ private fun MainMenuScreenContent(
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 //version number location
                 Text(
-                    text = "v2.1",
+                    text = "v2.2",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald
                 )
 
-                if (!LocalInspectionMode.current && showPopup) {
+                // --------- ONE-TIME DIALOGS (AUTHORITATIVE ORDER) ---------
+                // 1) Economy Update dialog (new)
+                // 2) Power-ups popup (existing)
+                // 3) Normal UI / other dialogs
+
+                val prefsRoot = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+                var showEconomyDialog by remember { mutableStateOf(false) }
+                var showPowerUpDialog by remember { mutableStateOf(false) }
+
+                LaunchedEffect(Unit) {
+                    val economyShown = prefsRoot.getBoolean(KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1, false)
+                    val powerupShown = prefsRoot.getBoolean(KEY_POWERUP_POPUP_SHOWN_V1, false)
+
+                    showEconomyDialog = !economyShown
+                    // Only consider power-up popup after economy dialog is acknowledged
+                    showPowerUpDialog = economyShown && !powerupShown && !hasShownPowerUpPopup(context)
+                }
+
+                if (!LocalInspectionMode.current && showEconomyDialog) {
+                    EconomyUpdateDialog(
+                        onDismiss = {
+                            // Mark as shown immediately so app restarts mid-flow cannot show both dialogs.
+                            prefsRoot.edit().putBoolean(KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1, true).apply()
+                            showEconomyDialog = false
+
+                            // After economy dialog closes, decide whether to show power-up popup.
+                            val powerupShownNow = prefsRoot.getBoolean(KEY_POWERUP_POPUP_SHOWN_V1, false) || hasShownPowerUpPopup(context)
+                            showPowerUpDialog = !powerupShownNow
+                        },
+                        onViewTrophyBoard = null
+                    )
+                }
+
+                if (!LocalInspectionMode.current && !showEconomyDialog && showPowerUpDialog) {
                     PowerUpsPopup(
                         onDismiss = {
+                            // Preserve popup logic but mark with versioned key.
+                            prefsRoot.edit().putBoolean(KEY_POWERUP_POPUP_SHOWN_V1, true).apply()
                             setPowerUpPopupShown(context)
-                            showPopup = false
+                            showPowerUpDialog = false
                         }
                     )
                 }
 
+                // When economy/power-up dialogs are active, suppress other first-run dialogs.
+                val suppressOtherDialogs = showEconomyDialog || showPowerUpDialog
+
                 // Daily Reward Dialog
-                if (!LocalInspectionMode.current && uiState.showDailyRewardDialog) {
+                if (!LocalInspectionMode.current && uiState.showDailyRewardDialog && !suppressOtherDialogs) {
                     DailyRewardDialog(
                         day = uiState.dailyRewardDay,
                         streak = uiState.dailyRewardStreak,
@@ -564,6 +601,11 @@ private fun MainMenuScreenContent(
                 // Keep a snapshot of whether daily reward was showing so we can show name dialog after it finishes
                 var dailyWasShowing by remember { mutableStateOf(uiState.showDailyRewardDialog) }
                 LaunchedEffect(uiState.showDailyRewardDialog) {
+                    if (suppressOtherDialogs) {
+                        showPlayerNameDialog = false
+                        dailyWasShowing = uiState.showDailyRewardDialog
+                        return@LaunchedEffect
+                    }
                     // If daily dialog just finished (was showing and now not), and name not prompted, show name dialog
                     if (dailyWasShowing && !uiState.showDailyRewardDialog && !prompted && savedPlayerName.isNullOrBlank()) {
                         showPlayerNameDialog = true
@@ -575,7 +617,7 @@ private fun MainMenuScreenContent(
                     }
                 }
 
-                if (!LocalInspectionMode.current && showPlayerNameDialog) {
+                if (!LocalInspectionMode.current && showPlayerNameDialog && !suppressOtherDialogs) {
                     PlayerNameDialog(
                         currentName = null,
                         onSave = { chosenName ->

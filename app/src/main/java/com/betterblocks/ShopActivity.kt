@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.lifecycleScope
+import com.betterblocks.economy.EconomyConfig
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.ui.*
 import com.betterblocks.ui.theme.BetterBlocksTheme
@@ -267,10 +268,10 @@ fun ShopScreen(
 
     // Define Shop Options
     val shopItems = listOf(
-        ShopItem("coins_small", "Stack of Coins", 3_000, R.drawable.shop_coins_small),
-        ShopItem("coins_medium", "Sack of Coins", 25_000, R.drawable.shop_coins_medium, "POPULAR"),
-        ShopItem("coins_large", "Chest of Coins", 100_000, R.drawable.shop_coins_large, "BEST VALUE"),
-        ShopItem("coins_mega", "Mega Coin Hoard", 400_000, R.drawable.shop_coins_mega, "ELITE MODE")
+        ShopItem("coins_small", "Stack of Coins", EconomyConfig.COIN_PACK_GRANTS["coins_small"] ?: 0, R.drawable.shop_coins_small),
+        ShopItem("coins_medium", "Sack of Coins", EconomyConfig.COIN_PACK_GRANTS["coins_medium"] ?: 0, R.drawable.shop_coins_medium, "POPULAR"),
+        ShopItem("coins_large", "Chest of Coins", EconomyConfig.COIN_PACK_GRANTS["coins_large"] ?: 0, R.drawable.shop_coins_large, "BEST VALUE"),
+        ShopItem("coins_mega", "Mega Coin Hoard", EconomyConfig.COIN_PACK_GRANTS["coins_mega"] ?: 0, R.drawable.shop_coins_mega, "ELITE MODE")
     )
 
 
@@ -280,14 +281,14 @@ fun ShopScreen(
             id = "rainbow_wipe",
             title = "Rainbow Wipe",
             description = "Clear the entire board",
-            cost = 1000,
+            cost = EconomyConfig.RAINBOW_WIPE_COST,
             icon = "🌈"
         ),
         PowerUpItem(
             id = "color_wipe",
             title = "Color Wipe",
             description = "Remove all blocks of one color",
-            cost = 75,
+            cost = EconomyConfig.COLOR_WIPE_COST,
             icon = "🎨"
         )
     )
@@ -296,17 +297,17 @@ fun ShopScreen(
     val trophyItems = listOf(
         TrophyShopItem(
             tier = TrophyTier.PLATINUM,
-            cost = 15625,
+            cost = EconomyConfig.PLATINUM_COINS,
             description = "Unlock Platinum Trophy Tier"
         ),
         TrophyShopItem(
             tier = TrophyTier.DIAMOND,
-            cost = 62500,
+            cost = EconomyConfig.DIAMOND_COINS,
             description = "Unlock Diamond Trophy Tier"
         ),
         TrophyShopItem(
             tier = TrophyTier.ELITE,
-            cost = 250000,
+            cost = EconomyConfig.ELITE_COINS,
             description = "Unlock Elite Trophy Tier"
         )
     )

@@ -65,6 +65,7 @@ import androidx.compose.ui.layout.positionInWindow
 import kotlinx.coroutines.delay
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.drawableRes
+import com.betterblocks.economy.EconomyConfig
 
 // --- CONSTANTS & COLORS ---
 val DeepBlue = Color(0xFF0B0123)           // Main Background: Midnight Void
@@ -541,7 +542,7 @@ fun RotationButtonWithCost(
                     )
                 } else {
                     Text(
-                        text = ROTATION_COST.toString(),
+                        text = EconomyConfig.ROTATION_COST.toString(),
                         color = DarkBackground,
                         fontSize = ssp(0.025f),
                         fontWeight = FontWeight.Bold,

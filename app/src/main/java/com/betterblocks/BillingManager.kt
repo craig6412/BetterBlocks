@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import com.android.billingclient.api.*
 import com.android.billingclient.api.BillingClient.BillingResponseCode
+import com.betterblocks.economy.EconomyConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,14 +33,12 @@ class BillingManager(
         "coins_large",
         "coins_mega"
     )
+
     object CoinPacks {
-        val amounts = mapOf(
-            "coins_small" to 3_000,
-            "coins_medium" to 25_000,
-            "coins_large" to 100_000,
-            "coins_mega" to 400_000
-        )
+        // IMPORTANT: product IDs must not change; only in-game coin grants are updated.
+        val amounts: Map<String, Int> = EconomyConfig.COIN_PACK_GRANTS
     }
+
     // Purchase update listener
     private val purchasesUpdatedListener = PurchasesUpdatedListener { billingResult, purchases ->
         when (billingResult.responseCode) {
