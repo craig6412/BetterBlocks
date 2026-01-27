@@ -5,9 +5,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
+import com.betterblocks.coupon.CouponLedger
 import com.betterblocks.ui.sdp
-import com.betterblocks.ui.ssp
 
 
 
@@ -27,6 +30,36 @@ fun SettingsScreen(
     var hapticEnabled by remember { mutableStateOf(initialHapticEnabled) }
     var darkTheme by remember { mutableStateOf(initialDarkTheme) }
     var highscoreNotifications by remember { mutableStateOf(initialHighscoreNotifications) }
+
+    val context = LocalContext.current
+
+    // --- Coupon Code Center state ---
+    var couponInput by remember { mutableStateOf("") }
+    var couponStatus by remember { mutableStateOf<String?>(null) }
+    var couponProcessing by remember { mutableStateOf(false) }
+
+    val couponLedger = remember { CouponLedger.get(context) }
+
+    fun applyCoupon() {
+        if (couponProcessing) return
+        couponProcessing = true
+        couponStatus = null
+
+        // Redeem synchronously; ledger is thread-safe and idempotent.
+        val result = couponLedger.redeem(couponInput)
+        couponStatus = when (result) {
+            is CouponLedger.Result.Success -> "Success! 100,000 coins added."
+            is CouponLedger.Result.Invalid -> "Invalid coupon code."
+            is CouponLedger.Result.AlreadyRedeemed -> "This code has already been redeemed."
+        }
+
+        // If success, clear input for better UX (optional, UI-only)
+        if (result is CouponLedger.Result.Success) {
+            couponInput = ""
+        }
+
+        couponProcessing = false
+    }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -138,6 +171,48 @@ fun SettingsScreen(
                         highscoreNotifications = it
                         onToggleHighscoreNotifications()
                     }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(sdp(0.03f)))
+
+            // -------------------------------
+            // Coupon Code Center
+            // -------------------------------
+            Text(
+                text = "Coupon Code Center",
+                color = LightText,
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Spacer(modifier = Modifier.height(sdp(0.015f)))
+
+            OutlinedTextField(
+                value = couponInput,
+                onValueChange = { couponInput = it },
+                label = { Text("Enter coupon code") },
+                singleLine = true,
+                enabled = !couponProcessing,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(sdp(0.015f)))
+
+            Button(
+                onClick = { applyCoupon() },
+                enabled = !couponProcessing,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text("APPLY")
+            }
+
+            couponStatus?.let { msg ->
+                Spacer(modifier = Modifier.height(sdp(0.01f)))
+                Text(
+                    text = msg,
+                    color = LightText,
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
 

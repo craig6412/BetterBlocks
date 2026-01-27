@@ -208,7 +208,7 @@ class ShopActivity : ComponentActivity() {
         }
 
         // COIN PURCHASES CAN SKIP TIERS - No sequential requirement!
-        // You can buy Elite tier directly if you have 250,000 coins
+        // You can buy Elite tier directly if you have EconomyConfig.ELITE_COINS coins
 
         if (shopRepo.useCoins(cost)) {
             // update lifetime coins and unlock tier through repo + prefs
@@ -260,8 +260,13 @@ fun ShopScreen(
     onTrophyPurchase: (TrophyTier, Int) -> Unit
 ) {
     val context = LocalContext.current
+
+    // Use the centralized repository so coin balance updates reactively in Compose.
+    val shopRepo = remember { ShopRepository.get(context.applicationContext) }
+    val currentCoins by shopRepo.coins.collectAsState()
+
+    // Tier info: keep existing prefs read for now (optional improvements later).
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    val currentCoins = prefs.getInt(KEY_COINS, 0)
     val currentTierOrdinal = prefs.getInt(KEY_HIGHEST_TIER_UNLOCKED, TrophyTier.UNRANKED.ordinal)
     val currentTier = TrophyTier.fromOrdinalSafe(currentTierOrdinal)
 
