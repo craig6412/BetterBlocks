@@ -5,7 +5,6 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.widget.Toast
 import androidx.compose.runtime.mutableStateOf
 import com.betterblocks.BuildConfig
 import com.google.android.gms.ads.*
@@ -13,7 +12,6 @@ import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.rewarded.RewardedAd
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
-import java.util.UUID
 
 object AdManager {
 
@@ -51,9 +49,6 @@ object AdManager {
 
     val interstitialAdUnitId: String
         get() = BuildConfig.INTERSTITIAL_AD_UNIT_ID
-
-    // Track the current in-flight rewarded transaction (for post-dismiss messaging)
-    @Volatile private var inFlightRewardTransactionId: String? = null
 
     fun initialize(context: Context) {
         MobileAds.initialize(context)
@@ -145,37 +140,27 @@ object AdManager {
             return
         }
 
-        val transactionId = UUID.randomUUID().toString()
-        inFlightRewardTransactionId = transactionId
-
-        Log.d(TAG, "Rewarded flow start txId=$transactionId unitType=rewarded")
+        Log.d(TAG, "Rewarded flow start")
 
         isRewardedInProgress = true
         startRewardedCountdown(60)
         isRewardedLoaded.value = false
 
-        // NOTE: We only grant coins inside onUserEarnedReward.
-        // This flag is for flow tracking; reward itself is ledger-based and idempotent.
-        var rewardCallbackFired = false
-
-        val ledger = RewardLedger.get(activity)
+        var earned = false
 
         fun cleanupAndPreload() {
-            Log.d(TAG, "Rewarded flow cleanup txId=$transactionId")
+            Log.d(TAG, "Rewarded flow cleanup")
             isRewardedInProgress = false
             clearRewardedCountdown()
 
             rewardedAd = null
             isRewardedLoaded.value = false
 
-            // Clear in-flight transaction after the flow settles
-            inFlightRewardTransactionId = null
-
             preloadRewarded(activity)
         }
 
         fun failFlow(reason: String) {
-            Log.e(TAG, "Rewarded flow failed txId=$transactionId reason=$reason")
+            Log.e(TAG, "Rewarded flow failed: $reason")
             try {
                 onFailed?.invoke()
             } catch (t: Throwable) {
@@ -187,28 +172,13 @@ object AdManager {
 
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
             override fun onAdDismissedFullScreenContent() {
-                val granted = ledger.wasGranted(transactionId)
-                Log.d(
-                    TAG,
-                    "Rewarded ad dismissed txId=$transactionId unitType=rewarded rewardCallbackFired=$rewardCallbackFired granted=$granted"
-                )
-
-                // User-visible feedback on whether the SDK actually triggered reward.
-                // (Keep UI intact; just a toast for now.)
-                try {
-                    val msg = if (granted) "Reward granted" else "Reward not triggered, try again"
-                    Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
-                } catch (_: Throwable) {
-                    // ignore toast failures
-                }
-
-                if (!granted) {
-                    // Treat as failure so callers can retry.
+                Log.d(TAG, "Rewarded ad dismissed (earned=$earned)")
+                // If user never earned the reward, treat as a failure.
+                if (!earned) {
                     failFlow("dismissed without reward")
                     return
                 }
-
-                // Success path: coins already persisted in onUserEarnedReward.
+                // Success path: we already invoked onRewardEarned in the reward listener.
                 cleanupAndPreload()
             }
 
@@ -218,24 +188,12 @@ object AdManager {
         }
 
         ad.show(activity) {
-            rewardCallbackFired = true
-
-            // Only grant inside this callback.
-            val grantedNow = ledger.grantRewardOnce(
-                transactionId = transactionId,
-                coinsToGrant = REWARDED_COINS,
-                adUnitType = "rewarded"
-            )
-
-            Log.d(TAG, "onUserEarnedReward txId=$transactionId unitType=rewarded grantedNow=$grantedNow")
-
-            // Preserve existing UI callbacks, but only after coins have been persisted.
-            if (grantedNow) {
-                try {
-                    onRewardEarned()
-                } catch (t: Throwable) {
-                    Log.w(TAG, "onRewardEarned threw", t)
-                }
+            earned = true
+            Log.d(TAG, "Reward earned")
+            try {
+                onRewardEarned()
+            } catch (t: Throwable) {
+                Log.w(TAG, "onRewardEarned threw", t)
             }
         }
     }

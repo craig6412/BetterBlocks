@@ -102,10 +102,43 @@ class BillingManager(
             .setProductList(products)
             .build()
 
+     // Always log this mapping request; do not gate on BuildConfig.DEBUG so logs show in debug/test environments.
+        Log.d(BILLING_MAP_TAG, "queryAvailableProducts: requesting ids=${productIds.joinToString(",")}")
+
         billingClient.queryProductDetailsAsync(params) { result, list ->
             if (result.responseCode == BillingResponseCode.OK) {
                 _productDetailsMap.value = list.associateBy { it.productId }
                 Log.d(TAG, "Loaded ${list.size} product details")
+
+                // Always log what Play returned; diagnosis depends on this even when purchases cannot complete.
+                list.forEach { details ->
+                    val formattedPrice = details.oneTimePurchaseOfferDetails?.formattedPrice ?: "(no price)"
+
+                    // INAPP products may not have basePlanId/offerId. If Play provides subscription-style offers,
+                    // surface identifiers anyway (safe, best-effort).
+                    val offerTokenFromSubs = details.subscriptionOfferDetails
+                        ?.firstOrNull()
+                        ?.offerToken
+
+                    val basePlanId = details.subscriptionOfferDetails
+                        ?.firstOrNull()
+                        ?.basePlanId
+
+                    val offerId = details.subscriptionOfferDetails
+                        ?.firstOrNull()
+                        ?.offerId
+
+                    Log.d(
+                        BILLING_MAP_TAG,
+                        "productId=${details.productId} name=${details.name} formattedPrice=$formattedPrice basePlanId=${basePlanId ?: "(n/a)"} offerId=${offerId ?: "(n/a)"} offerToken=${offerTokenFromSubs ?: "(n/a)"}"
+                    )
+                }
+
+                val returnedIds = list.map { it.productId }.toSet()
+                val missing = productIds.filter { it !in returnedIds }
+                if (missing.isNotEmpty()) {
+                    Log.w(BILLING_MAP_TAG, "Missing ProductDetails for ids=${missing.joinToString(",")}")
+                }
             } else {
                 Log.e(TAG, "Product query failed: ${result.debugMessage}")
             }
@@ -242,5 +275,6 @@ class BillingManager(
 
     companion object {
         private const val TAG = "BillingManager"
+        private const val BILLING_MAP_TAG = "BILLING_MAP"
     }
 }

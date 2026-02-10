@@ -47,23 +47,12 @@ import com.betterblocks.LightText
 import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
 import androidx.compose.ui.zIndex
+import com.betterblocks.DeviceClass
 import com.betterblocks.SpecialPurple
 import com.betterblocks.SuccessGreen
 import com.betterblocks.PreviewGameViewModel
 import com.betterblocks.ads.AdManager
 import com.betterblocks.PREFS_NAME
-import com.betterblocks.KEY_PLAYER_NAME
-import com.betterblocks.KEY_PLAYER_NAME_PROMPTED
-import com.betterblocks.KEY_FIREBASE_USER_ID
-import com.betterblocks.KEY_HIGH_SCORE
-import com.betterblocks.KEY_LIFETIME_COINS
-import com.betterblocks.PlayerNameDialog
-import com.betterblocks.DeviceClass
-import com.betterblocks.model.TrophyTier
-import com.betterblocks.model.drawableRes
-import com.betterblocks.KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1
-import com.betterblocks.KEY_POWERUP_POPUP_SHOWN_V1
-import com.betterblocks.ui.EconomyUpdateDialog
 
 
 // Gradient colors for background
@@ -526,58 +515,15 @@ private fun MainMenuScreenContent(
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 //version number location
                 Text(
-                    text = "v2.2",
+                    text = "v2.4",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald
                 )
 
                 // --------- ONE-TIME DIALOGS (AUTHORITATIVE ORDER) ---------
-                // 1) Economy Update dialog (new)
-                // 2) Power-ups popup (existing)
-                // 3) Normal UI / other dialogs
-
-                val prefsRoot = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
-                var showEconomyDialog by remember { mutableStateOf(false) }
-                var showPowerUpDialog by remember { mutableStateOf(false) }
-
-                LaunchedEffect(Unit) {
-                    val economyShown = prefsRoot.getBoolean(KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1, false)
-                    val powerupShown = prefsRoot.getBoolean(KEY_POWERUP_POPUP_SHOWN_V1, false)
-
-                    showEconomyDialog = !economyShown
-                    // Only consider power-up popup after economy dialog is acknowledged
-                    showPowerUpDialog = economyShown && !powerupShown && !hasShownPowerUpPopup(context)
-                }
-
-                if (!LocalInspectionMode.current && showEconomyDialog) {
-                    EconomyUpdateDialog(
-                        onDismiss = {
-                            // Mark as shown immediately so app restarts mid-flow cannot show both dialogs.
-                            prefsRoot.edit().putBoolean(KEY_ECONOMY_UPDATE_DIALOG_SHOWN_V1, true).apply()
-                            showEconomyDialog = false
-
-                            // After economy dialog closes, decide whether to show power-up popup.
-                            val powerupShownNow = prefsRoot.getBoolean(KEY_POWERUP_POPUP_SHOWN_V1, false) || hasShownPowerUpPopup(context)
-                            showPowerUpDialog = !powerupShownNow
-                        },
-                        onViewTrophyBoard = null
-                    )
-                }
-
-                if (!LocalInspectionMode.current && !showEconomyDialog && showPowerUpDialog) {
-                    PowerUpsPopup(
-                        onDismiss = {
-                            // Preserve popup logic but mark with versioned key.
-                            prefsRoot.edit().putBoolean(KEY_POWERUP_POPUP_SHOWN_V1, true).apply()
-                            setPowerUpPopupShown(context)
-                            showPowerUpDialog = false
-                        }
-                    )
-                }
-
-                // When economy/power-up dialogs are active, suppress other first-run dialogs.
-                val suppressOtherDialogs = showEconomyDialog || showPowerUpDialog
+                // Power-ups tutorial popup removed.
+                val suppressOtherDialogs = false
 
                 // Daily Reward Dialog
                 if (!LocalInspectionMode.current && uiState.showDailyRewardDialog && !suppressOtherDialogs) {
@@ -590,56 +536,7 @@ private fun MainMenuScreenContent(
                     )
                 }
 
-                // Player Name Onboarding: show after daily reward completes or on first run
-                val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
-                val savedPlayerName = prefs.getString(KEY_PLAYER_NAME, null)
-                val prompted = prefs.getBoolean(KEY_PLAYER_NAME_PROMPTED, false)
-
-                // If there's no saved name and we haven't prompted yet, show dialog after daily reward is not visible
-                var showPlayerNameDialog by remember { mutableStateOf(false) }
-
-                // Keep a snapshot of whether daily reward was showing so we can show name dialog after it finishes
-                var dailyWasShowing by remember { mutableStateOf(uiState.showDailyRewardDialog) }
-                LaunchedEffect(uiState.showDailyRewardDialog) {
-                    if (suppressOtherDialogs) {
-                        showPlayerNameDialog = false
-                        dailyWasShowing = uiState.showDailyRewardDialog
-                        return@LaunchedEffect
-                    }
-                    // If daily dialog just finished (was showing and now not), and name not prompted, show name dialog
-                    if (dailyWasShowing && !uiState.showDailyRewardDialog && !prompted && savedPlayerName.isNullOrBlank()) {
-                        showPlayerNameDialog = true
-                    }
-                    dailyWasShowing = uiState.showDailyRewardDialog
-                    // Also, if daily reward never needed and we haven't prompted, show immediately on first launch
-                    if (!uiState.showDailyRewardDialog && !prompted && savedPlayerName.isNullOrBlank()) {
-                        showPlayerNameDialog = true
-                    }
-                }
-
-                if (!LocalInspectionMode.current && showPlayerNameDialog && !suppressOtherDialogs) {
-                    PlayerNameDialog(
-                        currentName = null,
-                        onSave = { chosenName ->
-                            val finalName = chosenName
-                            prefs.edit().putString(KEY_PLAYER_NAME, finalName).putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
-                            showPlayerNameDialog = false
-                            // Optionally attempt leaderboard update if user id exists
-                            val userId = prefs.getString(KEY_FIREBASE_USER_ID, null)
-                            val currentScore = prefs.getInt(KEY_HIGH_SCORE, 0)
-                            if (!userId.isNullOrBlank()) {
-                                try {
-                                    com.betterblocks.FirestoreManager.updateLeaderboard(userId = userId, score = currentScore, tier = com.betterblocks.model.getPlayerTier(currentScore, prefs.getInt(KEY_LIFETIME_COINS, 0), prefs), playerNameOverride = finalName)
-                                } catch (_: Throwable) {}
-                            }
-                        },
-                        onCancel = {
-                            // Mark as prompted so we don't annoy the user again
-                            prefs.edit().putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
-                            showPlayerNameDialog = false
-                        }
-                    )
-                }
+                // Player name onboarding has been moved to the end of the first game over (see GameScreen).
 
                 val config = LocalConfiguration.current
                 val screenWidth = config.screenWidthDp.dp

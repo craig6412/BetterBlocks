@@ -590,6 +590,7 @@ fun GameScreen(
         if (!LocalInspectionMode.current && showColorWheelDialog) {
             Log.d("GameScreen", "showColorWheelDialog == true -> rendering ColorWheelDialog")
             ColorWheelDialog(
+                board = uiState.board,
                 onDismiss = {
                     Log.d("GameScreen", "ColorWheelDialog.onDismiss called")
                     showColorWheelDialog = false
@@ -728,32 +729,81 @@ fun GameScreen(
 
         // Show Game Over summary dialog only after the animation finished
         if (!LocalInspectionMode.current && (uiState.isGameOver || uiState.showGameSummaryDialog) && showGameOverDialogLocal) {
-            Log.d("GameScreen", "Showing GameOverSummaryDialog -> isGameOver=${uiState.isGameOver} showGameSummaryDialog=${uiState.showGameSummaryDialog}")
-            GameOverSummaryDialog(
-                finalScore = uiState.score,
-                highScore = uiState.highScore,
-                totalLinesCleared = uiState.linesClearedThisGame,
-                coinsEarned = uiState.coinsEarnedThisGame,
-                trophyTier = uiState.trophyTier,
-                isNewHighScore = uiState.showHighScoreAnim,
-                onPlayAgain = {
-                    // Play again handler — increment games counter and show interstitial every 3rd completed game
-                    gamesPlayed += 1
-                    val shouldShowAd = (gamesPlayed % 3 == 0)
-                    if (shouldShowAd && activity != null) {
-                        // Defer to AdManager to show interstitial; ensure it doesn't run during animation
-                        try {
-                            com.betterblocks.ads.AdManager.tryShowInterstitial(activity)
-                        } catch (t: Throwable) {
-                            Log.w("GameScreen", "Failed to show interstitial: ${t.message}")
-                        }
+            // Player name onboarding has been moved here: end of the first game over, before the summary dialog.
+            val prefs = context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+            val savedPlayerName = prefs.getString(KEY_PLAYER_NAME, null)
+            val prompted = prefs.getBoolean(KEY_PLAYER_NAME_PROMPTED, false)
+
+            var showPlayerNameDialog by rememberSaveable(uiState.isGameOver, uiState.showGameSummaryDialog) { mutableStateOf(false) }
+
+            LaunchedEffect(uiState.isGameOver, uiState.showGameSummaryDialog, showGameOverDialogLocal) {
+                if ((uiState.isGameOver || uiState.showGameSummaryDialog) && showGameOverDialogLocal) {
+                    if (!prompted && savedPlayerName.isNullOrBlank()) {
+                        showPlayerNameDialog = true
                     }
-                    // Reset game via provided callback
-                    onReset()
-                },
-                onMainMenu = { onGoToMenu() },
-                onShare = { shareGameResults(context, uiState.score, uiState.trophyTier) }
-            )
+                }
+            }
+
+            if (!LocalInspectionMode.current && showPlayerNameDialog) {
+                PlayerNameDialog(
+                    currentName = null,
+                    onSave = { chosenName ->
+                        prefs.edit().putString(KEY_PLAYER_NAME, chosenName).putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
+                        showPlayerNameDialog = false
+
+                        // Optionally attempt leaderboard update if a user id exists.
+                        val userId = prefs.getString(KEY_FIREBASE_USER_ID, null)
+                        val currentScore = prefs.getInt(KEY_HIGH_SCORE, 0)
+                        if (!userId.isNullOrBlank()) {
+                            try {
+                                com.betterblocks.FirestoreManager.updateLeaderboard(
+                                    userId = userId,
+                                    score = currentScore,
+                                    tier = com.betterblocks.model.getPlayerTier(
+                                        currentScore,
+                                        prefs.getInt(KEY_LIFETIME_COINS, 0),
+                                        prefs
+                                    ),
+                                    playerNameOverride = chosenName
+                                )
+                            } catch (_: Throwable) {
+                            }
+                        }
+                    },
+                    onCancel = {
+                        // Mark as prompted so we don't show again.
+                        prefs.edit().putBoolean(KEY_PLAYER_NAME_PROMPTED, true).apply()
+                        showPlayerNameDialog = false
+                    }
+                )
+            } else {
+                Log.d("GameScreen", "Showing GameOverSummaryDialog -> isGameOver=${uiState.isGameOver} showGameSummaryDialog=${uiState.showGameSummaryDialog}")
+                GameOverSummaryDialog(
+                    finalScore = uiState.score,
+                    highScore = uiState.highScore,
+                    totalLinesCleared = uiState.linesClearedThisGame,
+                    coinsEarned = uiState.coinsEarnedThisGame,
+                    trophyTier = uiState.trophyTier,
+                    isNewHighScore = uiState.showHighScoreAnim,
+                    onPlayAgain = {
+                        // Play again handler — increment games counter and show interstitial every 3rd completed game
+                        gamesPlayed += 1
+                        val shouldShowAd = (gamesPlayed % 3 == 0)
+                        if (shouldShowAd && activity != null) {
+                            // Defer to AdManager to show interstitial; ensure it doesn't run during animation
+                            try {
+                                com.betterblocks.ads.AdManager.tryShowInterstitial(activity)
+                            } catch (t: Throwable) {
+                                Log.w("GameScreen", "Failed to show interstitial: ${t.message}")
+                            }
+                        }
+                        // Reset game via provided callback
+                        onReset()
+                    },
+                    onMainMenu = { onGoToMenu() },
+                    onShare = { shareGameResults(context, uiState.score, uiState.trophyTier) }
+                )
+            }
         }
 
         // --- Zero Coins Dialog ---
@@ -808,9 +858,38 @@ fun GameScreen(
     }
 }
 
+// Analyze the board and return the wheel indices (0..segments-1) that correspond to colors present on the board.
+// This does not change visuals — it only constrains which segment the wheel can land on.
+private fun allowedWheelIndicesFromBoard(board: GameGrid, segments: Int): List<Int> {
+    if (segments <= 0) return emptyList()
+
+    // Map drawableResId -> wheel index for quick lookup.
+    val resIdToWheelIndex: Map<Int, Int> = COLOR_WIPE_DRAWABLES
+        .take(segments)
+        .mapIndexed { index, resId -> resId to index }
+        .toMap()
+
+    val allowed = LinkedHashSet<Int>()
+
+    // GameGrid is 9x9 (Array<Array<Int?>>). Each occupied cell already stores the drawable resId.
+    for (r in 0 until 9) {
+        for (c in 0 until 9) {
+            val drawableResId = board[r][c]
+            if (drawableResId != null) {
+                val idx = resIdToWheelIndex[drawableResId]
+                if (idx != null) allowed.add(idx)
+            }
+        }
+    }
+
+    // If for some reason we can't detect any colors, fall back to allowing all segments.
+    return if (allowed.isNotEmpty()) allowed.toList() else (0 until segments).toList()
+}
+
 // Color wheel dialog implementation with spinning animation
 @Composable
 private fun ColorWheelDialog(
+    board: GameGrid,
     onDismiss: () -> Unit,
     onSpinFinished: (Int) -> Unit
 ) {
@@ -838,6 +917,10 @@ private fun ColorWheelDialog(
     val rotation = remember { androidx.compose.animation.core.Animatable(0f) }
     val random = java.util.Random()
     val coroutineScope = rememberCoroutineScope()
+
+    // Compute allowed landing indices based on which colors are currently present on the board.
+    // Keep in sync with the current board (background-only logic).
+    val allowedIndices = remember(board, segments) { allowedWheelIndicesFromBoard(board, segments) }
 
     // Visual constants
     val sweep = 360f / segments
@@ -963,8 +1046,8 @@ private fun ColorWheelDialog(
                         spinning = true
                         winningIndex = null
 
-                        // Choose random target index between 0..segments-1
-                        val targetIndex = random.nextInt(segments)
+                        // Choose random target index ONLY from colors present on the board
+                        val targetIndex = allowedIndices[random.nextInt(allowedIndices.size)]
 
                         // Math explanation (center-pointer alignment):
                         // - Each segment i occupies angular interval [i*sweep, i*sweep + sweep) measured from 3 o'clock

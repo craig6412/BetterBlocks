@@ -11,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import com.betterblocks.KEY_POWERUP_POPUP_SHOWN_V1
 
 /**
  * Returns whether the popup was already shown.
@@ -23,7 +22,8 @@ fun hasShownPowerUpPopup(context: Context): Boolean {
     val legacyShown = prefs.getBoolean("tutorialShown", false)
     if (legacyShown) return true
 
-    return prefs.getBoolean(KEY_POWERUP_POPUP_SHOWN_V1, false)
+    // Versioned flag deprecated; treat as not shown (popup is no longer used in the app flow).
+    return false
 }
 
 /**
@@ -31,9 +31,8 @@ fun hasShownPowerUpPopup(context: Context): Boolean {
  */
 fun setPowerUpPopupShown(context: Context) {
     val prefs = context.getSharedPreferences("BetterBlocksPrefs", Context.MODE_PRIVATE)
-    // Keep legacy flag set too so older versions won't re-show it.
+    // Keep legacy flag set so older versions won't re-show it.
     prefs.edit()
-        .putBoolean(KEY_POWERUP_POPUP_SHOWN_V1, true)
         .putBoolean("tutorialShown", true)
         .apply()
 }

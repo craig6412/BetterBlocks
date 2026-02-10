@@ -2,6 +2,7 @@ package com.betterblocks
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.*
@@ -42,7 +43,6 @@ import com.betterblocks.ui.theme.BetterBlocksTheme
 import java.util.Locale
 import androidx.core.graphics.toColorInt
 import com.android.billingclient.api.ProductDetails
-
 
 
 class ShopActivity : ComponentActivity() {
@@ -92,6 +92,19 @@ class ShopActivity : ComponentActivity() {
                     color = DarkBackground
                 ) {
                     val productDetailsMap by billingManager.productDetailsMap.collectAsState()
+
+                    // DEBUG: dump productId -> formattedPrice mapping to diagnose swapped prices
+                    LaunchedEffect(productDetailsMap) {
+                        if (BuildConfig.DEBUG) {
+                            val entries = productDetailsMap.entries
+                                .sortedBy { it.key }
+                                .joinToString(separator = " | ") { (productId, details) ->
+                                    val price = details.oneTimePurchaseOfferDetails?.formattedPrice ?: "(no price)"
+                                    "$productId=$price"
+                                }
+                            Log.d("SHOP_PRICE_DEBUG", "productDetailsMap size=${productDetailsMap.size}: $entries")
+                        }
+                    }
 
                     ShopScreen(
                         productDetailsMap = productDetailsMap,
@@ -208,7 +221,7 @@ class ShopActivity : ComponentActivity() {
         }
 
         // COIN PURCHASES CAN SKIP TIERS - No sequential requirement!
-        // You can buy Elite tier directly if you have EconomyConfig.ELITE_COINS coins
+        // You can buy Elite tier directly if you have 250,000 coins
 
         if (shopRepo.useCoins(cost)) {
             // update lifetime coins and unlock tier through repo + prefs
@@ -260,25 +273,51 @@ fun ShopScreen(
     onTrophyPurchase: (TrophyTier, Int) -> Unit
 ) {
     val context = LocalContext.current
-
-    // Use the centralized repository so coin balance updates reactively in Compose.
-    val shopRepo = remember { ShopRepository.get(context.applicationContext) }
-    val currentCoins by shopRepo.coins.collectAsState()
-
-    // Tier info: keep existing prefs read for now (optional improvements later).
     val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    val currentCoins = prefs.getInt(KEY_COINS, 0)
     val currentTierOrdinal = prefs.getInt(KEY_HIGHEST_TIER_UNLOCKED, TrophyTier.UNRANKED.ordinal)
     val currentTier = TrophyTier.fromOrdinalSafe(currentTierOrdinal)
 
 
-    // Define Shop Options
-    val shopItems = listOf(
-        ShopItem("coins_small", "Stack of Coins", EconomyConfig.COIN_PACK_GRANTS["coins_small"] ?: 0, R.drawable.shop_coins_small),
-        ShopItem("coins_medium", "Sack of Coins", EconomyConfig.COIN_PACK_GRANTS["coins_medium"] ?: 0, R.drawable.shop_coins_medium, "POPULAR"),
-        ShopItem("coins_large", "Chest of Coins", EconomyConfig.COIN_PACK_GRANTS["coins_large"] ?: 0, R.drawable.shop_coins_large, "BEST VALUE"),
-        ShopItem("coins_mega", "Mega Coin Hoard", EconomyConfig.COIN_PACK_GRANTS["coins_mega"] ?: 0, R.drawable.shop_coins_mega, "ELITE MODE")
-    )
+    // Define Shop Options (keyed by productId; UI should never depend on list order)
+    val coinItemsById = remember {
+        mapOf(
+            "coins_small" to ShopItem(
+                id = "coins_small",
+                title = "Stack of Coins",
+                coinAmount = EconomyConfig.COIN_PACK_GRANTS["coins_small"] ?: 0,
+                imageResId = R.drawable.shop_coins_small
+            ),
+            "coins_medium" to ShopItem(
+                id = "coins_medium",
+                title = "Sack of Coins",
+                coinAmount = EconomyConfig.COIN_PACK_GRANTS["coins_medium"] ?: 0,
+                imageResId = R.drawable.shop_coins_medium,
+                badge = "POPULAR"
+            ),
+            "coins_large" to ShopItem(
+                id = "coins_large",
+                title = "Chest of Coins",
+                coinAmount = EconomyConfig.COIN_PACK_GRANTS["coins_large"] ?: 0,
+                imageResId = R.drawable.shop_coins_large,
+                badge = "BEST VALUE"
+            ),
+            "coins_mega" to ShopItem(
+                id = "coins_mega",
+                title = "Mega Coin Hoard",
+                coinAmount = EconomyConfig.COIN_PACK_GRANTS["coins_mega"] ?: 0,
+                imageResId = R.drawable.shop_coins_mega,
+                badge = "ELITE MODE"
+            )
+        )
+    }
 
+    // Explicit display order (still keyed by productId; no index-based meaning)
+    val coinDisplayOrder = remember {
+        listOf("coins_small", "coins_medium", "coins_large", "coins_mega")
+    }
+
+    val coinItems = coinDisplayOrder.mapNotNull { coinItemsById[it] }
 
     // Define Power-Up Items
     val powerUpItems = listOf(
@@ -388,13 +427,21 @@ fun ShopScreen(
 
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CompactCoinCard(shopItems[0], onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
-                        CompactCoinCard(shopItems[1], onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
+                        coinItems.getOrNull(0)?.let { item ->
+                            CompactCoinCard(item, onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
+                        }
+                        coinItems.getOrNull(1)?.let { item ->
+                            CompactCoinCard(item, onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
+                        }
                     }
                     Spacer(Modifier.height(6.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        CompactCoinCard(shopItems[2], onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
-                        CompactCoinCard(shopItems[3], onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
+                        coinItems.getOrNull(2)?.let { item ->
+                            CompactCoinCard(item, onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
+                        }
+                        coinItems.getOrNull(3)?.let { item ->
+                            CompactCoinCard(item, onPurchaseClick, productDetailsMap, Modifier.weight(1f).height(coinCardHeight))
+                        }
                     }
                 }
 
@@ -442,14 +489,43 @@ fun CompactCoinCard(
     productDetailsMap: Map<String, ProductDetails>,
     modifier: Modifier = Modifier
 ) {
-    val price = productDetailsMap[item.id]
+    val context = LocalContext.current
+
+    val formattedPrice = productDetailsMap[item.id]
         ?.oneTimePurchaseOfferDetails
         ?.formattedPrice
         ?: "—"
 
+    val imageName = remember(item.imageResId) {
+        try {
+            context.resources.getResourceEntryName(item.imageResId)
+        } catch (_: Exception) {
+            "(unknown)"
+        }
+    }
+
+    // Log once on composition for visibility even if the user never taps.
+    // NOTE: No BuildConfig.DEBUG gating here on purpose since some builds may inline DEBUG=false.
+    LaunchedEffect(item.id, formattedPrice, item.coinAmount, item.title, imageName) {
+        Log.d(
+            "SHOP_MAP",
+            "[compose] productId=${item.id} title=${item.title} coinAmount=${item.coinAmount} formattedPrice=$formattedPrice image=$imageName"
+        )
+    }
+
     Surface(
         modifier = modifier
-            .clickable(onClick = { onPurchaseClick(item.id) }, role = Role.Button),
+            .clickable(
+                role = Role.Button,
+                onClick = {
+                    // Log on TAP (before billing flow) so diagnosis works even when purchases can't complete.
+                    Log.d(
+                        "SHOP_MAP",
+                        "[tap] productId=${item.id} title=${item.title} coinAmount=${item.coinAmount} formattedPrice=$formattedPrice image=$imageName"
+                    )
+                    onPurchaseClick(item.id)
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
         color = DeepBlue.copy(alpha = 0.6f)
@@ -469,7 +545,7 @@ fun CompactCoinCard(
             )
 
             Text(
-                price,
+                formattedPrice,
                 fontFamily = Oswald,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
@@ -511,7 +587,13 @@ fun CompactPowerUpCard(
         val priceFont = if (tightVertical) 11.sp else 12.sp
 
         Surface(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    enabled = canAfford,
+                    role = Role.Button,
+                    onClick = { onPurchase(item.id, item.cost) }
+                ),
             shape = RoundedCornerShape(16.dp),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
             color = DeepBlue.copy(alpha = 0.6f)
@@ -565,11 +647,17 @@ fun CompactTrophyCard(
     val canAfford = currentCoins >= item.cost
     val alreadyOwned = currentTier.ordinal >= item.tier.ordinal
     val tierColor = trophyColorForTier(item.tier)
+    val canPurchase = canAfford && !alreadyOwned
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp),
+            .height(64.dp)
+            .clickable(
+                enabled = canPurchase,
+                role = Role.Button,
+                onClick = { onPurchase(item.tier, item.cost) }
+            ),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, tierColor.copy(alpha = 0.5f)),
         color = DeepBlue.copy(alpha = 0.6f)
@@ -596,7 +684,7 @@ fun CompactTrophyCard(
                 )
             }
 
-            // Make price visible to the left of the purchase button
+            // Make price visible to the left of the purchase button so it's always readable
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = String.format(Locale.getDefault(), "%,d", item.cost),
@@ -609,7 +697,7 @@ fun CompactTrophyCard(
 
                 Button(
                     onClick = { onPurchase(item.tier, item.cost) },
-                    enabled = canAfford && !alreadyOwned,
+                    enabled = canPurchase,
                     // slightly taller to avoid text clipping on some devices
                     modifier = Modifier.height(34.dp),
                     shape = RoundedCornerShape(14.dp),

@@ -1,14 +1,10 @@
 package com.betterblocks
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
-import com.betterblocks.PREFS_NAME
-import com.betterblocks.KEY_SOUND_ENABLED
-import com.betterblocks.KEY_HAPTIC_ENABLED
-import com.betterblocks.KEY_DARK_THEME
-import com.betterblocks.KEY_HIGHSCORE_NOTIFICATIONS
 import com.betterblocks.notifications.NotificationManagerHelper
 
 
@@ -23,6 +19,8 @@ class SettingsActivity : ComponentActivity() {
         val initialDarkTheme = prefs.getBoolean(KEY_DARK_THEME, false)
         // Highscore notifications default to ON (per latest request)
         val initialHighscoreNotifications = prefs.getBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true)
+
+        val shopRepo = ShopRepository.get(applicationContext)
 
         setContent {
             MaterialTheme {
@@ -58,6 +56,11 @@ class SettingsActivity : ComponentActivity() {
                         } else {
                             NotificationManagerHelper.disableNotifications(applicationContext)
                         }
+                    },
+                    onApplyCoupon = { code ->
+                        val result = CouponManager.applyCoupon(applicationContext, code, shopRepo)
+                        Log.d("COUPON", "apply result=$result")
+                        result
                     },
                     onBack = { finish() }
                 )

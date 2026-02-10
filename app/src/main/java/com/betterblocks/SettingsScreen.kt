@@ -5,11 +5,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.tooling.preview.Preview
-import com.betterblocks.coupon.CouponLedger
 import com.betterblocks.ui.sdp
 
 
@@ -24,6 +21,7 @@ fun SettingsScreen(
     onToggleHaptic: () -> Unit,
     onToggleTheme: () -> Unit,
     onToggleHighscoreNotifications: () -> Unit,
+    onApplyCoupon: (String) -> CouponManager.CouponResult,
     onBack: () -> Unit
 ) {
     var soundEnabled by remember { mutableStateOf(initialSoundEnabled) }
@@ -31,35 +29,11 @@ fun SettingsScreen(
     var darkTheme by remember { mutableStateOf(initialDarkTheme) }
     var highscoreNotifications by remember { mutableStateOf(initialHighscoreNotifications) }
 
-    val context = LocalContext.current
-
-    // --- Coupon Code Center state ---
-    var couponInput by remember { mutableStateOf("") }
+    var couponCode by remember { mutableStateOf("") }
     var couponStatus by remember { mutableStateOf<String?>(null) }
-    var couponProcessing by remember { mutableStateOf(false) }
+    var isApplyingCoupon by remember { mutableStateOf(false) }
 
-    val couponLedger = remember { CouponLedger.get(context) }
-
-    fun applyCoupon() {
-        if (couponProcessing) return
-        couponProcessing = true
-        couponStatus = null
-
-        // Redeem synchronously; ledger is thread-safe and idempotent.
-        val result = couponLedger.redeem(couponInput)
-        couponStatus = when (result) {
-            is CouponLedger.Result.Success -> "Success! 100,000 coins added."
-            is CouponLedger.Result.Invalid -> "Invalid coupon code."
-            is CouponLedger.Result.AlreadyRedeemed -> "This code has already been redeemed."
-        }
-
-        // If success, clear input for better UX (optional, UI-only)
-        if (result is CouponLedger.Result.Success) {
-            couponInput = ""
-        }
-
-        couponProcessing = false
-    }
+    val isInPreview = LocalInspectionMode.current
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -174,43 +148,61 @@ fun SettingsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(sdp(0.03f)))
+            Spacer(modifier = Modifier.height(sdp(0.04f)))
 
-            // -------------------------------
-            // Coupon Code Center
-            // -------------------------------
+            // COUPON CODE
             Text(
-                text = "Coupon Code Center",
+                text = "Coupon Code",
                 color = LightText,
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.titleMedium
             )
 
-            Spacer(modifier = Modifier.height(sdp(0.015f)))
+            Spacer(modifier = Modifier.height(sdp(0.01f)))
 
-            OutlinedTextField(
-                value = couponInput,
-                onValueChange = { couponInput = it },
-                label = { Text("Enter coupon code") },
-                singleLine = true,
-                enabled = !couponProcessing,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(sdp(0.015f)))
-
-            Button(
-                onClick = { applyCoupon() },
-                enabled = !couponProcessing,
-                modifier = Modifier.align(Alignment.End)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("APPLY")
+                TextField(
+                    value = couponCode,
+                    onValueChange = {
+                        couponCode = it
+                        couponStatus = null
+                    },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    enabled = !isApplyingCoupon,
+                    placeholder = { Text("Enter code") }
+                )
+
+                Spacer(modifier = Modifier.width(sdp(0.02f)))
+
+                Button(
+                    onClick = {
+                        if (isInPreview) return@Button
+                        isApplyingCoupon = true
+                        val result = onApplyCoupon(couponCode)
+                        couponStatus = when (result) {
+                            is CouponManager.CouponResult.Success -> {
+                                couponCode = ""
+                                "Coupon applied! +${result.coinsGranted} coins"
+                            }
+
+                            CouponManager.CouponResult.Invalid -> "Invalid code"
+                            CouponManager.CouponResult.AlreadyUsed -> "Code already used"
+                        }
+                        isApplyingCoupon = false
+                    },
+                    enabled = !isApplyingCoupon && couponCode.trim().isNotEmpty()
+                ) {
+                    Text("Apply")
+                }
             }
 
-            couponStatus?.let { msg ->
+            if (couponStatus != null) {
                 Spacer(modifier = Modifier.height(sdp(0.01f)))
                 Text(
-                    text = msg,
+                    text = couponStatus!!,
                     color = LightText,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -246,6 +238,7 @@ fun SettingsScreenPreview() {
         onToggleHaptic = {},
         onToggleTheme = {},
         onToggleHighscoreNotifications = {},
+        onApplyCoupon = { CouponManager.CouponResult.Invalid },
         onBack = {}
     )
 }
