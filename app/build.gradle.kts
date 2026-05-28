@@ -1,8 +1,9 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.crashlytics)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -15,7 +16,6 @@ android {
         targetSdk = 35
         versionCode = 19
         versionName = "2.4"
- // need to set to 16 ahead of time for new update coming in with non major issues being changed. as app is ad ready to run.
     }
 
     buildTypes {
@@ -45,16 +45,10 @@ android {
         buildConfig = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"  // REQUIRED for Kotlin 1.9.24
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    packaging.resources {
-        excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
@@ -76,23 +70,13 @@ dependencies {
     implementation("androidx.activity:activity-compose")
     implementation("androidx.compose.material:material-icons-extended")
 
-
-    // REMOVE old Kotlin stdlib pins
-    // implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.0") <-- DELETE
-    // implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0") <-- DELETE
-    // implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.0") <-- DELETE
-
     // Billing & Ads
     implementation("com.android.billingclient:billing:7.0.0")
     implementation("com.google.android.gms:play-services-ads:22.6.0")
     implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
     implementation("com.google.ads.mediation:unity:4.9.2.0")
 
-
-
-    //new stuff after issues with the sizing on release day..
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose")
-
 
     // Firebase (BOM resolves versions)
     implementation(platform("com.google.firebase:firebase-bom:32.8.1"))
@@ -101,7 +85,6 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-crashlytics")
-    // Messaging (FCM) for topic broadcasts and receiving messages
     implementation("com.google.firebase:firebase-messaging-ktx")
 
     // XML-based UI dependencies
