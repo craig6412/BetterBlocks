@@ -29,6 +29,10 @@ object AdManager {
     // Prevent overlapping rewarded flows.
     private var isRewardedInProgress: Boolean = false
 
+    // Prevent duplicate load calls while exposing loading state to Compose UI.
+    private var isRewardedLoadInProgress: Boolean = false
+    val isRewardedLoading = mutableStateOf(false)
+
     // Single rewarded ad
     private var rewardedAd: RewardedAd? = null
 
@@ -94,7 +98,23 @@ object AdManager {
     // -----------------------------
     // Rewarded Ads — single
     // -----------------------------
-    fun preloadRewarded(context: Context) {
+    fun preloadRewarded(
+        context: Context,
+        onLoaded: (() -> Unit)? = null,
+        onFailed: ((LoadAdError) -> Unit)? = null
+    ) {
+        if (rewardedAd != null && isRewardedLoaded.value) {
+            onLoaded?.invoke()
+            return
+        }
+
+        if (isRewardedLoadInProgress) {
+            Log.d(TAG, "RewardedAd load already in progress")
+            return
+        }
+
+        isRewardedLoadInProgress = true
+        isRewardedLoading.value = true
         isRewardedLoaded.value = false
 
         val request = AdRequest.Builder().build()
@@ -107,13 +127,19 @@ object AdManager {
                 override fun onAdLoaded(ad: RewardedAd) {
                     rewardedAd = ad
                     isRewardedLoaded.value = true
+                    isRewardedLoadInProgress = false
+                    isRewardedLoading.value = false
                     Log.d(TAG, "RewardedAd loaded")
+                    onLoaded?.invoke()
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     rewardedAd = null
                     isRewardedLoaded.value = false
-                    Log.e(TAG, "RewardedAd failed to load: ${error.message}")
+                    isRewardedLoadInProgress = false
+                    isRewardedLoading.value = false
+                    Log.w(TAG, "RewardedAd failed to load: ${error.message}")
+                    onFailed?.invoke(error)
                 }
             }
         )
@@ -132,7 +158,7 @@ object AdManager {
 
         val ad = rewardedAd
         if (ad == null) {
-            Log.e(TAG, "showRewarded: no rewarded ad loaded")
+            Log.w(TAG, "showRewarded: no rewarded ad loaded")
             isRewardedInProgress = false
             clearRewardedCountdown()
             onFailed?.invoke()
@@ -147,8 +173,11 @@ object AdManager {
         isRewardedLoaded.value = false
 
         var earned = false
+        var cleanedUp = false
 
         fun cleanupAndPreload() {
+            if (cleanedUp) return
+            cleanedUp = true
             Log.d(TAG, "Rewarded flow cleanup")
             isRewardedInProgress = false
             clearRewardedCountdown()
@@ -160,7 +189,7 @@ object AdManager {
         }
 
         fun failFlow(reason: String) {
-            Log.e(TAG, "Rewarded flow failed: $reason")
+            Log.w(TAG, "Rewarded flow failed: $reason")
             try {
                 onFailed?.invoke()
             } catch (t: Throwable) {
@@ -227,7 +256,7 @@ object AdManager {
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     interstitialAd = null
-                    Log.e(TAG, "Interstitial failed: ${error.message}")
+                    Log.w(TAG, "Interstitial failed: ${error.message}")
                 }
             }
         )
@@ -245,7 +274,8 @@ object AdManager {
         }
 
         val ad = interstitialAd ?: run {
-            Log.e(TAG, "Interstitial not loaded")
+            Log.w(TAG, "Interstitial not loaded")
+            preloadInterstitial(activity)
             return
         }
 
