@@ -1236,6 +1236,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val devRainbow = GameSettings.testRainbowCount.value
             val devColorWipe = GameSettings.testColorWipeCount.value
 
+            if (!BuildConfig.DEBUG) {
+                Log.w("GameViewModel", "Blocked developer inventory overrides in release build")
+                return
+            }
+
             _uiState.update { current ->
                 current.copy(
                     coins = devCoins.takeIf { it >= 0 } ?: current.coins,
@@ -1259,6 +1264,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Public wrapper used by Activities to apply developer overrides (inventory + tuning). */
     fun applyDeveloperOverrides() {
+        if (!BuildConfig.DEBUG) {
+            Log.w("GameViewModel", "Blocked developer overrides in release build")
+            return
+        }
+
         // Apply inventory overrides
         applyDeveloperInventoryOverrides()
         // Future: apply other GameSettings-based overrides here

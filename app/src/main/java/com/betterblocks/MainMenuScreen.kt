@@ -34,6 +34,7 @@ import com.betterblocks.ui.sh
 import android.app.Activity
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.border
@@ -100,6 +101,14 @@ fun FreeCoinsButton(
 ) {
     val ctx = LocalContext.current
     val category = deviceCategory(forcePreviewFold)
+    val activity = remember(ctx) { ctx as? Activity }
+
+    val rewardedLoaded = AdManager.isRewardedLoaded.value
+
+
+    var isLoadingAd by remember { mutableStateOf(false) }
+    var showAdUnavailableDialog by remember { mutableStateOf(false) }
+    var loadRequestId by remember { mutableStateOf(0) }
 
     val sizeDp = when (category) {
         DeviceClass.Phone -> sw(0.14f)
@@ -117,51 +126,150 @@ fun FreeCoinsButton(
         DeviceClass.Foldable -> sw(0.03f)
     }
 
-    // Move down by an additional 10% of the screen height to avoid overlap with top UI
+    fun awardFreeCoins() {
+        try {
+            viewModelBackedCallbacks.addCoins(AdManager.REWARDED_COINS)
+            Log.d("FreeCoinsButton", "Reward completed: added ${AdManager.REWARDED_COINS} coins")
+        } catch (t: Throwable) {
+            Log.w("FreeCoinsButton", "Failed to add rewarded coins", t)
+        }
+    }
+
+    fun showRewardedOrFail(act: Activity) {
+        isLoadingAd = false
+        AdManager.showRewarded(
+            act,
+            onRewardEarned = { awardFreeCoins() },
+            onFailed = {
+                isLoadingAd = false
+                showAdUnavailableDialog = true
+                AdManager.preloadRewarded(ctx)
+            }
+        )
+    }
+// If an existing preload finishes while the loading dialog is open, launch the ad automatically.
+    LaunchedEffect(isLoadingAd, rewardedLoaded) {
+        if (isLoadingAd && rewardedLoaded) {
+            activity?.let { showRewardedOrFail(it) }
+        }
+    }
+    LaunchedEffect(isLoadingAd, loadRequestId) {
+        if (isLoadingAd) {
+            delay(12_000L)
+            if (isLoadingAd) {
+                isLoadingAd = false
+                showAdUnavailableDialog = true
+                AdManager.preloadRewarded(ctx)
+            }
+        }
+    }
+
     val extraVerticalOffset = sh(0.10f)
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier
-            .align(Alignment.TopEnd)
-            .padding(top = topPad + extraVerticalOffset, end = endPad)
-            .size(sizeDp)
-            .border(width = 1.dp, color = Color.Red, shape = RoundedCornerShape(4.dp)) // DEBUG border
-            .zIndex(1000f)
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = topPad + extraVerticalOffset, end = endPad)
+                .size(sizeDp)
+                .zIndex(1000f)
         ) {
-            Log.d("FreeCoinsButton", "composed: category=$category size=$sizeDp topPad=${topPad + extraVerticalOffset} endPad=$endPad")
-            val activity = remember { (ctx as? Activity) }
             Image(
                 painter = painterResource(id = R.drawable.free_coins),
                 contentDescription = "Free Coins",
                 modifier = Modifier
                     .size(sizeDp)
                     .clickable(
+                        enabled = !isLoadingAd,
                         indication = LocalIndication.current,
                         interactionSource = remember { MutableInteractionSource() }
                     ) {
                         val act = activity
                         if (act == null) {
-                            // Preload for later if no activity available
-                            com.betterblocks.ads.AdManager.preloadRewarded(ctx)
-                            onGoToShop()
+                            AdManager.preloadRewarded(ctx)
+                            showAdUnavailableDialog = true
                             return@clickable
                         }
 
-                        if (com.betterblocks.ads.AdManager.isRewardedLoaded.value) {
-                            com.betterblocks.ads.AdManager.showRewarded(
-                                act,
-                                onRewardEarned = { try { viewModelBackedCallbacks.addCoins(com.betterblocks.ads.AdManager.REWARDED_COINS) } catch (_: Throwable) {} },
-                                onFailed = { com.betterblocks.ads.AdManager.preloadRewarded(ctx); onGoToShop() }
-                            )
+                        showAdUnavailableDialog = false
+
+                        if (AdManager.isRewardedLoaded.value) {
+                            showRewardedOrFail(act)
                         } else {
-                            com.betterblocks.ads.AdManager.preloadRewarded(ctx)
+                            isLoadingAd = true
+                            val requestId = loadRequestId + 1
+                            loadRequestId = requestId
+
+                            AdManager.preloadRewarded(
+                                ctx,
+                                onLoaded = {
+                                    if (isLoadingAd && loadRequestId == requestId) {
+                                        showRewardedOrFail(act)
+                                    }
+                                },
+                                onFailed = {
+                                    if (loadRequestId == requestId) {
+                                        isLoadingAd = false
+                                        showAdUnavailableDialog = true
+                                    }
+                                }
+                            )
                         }
                     }
             )
         }
+
+        if (isLoadingAd) {
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Loading Reward") },
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                        Text("Getting your free coins video ready...")
+                    }
+                },
+                confirmButton = {},
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            isLoadingAd = false
+                            AdManager.preloadRewarded(ctx)
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        if (showAdUnavailableDialog) {
+            AlertDialog(
+                onDismissRequest = { showAdUnavailableDialog = false },
+                title = { Text("Reward unavailable") },
+                text = { Text("No reward video is ready right now. Try again in a moment, or visit the shop.") },
+                confirmButton = {
+                    TextButton(onClick = { showAdUnavailableDialog = false }) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showAdUnavailableDialog = false
+                            onGoToShop()
+                        }
+                    ) {
+                        Text("Shop")
+                    }
+                }
+            )
+        }
     }
 }
-
 @Composable
 fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
     Card(
