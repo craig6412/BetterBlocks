@@ -1,6 +1,8 @@
 package com.betterblocks
 
 import android.app.Application
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.betterblocks.ads.AdManager
 import com.betterblocks.notifications.NotificationManagerHelper
@@ -9,15 +11,40 @@ import com.google.firebase.messaging.FirebaseMessaging
 class BetterBlocksApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
         try {
-            // Initialize FirestoreManager early so other components can use it safely
+            // Keep only the minimum app-wide setup synchronous. Heavy/network-backed work is staggered
+            // so first launch and resume do not fight Compose, WebView, ad media, and Firebase all at once.
             FirestoreManager.init(applicationContext)
-
-            // Initialize notification channels and internal state; do not assume permission is granted.
             NotificationManagerHelper.initialize(applicationContext)
+            AdManager.initialize(applicationContext)
 
-            // Subscribe to highscores topic for broadcast notifications. Subscription doesn't require
-            // notification permission and can safely be done at app start.
+            Handler(Looper.getMainLooper()).postDelayed({
+                preloadAdsSafely()
+            }, 750L)
+
+            Handler(Looper.getMainLooper()).postDelayed({
+                subscribeToHighscoresSafely()
+            }, 1_500L)
+
+            Log.d("BetterBlocksApp", "Initialized core app services; deferred ads and FCM startup work")
+        } catch (t: Throwable) {
+            Log.w("BetterBlocksApp", "Failed to initialize in Application.onCreate: ${t.message}")
+        }
+    }
+
+    private fun preloadAdsSafely() {
+        try {
+            AdManager.preloadRewarded(applicationContext)
+            Log.d("BetterBlocksApp", "Deferred rewarded ad preload requested")
+        } catch (t: Throwable) {
+            Log.w("BetterBlocksApp", "Deferred rewarded preload failed: ${t.message}")
+        }
+    }
+
+    private fun subscribeToHighscoresSafely() {
+        try {
+            // Subscription doesn't require notification permission and can safely be done after launch.
             FirebaseMessaging.getInstance().subscribeToTopic("highscores")
                 .addOnCompleteListener { task ->
                     if (task.isSuccessful) {
@@ -26,17 +53,8 @@ class BetterBlocksApp : Application() {
                         Log.w("BetterBlocksApp", "Failed to subscribe to highscores topic", task.exception)
                     }
                 }
-
-            // NOTE: Do NOT request runtime POST_NOTIFICATIONS or schedule reminders from Application.onCreate.
-            // Those flows require an Activity context to show the system permission dialog. Scheduling
-            // will be started by MainActivity when permission is granted or when the user enables via UI.
-
-            AdManager.initialize(applicationContext)
-            // Preload rewarded ads as early as possible
-            AdManager.preloadRewarded(applicationContext)
-            Log.d("BetterBlocksApp", "Initialized FirestoreManager and AdManager")
         } catch (t: Throwable) {
-            Log.w("BetterBlocksApp", "Failed to initialize in Application.onCreate: ${t.message}")
+            Log.w("BetterBlocksApp", "Highscores topic subscription crashed: ${t.message}")
         }
     }
 }
