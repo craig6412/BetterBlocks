@@ -30,6 +30,9 @@ import com.betterblocks.SuccessGreen
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.drawableRes
 import com.betterblocks.trophyColorForTier
+import com.betterblocks.trophyDisplayName
+import com.betterblocks.trophyEarnedText
+import com.betterblocks.trophyRequirementText
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 import androidx.compose.ui.layout.ContentScale
@@ -253,7 +256,7 @@ fun TierUnlockDialog(
                     GlowingTrophy(tier)
 
                     Text(
-                        text = "New Tier Unlocked!",
+                        text = "New Trophy Earned!",
                         fontFamily = Oswald,
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
@@ -262,12 +265,30 @@ fun TierUnlockDialog(
                     )
 
                     Text(
-                        text = tier.name,
+                        text = trophyDisplayName(tier),
                         fontFamily = Oswald,
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
                         color = trophyColorForTier(tier),
                         textAlign = TextAlign.Center
+                    )
+
+                    Text(
+                        text = trophyEarnedText(tier),
+                        fontFamily = Oswald,
+                        fontSize = 17.sp,
+                        color = LightText.copy(alpha = 0.9f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 22.sp
+                    )
+
+                    Text(
+                        text = trophyRequirementText(tier),
+                        fontFamily = Oswald,
+                        fontSize = 14.sp,
+                        color = LightText.copy(alpha = 0.65f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -280,7 +301,7 @@ fun TierUnlockDialog(
                         shape = RoundedCornerShape(18.dp)
                     ) {
                         Text(
-                            text = "Nice!",
+                            text = "OK",
                             fontFamily = Oswald,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,

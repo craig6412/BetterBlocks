@@ -78,6 +78,7 @@ import com.betterblocks.PreviewGameViewModel
 import com.betterblocks.SCREEN_HORIZONTAL_PADDING
 import com.betterblocks.isValidPlacement
 import com.betterblocks.model.TrophyTier
+import com.betterblocks.model.getPlayerTier
 import com.betterblocks.trophyColorForTier
 import kotlin.times
 
@@ -86,6 +87,7 @@ import com.betterblocks.ui.AvailableBlocks
 import com.betterblocks.ui.GameOverSummaryDialog
 import com.betterblocks.ui.shareGameResults
 import com.betterblocks.ui.ZeroCoinsDialog
+import com.betterblocks.ui.TierUnlockDialog
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.Shadow
 import com.betterblocks.ads.AdManager
@@ -157,6 +159,41 @@ fun GameScreen(
     var showMenuDialog by remember { mutableStateOf(false) }
     var showColorWheelDialog by remember { mutableStateOf(false) }
     var showBuyColorWipeDialog by remember { mutableStateOf(false) }
+
+    // Trophy unlock popup tracking.
+    // This is UI-only and watches the live score crossing into a newly earned tier.
+    val trophyPrefs = remember(context) {
+        context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+    }
+    val currentEarnedTier = remember(uiState.score, uiState.coins, uiState.highScore) {
+        getPlayerTier(
+            bestScore = uiState.score.coerceAtLeast(uiState.highScore),
+            coins = trophyPrefs.getInt(KEY_LIFETIME_COINS, 0),
+            prefs = trophyPrefs
+        )
+    }
+    var lastObservedTierName by rememberSaveable {
+        mutableStateOf(currentEarnedTier.name)
+    }
+    var pendingTierUnlock by remember { mutableStateOf<TrophyTier?>(null) }
+
+    LaunchedEffect(currentEarnedTier, uiState.isGameOver, uiState.isLastChance) {
+        val lastObservedTier = runCatching {
+            TrophyTier.valueOf(lastObservedTierName)
+        }.getOrDefault(TrophyTier.UNRANKED)
+
+        if (
+            !uiState.isGameOver &&
+            !uiState.isLastChance &&
+            currentEarnedTier != TrophyTier.UNRANKED &&
+            currentEarnedTier.ordinal > lastObservedTier.ordinal
+        ) {
+            pendingTierUnlock = currentEarnedTier
+            lastObservedTierName = currentEarnedTier.name
+        } else if (currentEarnedTier.ordinal < lastObservedTier.ordinal) {
+            lastObservedTierName = currentEarnedTier.name
+        }
+    }
 
     // How far above finger block appears
     val liftPx = with(density) { sh(0.12f).toPx() }
@@ -360,27 +397,27 @@ fun GameScreen(
 
                             // Visual border drawn slightly larger than the grid so there is a ~5.dp gap
                             val borderGap = sdp(0.005f)
-                             if (measuredGridSizePx > 0f) {
-                                 val gridDp = with(density) { measuredGridSizePx.toDp() }
-                                 val borderSize = gridDp + (borderGap * 2)
+                            if (measuredGridSizePx > 0f) {
+                                val gridDp = with(density) { measuredGridSizePx.toDp() }
+                                val borderSize = gridDp + (borderGap * 2)
 
-                                 Box(
-                                     modifier = Modifier
-                                         .size(borderSize)
-                                         .offset (
-                                             x = 0.dp,
-                                             y = sdp(0.01f)
+                                Box(
+                                    modifier = Modifier
+                                        .size(borderSize)
+                                        .offset (
+                                            x = 0.dp,
+                                            y = sdp(0.01f)
 
-                                         )
-                                         .align(Alignment.Center)
-                                         .border(
-                                             width = sdp(0.005f),
-                                             color = LightText.copy(alpha = 0.08f),
-                                             shape = RoundedCornerShape(sdp(0.01f))
-                                         )
-                                         .zIndex(0f)
-                                 )
-                             }
+                                        )
+                                        .align(Alignment.Center)
+                                        .border(
+                                            width = sdp(0.005f),
+                                            color = LightText.copy(alpha = 0.08f),
+                                            shape = RoundedCornerShape(sdp(0.01f))
+                                        )
+                                        .zIndex(0f)
+                                )
+                            }
 
                             // The actual game board (measurements used by drag controller remain tied to this Box)
                             // Compute an effective cell Dp that matches the even pixel cell size used by the drag controller
@@ -683,6 +720,16 @@ fun GameScreen(
                 },
                 properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = true, dismissOnBackPress = true)
             )
+        }
+
+        // --- Trophy Unlock Dialog (shown immediately when score reaches a new trophy tier) ---
+        pendingTierUnlock?.let { unlockedTier ->
+            if (!LocalInspectionMode.current) {
+                TierUnlockDialog(
+                    tier = unlockedTier,
+                    onDismiss = { pendingTierUnlock = null }
+                )
+            }
         }
 
         // --- Last‑chance dialog (offer a rainbow wipe once per game) ---

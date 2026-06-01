@@ -699,8 +699,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
 
             checkGameOverOrLastChance()
+        } else if (currentState.clearingCells.isNotEmpty()) {
+            // Normal line clear: keep the filled cells visible during the sweep animation,
+            // then remove them here when LineClearAnimator reports completion. This matches
+            // the color-wipe/rainbow-wipe flow and prevents the animation from playing over
+            // cells that were already removed from the board state.
+            val clearedBoard = currentState.board.map { it.clone() }.toTypedArray()
+            for (cell in currentState.clearingCells) {
+                clearedBoard[cell.row][cell.col] = null
+            }
+
+            _uiState.update {
+                it.copy(
+                    board = clearedBoard,
+                    clearingCells = emptySet(),
+                    isRainbowWipeActive = false,
+                    isColorWipeAnimating = false,
+                    selectedBlock = null
+                )
+            }
+
+            val updated = _uiState.value
+            persistGameSnapshot(
+                board = updated.board,
+                blocks = updated.availableBlocks,
+                coins = updated.coins,
+                rainbowCount = updated.rainbowBlockCount,
+                colorWipeCount = updated.colorWipeCount,
+                score = updated.score,
+                meterValue = updated.specialMeterValue,
+                freeRotations = updated.freeRotations,
+                lastRotatedBlockId = updated.lastRotatedBlockId,
+                selectedBlockId = null,
+                isGameOver = false,
+                isLastChance = false
+            )
+
+            checkGameOverOrLastChance()
         } else {
-            // For normal line clears, just reset the flags
+            // No active clear animation; just reset any stale flags.
             _uiState.update {
                 it.copy(
                     clearingCells = emptySet(),
@@ -991,6 +1028,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val current = _uiState.value
         val block = current.selectedBlock ?: return
         if (current.isGameOver || current.isLastChance) return
+        if (current.isColorWipeAnimating || current.isRainbowWipeActive || current.clearingCells.isNotEmpty()) return
         if (block.isSpecial) {
             // Special blocks are handled via separate flows (rainbow/color wipe buttons)
             return
@@ -1040,26 +1078,35 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             onSpecialMeterFilled(current.rainbowBlockCount, current.specialMeterValue)
         }
 
-        var finalBoard = newBoard
+        val hasLineClear = cellsToClear.isNotEmpty()
+        val boardAfterPlacement = newBoard
+        val boardAfterClear = if (hasLineClear) {
+            newBoard.map { it.clone() }.toTypedArray().also { boardCopy ->
+                cellsToClear.forEach { coord -> boardCopy[coord.row][coord.col] = null }
+            }
+        } else {
+            newBoard
+        }
+
         var points = block.shape.size
-        if (cellsToClear.isNotEmpty()) {
-            finalBoard = newBoard.map { it.clone() }.toTypedArray()
-            cellsToClear.forEach { coord -> finalBoard[coord.row][coord.col] = null }
+        if (hasLineClear) {
             points += (rowsToClear.size + colsToClear.size) * 100
         }
 
         val remainingBlocks = current.availableBlocks.filter { it.id != block.id }
-        val nextBlocks = if (remainingBlocks.isEmpty()) generateNewBlocks(finalBoard)
+        val nextBlocks = if (remainingBlocks.isEmpty()) generateNewBlocks(boardAfterClear)
         else remainingBlocks
 
         _uiState.update {
             it.copy(
-                board = finalBoard,
+                // For normal line clears, keep the completed row/column visible until
+                // onClearAnimationFinished() removes it. This makes the sweep animation
+                // play over real cells instead of an already-cleared board.
+                board = if (hasLineClear) boardAfterPlacement else boardAfterClear,
                 availableBlocks = nextBlocks,
                 selectedBlock = null,
                 score = it.score + points,
-                clearingCells = cellsToClear  // drive line-clear animation
-                ,
+                clearingCells = cellsToClear,
                 // Update the single source-of-truth counter for lines cleared this run.
                 // Use rowsToClear.size + colsToClear.size (counts unique cleared lines)
                 linesClearedThisGame = it.linesClearedThisGame + (rowsToClear.size + colsToClear.size)
@@ -1068,7 +1115,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val updated = _uiState.value
         persistGameSnapshot(
-            board = updated.board,
+            // Persist the post-animation board when a line clear is active. If the app is
+            // killed mid-animation, it resumes in the already-cleared, consistent state.
+            board = if (hasLineClear) boardAfterClear else updated.board,
             blocks = updated.availableBlocks,
             coins = updated.coins,
             rainbowCount = updated.rainbowBlockCount,
@@ -1082,8 +1131,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             isLastChance = updated.isLastChance
         )
 
-        // After a normal placement, check for game over / last chance
-        checkGameOverOrLastChance()
+        // For clears, wait until the animation has removed the cells before checking
+        // game over/last chance. For non-clearing placements, check immediately.
+        if (!hasLineClear) {
+            checkGameOverOrLastChance()
+        }
     }
 
     // --- GAME OVER / MOVE AVAILABILITY LOGIC ---
@@ -1191,7 +1243,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val firstShown = prefs.getBoolean(KEY_FIRST_GAME_OVER_SHOWN, false)
             if (updated.isGameOver && !firstShown) {
                 val newCount = updated.rainbowBlockCount + 3
-               saveRainbowCount(newCount)
+                saveRainbowCount(newCount)
                 prefs.edit().putBoolean(KEY_FIRST_GAME_OVER_SHOWN, true).apply()
                 _uiState.update {
                     it.copy(
@@ -1281,6 +1333,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Select a preview block (from bottom row/available blocks) */
     fun selectBlock(block: Block) {
+        val currentState = _uiState.value
+        if (currentState.isGameOver || currentState.isLastChance) return
+        if (currentState.isColorWipeAnimating || currentState.isRainbowWipeActive || currentState.clearingCells.isNotEmpty()) return
+
         Log.d("GameViewModel", "selectBlock -> id=${block.id} name=${block.name}")
         _uiState.update {
             it.copy(

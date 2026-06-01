@@ -623,7 +623,7 @@ private fun MainMenuScreenContent(
                 Spacer(modifier = Modifier.height(sh(0.01f)))
 //version number location
                 Text(
-                    text = "v2.4",
+                    text = "v2.7",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald

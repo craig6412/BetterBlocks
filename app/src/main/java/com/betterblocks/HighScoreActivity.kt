@@ -280,7 +280,9 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
 
             Spacer(Modifier.width(16.dp))
 
-            Column {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
                     text = "YOUR RANKING",
                     fontFamily = Oswald,
@@ -296,6 +298,14 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                     color = LightText
                 )
                 Spacer(Modifier.height(4.dp))
+                Text(
+                    text = trophyRequirementText(playerTier),
+                    fontFamily = Oswald,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    color = LightText.copy(alpha = 0.72f)
+                )
+                Spacer(Modifier.height(6.dp))
                 Text(
                     text = "${formatter.format(lifetimeCoins)} Coins",
                     fontFamily = Oswald,

@@ -1,11 +1,9 @@
 package com.betterblocks
 
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,50 +26,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize the notifications subsystem (creates channels, loads prefs). We do NOT
-        // schedule anything here — scheduling occurs only when the user enables and sets a time.
+        // Initialize notification channels only. Do not request POST_NOTIFICATIONS or schedule
+        // reminders during first launch; that system prompt hurts first-session retention.
+        // The user can opt in from Settings, where the permission request is tied to intent.
         NotificationManagerHelper.initialize(applicationContext)
 
-        // Request POST_NOTIFICATIONS permission from an Activity-level flow if the app-level
-        // highscore notifications pref is ON. NOTE: Android does not allow auto-accepting
-        // runtime permissions at install time; the user must explicitly grant them. We request
-        // at first run to minimize friction.
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        val hsEnabledPref = prefs.getBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true)
-
-        if (hsEnabledPref) {
-            // Use ActivityResult API to request permission on Android 13+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val requestPermissionLauncher = registerForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { isGranted: Boolean ->
-                    if (isGranted) {
-                        // User granted — enable and schedule default reminder (20:00)
-                        NotificationManagerHelper.enableNotifications(applicationContext)
-                        NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
-                    } else {
-                        // Permission denied — leave pref as-is so the Settings toggle shows state.
-                        // TODO: consider showing a rationale or directing user to system settings.
-                    }
-                }
-
-                if (NotificationManagerHelper.isPostNotificationsPermissionGranted(this)) {
-                    // Already granted
-                    NotificationManagerHelper.enableNotifications(applicationContext)
-                    NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
-                } else {
-                    // Ask the system dialog
-                    requestPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                }
-            } else {
-                // On older OS versions notifications are implicitly allowed; enable and schedule.
-                NotificationManagerHelper.enableNotifications(applicationContext)
-                NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
-            }
-        }
-
-        // TODO: When wiring the Settings UI, call NotificationManagerHelper.enableNotifications/disableNotifications
-        // and request POST_NOTIFICATIONS permission (Android 13+) from an Activity-level flow.
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
 

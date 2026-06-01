@@ -1,14 +1,30 @@
 package com.betterblocks
 
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import com.betterblocks.notifications.NotificationManagerHelper
 
 
 class SettingsActivity : ComponentActivity() {
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        if (isGranted) {
+            prefs.edit().putBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true).apply()
+            NotificationManagerHelper.enableNotifications(applicationContext)
+            NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
+        } else {
+            prefs.edit().putBoolean(KEY_HIGHSCORE_NOTIFICATIONS, false).apply()
+            NotificationManagerHelper.disableNotifications(applicationContext)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,16 +60,21 @@ class SettingsActivity : ComponentActivity() {
                         recreate()
                     },
                     onToggleHighscoreNotifications = {
-                        val current = prefs.getBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true)
+                        val current = prefs.getBoolean(KEY_HIGHSCORE_NOTIFICATIONS, false)
                         val newValue = !current
-                        prefs.edit().putBoolean(KEY_HIGHSCORE_NOTIFICATIONS, newValue).apply()
 
                         if (newValue) {
-                            // Enable notification subsystem and schedule a default daily reminder (20:00).
-                            // TODO: request POST_NOTIFICATIONS permission from Activity if on Android 13+ before enabling.
-                            NotificationManagerHelper.enableNotifications(applicationContext)
-                            NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                !NotificationManagerHelper.isPostNotificationsPermissionGranted(this)
+                            ) {
+                                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                prefs.edit().putBoolean(KEY_HIGHSCORE_NOTIFICATIONS, true).apply()
+                                NotificationManagerHelper.enableNotifications(applicationContext)
+                                NotificationManagerHelper.scheduleDailyReminder(applicationContext, 20, 0)
+                            }
                         } else {
+                            prefs.edit().putBoolean(KEY_HIGHSCORE_NOTIFICATIONS, false).apply()
                             NotificationManagerHelper.disableNotifications(applicationContext)
                         }
                     },
