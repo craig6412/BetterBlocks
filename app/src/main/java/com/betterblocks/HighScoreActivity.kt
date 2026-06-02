@@ -110,6 +110,7 @@ fun HighscoreScreen(onBack: () -> Unit) {
         pageCount = { tiers.size }
     )
     val coroutineScope = rememberCoroutineScope()
+    val viewedTier = tiers.getOrElse(pagerState.currentPage) { playerTier }
 
     // A subtle gradient background
     val backgroundBrush = Brush.verticalGradient(
@@ -156,8 +157,8 @@ fun HighscoreScreen(onBack: () -> Unit) {
             }
         }
 
-        // 2. PLAYER STATS (HERO CARD)
-        PlayerStatsCard(lifetimeCoins, playerTier)
+        // 2. SELECTED TROPHY INFO (HERO CARD)
+        TrophyInfoCard(lifetimeCoins, viewedTier)
 
         Spacer(Modifier.height(16.dp))
 
@@ -245,9 +246,9 @@ fun HighscoreScreen(onBack: () -> Unit) {
 // ---------------------------------------------------------
 
 @Composable
-fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
+fun TrophyInfoCard(lifetimeCoins: Int, viewedTier: TrophyTier) {
     val formatter = NumberFormat.getIntegerInstance()
-    val tierColor = trophyColorForTier(playerTier)
+    val tierColor = trophyColorForTier(viewedTier)
 
     Card(
         modifier = Modifier
@@ -271,7 +272,7 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                     .background(tierColor.copy(alpha = 0.2f), CircleShape)
             ) {
                 Image(
-                    painter = painterResource(com.betterblocks.trophyRes(playerTier)),
+                    painter = painterResource(com.betterblocks.trophyRes(viewedTier)),
                     contentDescription = "Trophy",
                     modifier = Modifier.size(32.dp),
                     contentScale = ContentScale.Fit
@@ -284,14 +285,14 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = "YOUR RANKING",
+                    text = "VIEWING TROPHY",
                     fontFamily = Oswald,
                     fontSize = 12.sp,
                     color = LightText.copy(alpha = 0.6f),
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = playerTier.name,
+                    text = trophyDisplayName(viewedTier),
                     fontFamily = Oswald,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
@@ -299,7 +300,7 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = trophyRequirementText(playerTier),
+                    text = trophyRequirementText(viewedTier),
                     fontFamily = Oswald,
                     fontSize = 13.sp,
                     lineHeight = 16.sp,
@@ -307,7 +308,7 @@ fun PlayerStatsCard(lifetimeCoins: Int, playerTier: TrophyTier) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "${formatter.format(lifetimeCoins)} Coins",
+                    text = "Your lifetime coins: ${formatter.format(lifetimeCoins)}",
                     fontFamily = Oswald,
                     fontSize = 16.sp,
                     color = Pink_Jackie // Assuming Pink_Jackie exists, else use Color(0xFFFFD700)

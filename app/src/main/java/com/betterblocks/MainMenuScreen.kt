@@ -54,6 +54,10 @@ import com.betterblocks.SuccessGreen
 import com.betterblocks.PreviewGameViewModel
 import com.betterblocks.ads.AdManager
 import com.betterblocks.PREFS_NAME
+import com.betterblocks.trophyColorForTier
+import com.betterblocks.trophyDisplayName
+import com.betterblocks.trophyRequirementText
+import com.betterblocks.trophyRes
 
 
 // Gradient colors for background
@@ -373,6 +377,76 @@ fun StatItem(emoji: String, value: String, backgroundColor: Color) {
 
 
 @Composable
+fun CurrentTrophyCard(uiState: GameUiState, modifier: Modifier = Modifier) {
+    val tier = uiState.trophyTier
+    val tierColor = trophyColorForTier(tier)
+
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = sw(0.03f)),
+        shape = RoundedCornerShape(sdp(0.018f)),
+        colors = CardDefaults.cardColors(
+            containerColor = DeepBlue.copy(alpha = 0.72f)
+        ),
+        border = BorderStroke(sdp(0.0015f), tierColor.copy(alpha = 0.55f)),
+        elevation = CardDefaults.cardElevation(sdp(0.004f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            tierColor.copy(alpha = 0.18f),
+                            DeepBlue.copy(alpha = 0.9f),
+                            tierColor.copy(alpha = 0.10f)
+                        )
+                    )
+                )
+                .padding(horizontal = sw(0.035f), vertical = sh(0.007f)),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Image(
+                painter = painterResource(id = trophyRes(tier)),
+                contentDescription = trophyDisplayName(tier),
+                modifier = Modifier.size(sdp(0.042f)),
+                contentScale = ContentScale.Fit
+            )
+
+            Spacer(modifier = Modifier.width(sdp(0.018f)))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = "CURRENT TROPHY",
+                    color = LightText.copy(alpha = 0.62f),
+                    fontSize = ssp(0.014f),
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = Oswald
+                )
+                Text(
+                    text = trophyDisplayName(tier).uppercase(),
+                    color = LightText,
+                    fontSize = ssp(0.022f),
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = Oswald
+                )
+                Text(
+                    text = trophyRequirementText(tier),
+                    color = LightText.copy(alpha = 0.68f),
+                    fontSize = ssp(0.0125f),
+                    fontFamily = Oswald,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
 fun MainMenuScreen(
     viewModel: GameViewModel,
     onPlayClicked: () -> Unit,
@@ -496,7 +570,12 @@ private fun MainMenuScreenContent(
                         )
                 )
 
-                Spacer(modifier = Modifier.height(sh(0.015f))) // Space between header and banner
+                CurrentTrophyCard(
+                    uiState = uiState,
+                    modifier = Modifier.offset(y = sh(-0.006f))
+                )
+
+                Spacer(modifier = Modifier.height(sh(0.008f))) // Space between trophy card and banner
 
                 // Flexible space before banner
                 Spacer(modifier = Modifier.weight(0.6f))
