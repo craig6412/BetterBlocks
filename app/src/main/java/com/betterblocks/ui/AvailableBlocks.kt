@@ -9,6 +9,7 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.betterblocks.Block
 import com.betterblocks.BlockPreviewCard
@@ -18,6 +19,8 @@ import com.betterblocks.InteractionType
 @Composable
 fun AvailableBlocks(
     uiState: GameUiState,
+    cardSize: Dp,
+    previewCellSize: Dp,
     onBlockInteraction: (Block, InteractionType) -> Unit,
     onDragStart: (Block, Offset) -> Unit,  // ✅ Block + Offset
     onDrag: (Offset) -> Unit,              // ✅ Just Offset
@@ -36,6 +39,8 @@ fun AvailableBlocks(
                 BlockPreviewCard(
                     block = displayBlock,
                     isSelected = (uiState.selectedBlock?.id == block.id),
+                    cardSize = cardSize,
+                    previewCellSize = previewCellSize,
                     onClick = {
                         onBlockInteraction(displayBlock, InteractionType.TAP)
                     },

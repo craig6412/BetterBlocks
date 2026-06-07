@@ -4,60 +4,9 @@ package com.betterblocks
  * Smart Preview Generator for BetterBlocks
  *
  * This module provides intelligent block preview generation that adapts to the current board state.
- * It ensures players always receive blocks they can place, preventing frustrating dead-end situations.
+ * It ensures players receive blocks they can place, and it pre-orients those blocks toward
+ * the best board-aware placement most of the time.
  */
-
-/**
- * Checks if a given block can fit anywhere on the current board.
- *
- * This function tests every possible position on the board to see if the block
- * can be placed without:
- * - Exceeding board boundaries
- * - Colliding with already-filled cells
- *
- * @param board The current game board (2D array where null = empty, non-null = occupied)
- * @param block The block to test for placement
- * @return true if the block can fit in at least one position, false otherwise
- *
- * Performance: O(rows × cols × blockSize) - optimized with early return
- */
-fun canBlockFit(board: GameGrid, block: Block): Boolean {
-    val rows = board.size
-    val cols = if (rows > 0) board[0].size else 0
-
-    // Safety check for empty board
-    if (rows == 0 || cols == 0) return false
-
-    // Try placing the block at every possible position
-    for (r in 0 until rows) {
-        for (c in 0 until cols) {
-            var fits = true
-
-            // Check if all cells of the block can be placed from this origin (r, c)
-            for (cell in block.shape) {
-                val rr = r + cell.row
-                val cc = c + cell.col
-
-                // Check boundary violation
-                if (rr !in 0 until rows || cc !in 0 until cols) {
-                    fits = false
-                    break
-                }
-
-                // Check collision with existing block
-                if (board[rr][cc] != null) {
-                    fits = false
-                    break
-                }
-            }
-
-            // Early return as soon as we find a valid position
-            if (fits) return true
-        }
-    }
-
-    return false
-}
 
 // Centralized difficulty enum and config
 enum class Difficulty { EASY, NORMAL, HARD }
@@ -67,7 +16,7 @@ object DifficultyConfig {
     val largeProbabilityModifier: Map<Difficulty, Float> = mapOf(
         Difficulty.EASY to 0.4f,    // reduce chance of large blocks
         Difficulty.NORMAL to 1.0f,
-        Difficulty.HARD to 1.6f      // increase chance of large blocks on hard
+        Difficulty.HARD to 1.6f     // increase chance of large blocks on hard
     )
 
     // Minimum occupied cells required before considering ST_2 perfect-fit logic
@@ -81,140 +30,294 @@ object DifficultyConfig {
     val maxAwkwardPerInventory: Int = 1
 }
 
+private data class PlacementScore(
+    val block: Block,
+    val row: Int,
+    val col: Int,
+    val score: Int
+)
+
 // Helper to determine if a block is 'awkward' (ST_2 or large)
 private fun isAwkwardBlock(block: Block): Boolean {
     if (block.name == "2-High Staircase") return true
     return block.shape.size >= 7
 }
 
-// Update: ensure perfect-fit logic is only applied to ST_2 by name
+private fun normalizedShapeKey(block: Block): String {
+    return block.shape
+        .sortedWith(compareBy<Coord> { it.row }.thenBy { it.col })
+        .joinToString("|") { "${it.row},${it.col}" }
+}
+
+private fun uniqueRotations(block: Block): List<Block> {
+    val result = mutableListOf<Block>()
+    val seen = mutableSetOf<String>()
+    var current = block
+
+    repeat(4) {
+        val key = normalizedShapeKey(current)
+        if (seen.add(key)) {
+            result.add(current)
+        }
+        current = current.rotate()
+    }
+
+    return result
+}
+
+private fun canPlaceAt(board: GameGrid, block: Block, row: Int, col: Int): Boolean {
+    val rows = board.size
+    val cols = if (rows > 0) board[0].size else 0
+
+    if (rows == 0 || cols == 0) return false
+
+    for (cell in block.shape) {
+        val r = row + cell.row
+        val c = col + cell.col
+
+        if (r !in 0 until rows || c !in 0 until cols) return false
+        if (board[r][c] != null) return false
+    }
+
+    return true
+}
+
+private fun simulatePlacement(board: GameGrid, block: Block, row: Int, col: Int): GameGrid {
+    val copy = board.map { it.clone() }.toTypedArray()
+
+    for (cell in block.shape) {
+        val r = row + cell.row
+        val c = col + cell.col
+        copy[r][c] = block.colorResId
+    }
+
+    return copy
+}
+
+private fun countCompletedLines(board: GameGrid): Int {
+    val rows = board.size
+    val cols = if (rows > 0) board[0].size else 0
+
+    if (rows == 0 || cols == 0) return 0
+
+    var lines = 0
+
+    for (r in 0 until rows) {
+        if (board[r].all { it != null }) lines++
+    }
+
+    for (c in 0 until cols) {
+        var full = true
+        for (r in 0 until rows) {
+            if (board[r][c] == null) {
+                full = false
+                break
+            }
+        }
+        if (full) lines++
+    }
+
+    return lines
+}
+
+private fun countAlmostCompletedLines(board: GameGrid): Int {
+    val rows = board.size
+    val cols = if (rows > 0) board[0].size else 0
+
+    if (rows == 0 || cols == 0) return 0
+
+    var almost = 0
+
+    for (r in 0 until rows) {
+        val filled = board[r].count { it != null }
+        if (filled == cols - 1) almost++
+    }
+
+    for (c in 0 until cols) {
+        var filled = 0
+        for (r in 0 until rows) {
+            if (board[r][c] != null) filled++
+        }
+        if (filled == rows - 1) almost++
+    }
+
+    return almost
+}
+
+private fun countEmptyCells(board: GameGrid): Int {
+    return board.sumOf { row -> row.count { it == null } }
+}
+
+private fun countRemainingMobility(board: GameGrid, allBlocks: List<Block>): Int {
+    return allBlocks.count { candidate ->
+        uniqueRotations(candidate).any { rotated ->
+            canPlaceBlock(board, rotated)
+        }
+    }
+}
+
+private fun bestOrientedBlockForBoard(
+    board: GameGrid,
+    block: Block,
+    allBlocks: List<Block>,
+    difficulty: Difficulty = Difficulty.NORMAL
+): PlacementScore? {
+    if (block.isSpecial) return null
+
+    if (block.name == "2-High Staircase" && !hasPerfectFitForST2(board, block, difficulty)) {
+        return null
+    }
+
+    val rows = board.size
+    val cols = if (rows > 0) board[0].size else 0
+
+    if (rows == 0 || cols == 0) return null
+
+    val currentEmptyCells = countEmptyCells(board)
+    val isCrowded = currentEmptyCells <= 24
+    var best: PlacementScore? = null
+
+    for (rotated in uniqueRotations(block)) {
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                if (!canPlaceAt(board, rotated, row, col)) continue
+
+                val simulated = simulatePlacement(board, rotated, row, col)
+                val completedLines = countCompletedLines(simulated)
+                val almostLines = countAlmostCompletedLines(simulated)
+                val mobility = countRemainingMobility(simulated, allBlocks)
+
+                var score = 0
+
+                // Biggest priority: give the player blocks that immediately clear.
+                score += completedLines * 10_000
+
+                // Second: set up near-clears.
+                score += almostLines * 350
+
+                // Third: preserve future playable options.
+                score += mobility * 150
+
+                // Help crowded boards by favoring smaller/easier blocks.
+                if (isCrowded) {
+                    score += (10 - rotated.shape.size).coerceAtLeast(0) * 120
+                }
+
+                // Light bonus for not being awkward.
+                if (!isAwkwardBlock(rotated)) {
+                    score += 75
+                }
+
+                // Small center preference so pieces do not always hug the corner.
+                val centerRow = rows / 2
+                val centerCol = cols / 2
+                val centerDistance = kotlin.math.abs(row - centerRow) + kotlin.math.abs(col - centerCol)
+                score -= centerDistance * 5
+
+                val placement = PlacementScore(
+                    block = rotated,
+                    row = row,
+                    col = col,
+                    score = score
+                )
+
+                if (best == null || placement.score > best.score) {
+                    best = placement
+                }
+            }
+        }
+    }
+
+    return best
+}
+
+/**
+ * Checks if a given block can fit anywhere on the current board.
+ *
+ * This version checks all unique rotations so helper logic can find playable pieces even when
+ * the block's default authored orientation would not fit.
+ */
+fun canBlockFit(board: GameGrid, block: Block): Boolean {
+    return uniqueRotations(block).any { rotated ->
+        canPlaceBlock(board, rotated)
+    }
+}
+
+/**
+ * Update: ensure perfect-fit logic is only applied to ST_2 by name.
+ */
 fun hasPerfectFitForST2(board: GameGrid, block: Block, difficulty: Difficulty = Difficulty.NORMAL): Boolean {
     if (block.name != "2-High Staircase") return false
 
-    val size = board.size
+    val rows = board.size
+    val cols = if (rows > 0) board[0].size else 0
+
+    if (rows == 0 || cols == 0) return false
 
     // Prevent early / empty-board ST_2 unless difficulty allows lower threshold
     val occupied = board.sumOf { row -> row.count { it != null } }
     val threshold = DifficultyConfig.st2OccupiedThreshold[difficulty] ?: 6
     if (occupied < threshold) return false
 
-    for (row in 0 until size) {
-        for (col in 0 until size) {
+    for (rotated in uniqueRotations(block)) {
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                if (!canPlaceAt(board, rotated, row, col)) continue
 
-            var fits = true
-            for (cell in block.shape) {
-                val r = row + cell.row
-                val c = col + cell.col
-                if (r !in 0 until size || c !in 0 until size || board[r][c] != null) {
-                    fits = false
-                    break
-                }
-            }
-            if (!fits) continue
+                var constraints = 0
 
-            var constraints = 0
-            for (cell in block.shape) {
-                val r = row + cell.row
-                val c = col + cell.col
+                for (cell in rotated.shape) {
+                    val r = row + cell.row
+                    val c = col + cell.col
 
-                val neighbors = listOf(
-                    r - 1 to c,
-                    r + 1 to c,
-                    r to c - 1,
-                    r to c + 1
-                )
+                    val neighbors = listOf(
+                        r - 1 to c,
+                        r + 1 to c,
+                        r to c - 1,
+                        r to c + 1
+                    )
 
-                for ((nr, nc) in neighbors) {
-                    if (nr !in 0 until size || nc !in 0 until size || board[nr][nc] != null) {
-                        constraints++
+                    for ((nr, nc) in neighbors) {
+                        if (nr !in 0 until rows || nc !in 0 until cols || board[nr][nc] != null) {
+                            constraints++
+                        }
                     }
                 }
-            }
 
-            if (constraints >= 3) return true
+                if (constraints >= 3) return true
+            }
         }
     }
+
     return false
 }
 
-/* ============================ */
 /**
  * Generates a smart preview of 3 blocks based on the current board state.
  *
- * This function adapts to the board's "fullness" to ensure players can always make progress:
- *
- * **Case 1: Normal Gameplay (3+ blocks fit)**
- * - Returns 3 random blocks from those that can fit
- * - Maintains game difficulty and variety
- *
- * **Case 2: Crowded Board (1-2 blocks fit)**
- * - Uses the blocks that fit
- * - Fills remaining slots with small/easy blocks that also fit
- * - Helps player recover from tight situations
- *
- * **Case 3: Critical Board State (nothing fits)**
- * - Returns guaranteed tiny blocks (1×1, 1×2, small L-shapes)
- * - Gives player a chance to clear space and continue
- *
- * @param board The current game board state
- * @param allBlocks The complete pool of available block types (from BLOCK_MANAGER)
- * @return List of exactly 3 blocks for the player to choose from
- *
- * Performance: O(allBlocks.size × board.size²) - acceptable for typical game loop
+ * This now uses the same board-aware inventory helper as the main game path, so previews
+ * are selected and oriented using the upgraded placement scoring.
  */
 fun generateSmartPreview(board: GameGrid, allBlocks: List<Block>): List<Block> {
-    // Define "easy blocks" as those with 4 or fewer cells
-    // These are statistically easier to place in tight spaces
-    val easyBlocks = allBlocks.filter { it.shape.size <= 4 }
-
-    // Find all blocks that can currently fit on the board
-    val fittingBlocks = allBlocks.filter { block ->
-        if (!canBlockFit(board, block)) return@filter false
-        if (block.name == "2-High Staircase") hasPerfectFitForST2(board, block) else true
-    }
-
-    // CASE 1: Normal gameplay - plenty of options available
-    if (fittingBlocks.size >= 3) {
-        return fittingBlocks.shuffled().take(3)
-    }
-
-    // CASE 2: Partial fit - board is getting crowded
-    if (fittingBlocks.isNotEmpty()) {
-        val needed = 3 - fittingBlocks.size
-
-        // Fill remaining slots with easy blocks that also fit
-        val fillers = easyBlocks
-            .filter { canBlockFit(board, it) }
-            .shuffled()
-            .take(needed)
-
-        // Combine and shuffle to avoid predictable patterns
-        return (fittingBlocks + fillers).shuffled().take(3)
-    }
-
-    // CASE 3: Critical situation - nothing fits normally
-    // Fallback to guaranteed tiny blocks (1-2 cells)
-    val guaranteed = easyBlocks.filter { it.shape.size <= 2 }
-
-    // If even guaranteed blocks don't exist (shouldn't happen), return any 3 easy blocks
-    return if (guaranteed.isNotEmpty()) {
-        guaranteed.shuffled().take(3)
-    } else {
-        easyBlocks.shuffled().take(3)
-    }
+    return getSmartInventory(
+        board = board,
+        allBlocks = allBlocks,
+        difficulty = Difficulty.NORMAL
+    )
 }
 
 /**
  * Extension function to check if the board is getting critically full.
  *
- * This can be used by the UI to show warnings or adjust difficulty.
- *
  * @return true if less than 20% of the board is empty
  */
 fun GameGrid.isCriticallyFull(): Boolean {
+    if (this.isEmpty() || this[0].isEmpty()) return false
+
     val totalCells = this.size * this[0].size
     val occupiedCells = this.sumOf { row -> row.count { it != null } }
     val emptyPercentage = (totalCells - occupiedCells).toFloat() / totalCells
+
     return emptyPercentage < 0.20f
 }
 
@@ -222,10 +325,6 @@ fun GameGrid.isCriticallyFull(): Boolean {
  * Utility function to count how many blocks from a list can fit on the board.
  *
  * Useful for debugging and analytics.
- *
- * @param board The current game board
- * @param blocks List of blocks to test
- * @return Count of blocks that can fit
  */
 fun countFittingBlocks(board: GameGrid, blocks: List<Block>): Int {
     return blocks.count { canBlockFit(board, it) }
@@ -234,47 +333,25 @@ fun countFittingBlocks(board: GameGrid, blocks: List<Block>): Int {
 /**
  * Gets a difficulty-adjusted preview based on the player's progress.
  *
- * This variant allows for dynamic difficulty scaling as the game progresses.
- *
- * @param board Current game board
- * @param allBlocks Complete block pool
- * @param difficulty Scale from 0.0 (easy) to 1.0 (hard)
- * @return List of 3 blocks adjusted for difficulty
+ * This variant maps the float difficulty into the centralized enum and then uses the
+ * board-aware inventory helper.
  */
 fun generateDifficultyAdjustedPreview(
     board: GameGrid,
     allBlocks: List<Block>,
     difficulty: Float = 0.5f
 ): List<Block> {
-    val fittingBlocks = allBlocks.filter { block ->
-        if (!canBlockFit(board, block)) return@filter false
-        if (block.name == "2-High Staircase") hasPerfectFitForST2(board, block) else true
+    val mappedDifficulty = when {
+        difficulty < 0.3f -> Difficulty.EASY
+        difficulty > 0.7f -> Difficulty.HARD
+        else -> Difficulty.NORMAL
     }
 
-    if (fittingBlocks.isEmpty()) {
-        // Emergency mode - give easiest blocks
-        return allBlocks.filter { it.shape.size <= 2 }.shuffled().take(3)
-    }
-
-    // Adjust the pool based on difficulty
-    val adjustedPool = when {
-        difficulty < 0.3f -> {
-            // Easy: favor smaller blocks
-            fittingBlocks.filter { it.shape.size <= 5 }
-        }
-        difficulty > 0.7f -> {
-            // Hard: allow all fitting blocks including large ones
-            fittingBlocks
-        }
-        else -> {
-            // Medium: balanced mix
-            val small = fittingBlocks.filter { it.shape.size <= 4 }
-            val large = fittingBlocks.filter { it.shape.size > 4 }
-            small + large.take(2)
-        }
-    }
-
-    return adjustedPool.shuffled().take(3)
+    return getSmartInventory(
+        board = board,
+        allBlocks = allBlocks,
+        difficulty = mappedDifficulty
+    )
 }
 
 /**
@@ -282,21 +359,16 @@ fun generateDifficultyAdjustedPreview(
  * Returns true if given Block can be placed anywhere on `board`.
  */
 fun canPlaceBlock(board: GameGrid, block: Block): Boolean {
-    val size = board.size
-    if (size == 0) return false
+    val rows = board.size
+    val cols = if (rows > 0) board[0].size else 0
 
-    for (row in 0 until size) {
-        for (col in 0 until size) {
-            var fits = true
-            for (offset in block.shape) {
-                val r = row + offset.row
-                val c = col + offset.col
-                if (r !in 0 until size || c !in 0 until size || board[r][c] != null) {
-                    fits = false
-                    break
-                }
+    if (rows == 0 || cols == 0) return false
+
+    for (row in 0 until rows) {
+        for (col in 0 until cols) {
+            if (canPlaceAt(board, block, row, col)) {
+                return true
             }
-            if (fits) return true
         }
     }
 
@@ -304,99 +376,146 @@ fun canPlaceBlock(board: GameGrid, block: Block): Boolean {
 }
 
 /**
- * Attempts up to [maxAttempts] to generate a 3-block inventory where at least one
- * block is placeable somewhere on the board. Falls back to a random inventory
- * if no such inventory can be generated (allowing legitimate game-over).
+ * Generates a 3-block inventory where the helper analyzes the board, scores candidate
+ * placements, and returns blocks already rotated into their strongest orientation.
+ *
+ * The old version only ensured at least one block was placeable. This version makes the
+ * whole preview intentionally helpful while still keeping some difficulty and variety.
  */
-
 fun getSmartInventory(
     board: GameGrid,
     allBlocks: List<Block>,
     maxAttempts: Int = 12,
     difficulty: Difficulty = Difficulty.NORMAL
 ): List<Block> {
+    val currentEmptyCells = countEmptyCells(board)
+    val isCrowded = currentEmptyCells <= 24
+    val isCritical = currentEmptyCells <= 14
 
-    // Helper probability modifiers
-    val largeModifier = DifficultyConfig.largeProbabilityModifier[difficulty] ?: 1.0f
-
-    // Weighted category helpers
-    val smallBlocks = allBlocks.filter { it.shape.size <= 4 }
-    val mediumBlocks = allBlocks.filter { it.shape.size in 5..6 }
-    val largeBlocks = allBlocks.filter { it.shape.size >= 7 }
-
-    // Ensure at least one placeable block in returned inventory
-    fun inventoryHasPlaceable(inv: List<Block>): Boolean = inv.any { canPlaceBlock(board, it) }
-
-    // Try random inventories with bias towards difficulty
-    repeat(maxAttempts) {
-        val pool = mutableListOf<Block>().apply { addAll(allBlocks) }
-
-        // Create a weighted shuffled pool: inflate large pool by modifier factor
-        val weighted = mutableListOf<Block>()
-        weighted.addAll(smallBlocks) // small always present once
-        // Add medium once
-        weighted.addAll(mediumBlocks)
-        // Add large blocks multiple times based on modifier (rounded)
-        val repeatLarge = (largeModifier).coerceAtLeast(1f).toInt()
-        repeat(repeatLarge) { weighted.addAll(largeBlocks) }
-
-        val inventory = weighted.shuffled().take(3)
-
-        // Enforce awkward cap: ensure no more than configured awkwards
-        if (inventory.count { isAwkwardBlock(it) } > DifficultyConfig.maxAwkwardPerInventory) {
-            // reject this candidate
-        } else if (inventoryHasPlaceable(inventory)) {
-            return inventory
+    val scoredCandidates = allBlocks
+        .filter { !it.isSpecial }
+        .mapNotNull { block ->
+            bestOrientedBlockForBoard(
+                board = board,
+                block = block,
+                allBlocks = allBlocks,
+                difficulty = difficulty
+            )
         }
-    }
+        .sortedByDescending { it.score }
 
-    // If random attempts failed, build a guaranteed-fit inventory using deterministic rules
-    val fittingBlocks = allBlocks.filter { block ->
-        if (!canBlockFit(board, block)) return@filter false
-        // apply ST_2 perfect-fit check only for ST_2 (by name)
-        if (block.name == "2-High Staircase") return@filter hasPerfectFitForST2(board, block, difficulty)
-        true
-    }
-
-    if (fittingBlocks.isNotEmpty()) {
-        // Choose a guaranteed fit block, preferring non-awkward unless none
-        val preferred = fittingBlocks.firstOrNull { !isAwkwardBlock(it) } ?: fittingBlocks.random()
-
-        // Fill remaining two slots with the easiest fitting blocks while enforcing awkward cap
-        val others = (allBlocks.filter { it != preferred }
-            .filter { canBlockFit(board, it) }
+    if (scoredCandidates.isEmpty()) {
+        val emergencyBlocks = allBlocks
+            .filter { !it.isSpecial && it.shape.size <= 2 }
             .shuffled()
-            .filter { !isAwkwardBlock(it) }
-            .take(2)).toMutableList()
+            .take(BLOCKS_PER_ROUND)
 
-        // If we couldn't find non-awkward fillers, allow one awkward if needed (but cap total awkwards)
-        while (others.size < 2) {
-            val candidate = allBlocks.filter { it != preferred }.shuffled().firstOrNull()
-            if (candidate == null) break
-            if (listOf(preferred).count { isAwkwardBlock(it) } + others.count { isAwkwardBlock(it) } >= DifficultyConfig.maxAwkwardPerInventory) {
-                // try to pick a non-awkward next
-                val nonawk = allBlocks.filter { it != preferred && !isAwkwardBlock(it) }.firstOrNull()
-                if (nonawk != null) others.add(nonawk) else break
-            } else {
-                others.add(candidate)
+        if (emergencyBlocks.isNotEmpty()) {
+            return emergencyBlocks
+        }
+
+        return allBlocks
+            .filter { !it.isSpecial }
+            .shuffled()
+            .take(BLOCKS_PER_ROUND)
+    }
+
+    val result = mutableListOf<Block>()
+
+    // Always give the single best board-aware block first.
+    result.add(scoredCandidates.first().block)
+
+    val remaining = scoredCandidates
+        .drop(1)
+        .filter { candidate ->
+            result.none { it.name == candidate.block.name }
+        }
+
+    val easyPool = remaining.filter { it.block.shape.size <= 4 }
+    val mediumPool = remaining.filter { it.block.shape.size in 5..6 }
+    val largePool = remaining.filter { it.block.shape.size >= 7 }
+
+    when {
+        isCritical -> {
+            result.addAll(easyPool.take(BLOCKS_PER_ROUND - result.size).map { it.block })
+        }
+
+        isCrowded -> {
+            result.addAll(easyPool.take(1).map { it.block })
+
+            if (result.size < BLOCKS_PER_ROUND) {
+                result.addAll(
+                    (easyPool.drop(1) + mediumPool)
+                        .filter { candidate -> result.none { it.name == candidate.block.name } }
+                        .take(BLOCKS_PER_ROUND - result.size)
+                        .map { it.block }
+                )
             }
         }
 
-        val inv = listOf(preferred) + others
-        // ensure placeable
-        if (inventoryHasPlaceable(inv)) return inv.take(3)
+        else -> {
+            val largeModifier = DifficultyConfig.largeProbabilityModifier[difficulty] ?: 1.0f
+
+            val balancedPool = mutableListOf<PlacementScore>()
+            balancedPool.addAll(easyPool.take(4))
+            balancedPool.addAll(mediumPool.take(5))
+
+            if (largeModifier >= 1.0f) {
+                balancedPool.addAll(largePool.take(2))
+            } else {
+                balancedPool.addAll(largePool.take(1))
+            }
+
+            result.addAll(
+                balancedPool
+                    .filter { candidate -> result.none { it.name == candidate.block.name } }
+                    .shuffled()
+                    .sortedByDescending { it.score }
+                    .take(BLOCKS_PER_ROUND - result.size)
+                    .map { it.block }
+            )
+        }
     }
 
-    // Absolute fallback: return 3 easiest blocks that exist (guaranteed smalls) or any 3
-    val easy = allBlocks.filter { it.shape.size <= 4 }
-    if (easy.isNotEmpty()) {
-        // If any easy block can be placed, guarantee at least one is placeable
-        val placeableEasy = easy.firstOrNull { canPlaceBlock(board, it) }
-        if (placeableEasy != null) {
-            val others = (easy.filter { it != placeableEasy }.shuffled().take(2)).toMutableList()
-            return listOf(placeableEasy) + others
-        }
-        return easy.shuffled().take(3)
+    // Fill any missing slots with the best remaining oriented blocks.
+    if (result.size < BLOCKS_PER_ROUND) {
+        result.addAll(
+            scoredCandidates
+                .map { it.block }
+                .filter { candidate -> result.none { it.name == candidate.name } }
+                .take(BLOCKS_PER_ROUND - result.size)
+        )
     }
-    return allBlocks.shuffled().take(3)
+
+    // Absolute fallback: keep exactly 3.
+    if (result.size < BLOCKS_PER_ROUND) {
+        result.addAll(
+            allBlocks
+                .filter { !it.isSpecial }
+                .filter { candidate -> result.none { it.name == candidate.name } }
+                .shuffled()
+                .take(BLOCKS_PER_ROUND - result.size)
+        )
+    }
+
+    // Final safety: no more than one awkward block.
+    val trimmed = result.take(BLOCKS_PER_ROUND).toMutableList()
+    val awkwardCount = trimmed.count { isAwkwardBlock(it) }
+
+    if (awkwardCount > DifficultyConfig.maxAwkwardPerInventory) {
+        val replacement = scoredCandidates
+            .map { it.block }
+            .firstOrNull { candidate ->
+                !isAwkwardBlock(candidate) && trimmed.none { it.name == candidate.name }
+            }
+
+        if (replacement != null) {
+            val index = trimmed.indexOfLast { isAwkwardBlock(it) }
+            if (index >= 0) {
+                trimmed[index] = replacement
+            }
+        }
+    }
+
+    return trimmed.take(BLOCKS_PER_ROUND)
 }

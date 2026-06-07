@@ -361,9 +361,37 @@ fun GameScreen(
     fun availableBlocksOffset(forcePreviewFold: Boolean = false): Dp =
         when (deviceCategory(forcePreviewFold)) {
             DeviceClass.Phone -> sh(-0.05f)
-            DeviceClass.Tablet -> sh(-0.08f)
+            DeviceClass.Tablet -> sh(-0.025f)
             DeviceClass.Foldable -> sh(-0.05f)
         }
+
+    @Composable
+    fun availableBlocksRowHeight(forcePreviewFold: Boolean = false): Dp {
+        return when (deviceCategory(forcePreviewFold)) {
+            DeviceClass.Phone -> GameSettings.availableBlocksRowHeight.value.coerceAtLeast(0f).dp
+            DeviceClass.Tablet -> 118.dp
+            DeviceClass.Foldable -> GameSettings.availableBlocksRowHeight.value.coerceAtLeast(0f).dp * 0.85f
+        }
+    }
+
+    @Composable
+    fun previewCardSize(forcePreviewFold: Boolean = false): Dp {
+        return when (deviceCategory(forcePreviewFold)) {
+            DeviceClass.Phone -> sw(0.22f)
+            DeviceClass.Tablet -> minOf(sw(0.17f), 118.dp)
+            DeviceClass.Foldable -> sw(0.20f)
+        }
+    }
+
+    @Composable
+    fun previewCellSize(forcePreviewFold: Boolean = false): Dp {
+        return when (deviceCategory(forcePreviewFold)) {
+            DeviceClass.Phone -> sdp(0.03f)
+            DeviceClass.Tablet -> minOf(sdp(0.022f), 18.dp)
+            DeviceClass.Foldable -> sdp(0.026f)
+        }
+    }
+
     @Composable
     fun cellSize(): Dp = boardSize() / 9
 
@@ -503,31 +531,18 @@ fun GameScreen(
                         // =====================
                         // AVAILABLE BLOCKS ROW
                         // =====================
-                        // Defensive clamp: ensure height is non-negative (developer knobs can set negatives)
-                        @Composable
-                        fun availableBlocksRowHeight(forcePreviewFold: Boolean = false): Dp {
-                            val category = deviceCategory(forcePreviewFold)
-                            val base = GameSettings.availableBlocksRowHeight.value.dp
-
-                            return when (category) {
-                                DeviceClass.Foldable -> base * 0.85f   // 👈 shrink ONLY on fold
-                                else -> base
-                            }
-                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(
-                                    GameSettings.availableBlocksRowHeight.value
-                                        .coerceAtLeast(0f)
-                                        .dp
-                                )
+                                .height(availableBlocksRowHeight(forcePreviewFold))
                                 .padding(horizontal = SCREEN_HORIZONTAL_PADDING)
-                                .offset(y = availableBlocksOffset()),
+                                .offset(y = availableBlocksOffset(forcePreviewFold)),
                             contentAlignment = Alignment.Center
                         ) {
                             AvailableBlocks(
                                 uiState = uiState,
+                                cardSize = previewCardSize(forcePreviewFold),
+                                previewCellSize = previewCellSize(forcePreviewFold),
                                 onBlockInteraction = { block, interactionType ->
                                     when (interactionType) {
                                         InteractionType.DRAG_START -> {

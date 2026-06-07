@@ -258,6 +258,8 @@ fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
 fun BlockPreviewCard(
     block: Block,
     isSelected: Boolean = false,
+    cardSize: Dp,
+    previewCellSize: Dp,
     onClick: () -> Unit,
     onDragStart: (fingerInWindow: Offset) -> Unit,
     onDrag: (currentFingerPos: Offset) -> Unit,
@@ -283,7 +285,7 @@ fun BlockPreviewCard(
         colors = CardDefaults.cardColors(containerColor = DarkBackground),
         elevation = CardDefaults.cardElevation(sdp(0.006f)),
         modifier = modifier
-            .size(sw(0.22f))
+            .size(cardSize)
             .onGloballyPositioned { coords ->
                 // store window coordinates to match grid/window coordinates
                 cardWindowPos = coords.positionInWindow()
@@ -328,7 +330,7 @@ fun BlockPreviewCard(
          ) {
             BlockGrid(
                 block = block,
-                cellSize = sdp(0.03f),
+                cellSize = previewCellSize,
                 modifier = Modifier.graphicsLayer(
                     scaleX = 0.9f,
                     scaleY = 0.9f
