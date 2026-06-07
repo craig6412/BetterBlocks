@@ -159,6 +159,14 @@ fun GameScreen(
     var showMenuDialog by remember { mutableStateOf(false) }
     var showColorWheelDialog by remember { mutableStateOf(false) }
     var showBuyColorWipeDialog by remember { mutableStateOf(false) }
+    var showGameOverDialogLocal by remember { mutableStateOf(false) }
+    var deferredTierUnlock by remember { mutableStateOf<TrophyTier?>(null) }
+
+    fun clearLocalDialogs() {
+        showMenuDialog = false
+        showColorWheelDialog = false
+        showBuyColorWipeDialog = false
+    }
 
     // Trophy unlock popup tracking.
     // This is UI-only and watches the live score crossing into a newly earned tier.
@@ -177,7 +185,39 @@ fun GameScreen(
     }
     var pendingTierUnlock by remember { mutableStateOf<TrophyTier?>(null) }
 
-    LaunchedEffect(currentEarnedTier, uiState.isGameOver, uiState.isLastChance) {
+    val gameOverSummaryReady =
+        (uiState.isGameOver || uiState.showGameSummaryDialog) && showGameOverDialogLocal
+
+    val highPriorityDialogShowing =
+        uiState.isLastChance || gameOverSummaryReady
+
+    val gameDialogWaitingOrShowing =
+        uiState.isLastChance ||
+                uiState.isGameOver ||
+                uiState.showGameSummaryDialog ||
+                showGameOverDialogLocal
+
+    val localDialogShowing =
+        showMenuDialog || showColorWheelDialog || showBuyColorWipeDialog
+
+    val vmNonGameDialogShowing =
+        uiState.showFirstGameOverDialog ||
+                uiState.showRainbowEarnedDialog ||
+                uiState.showZeroCoinsDialog
+
+    val anyDialogShowing =
+        gameDialogWaitingOrShowing ||
+                localDialogShowing ||
+                vmNonGameDialogShowing ||
+                pendingTierUnlock != null
+
+    LaunchedEffect(uiState.isGameOver, uiState.isLastChance, uiState.showGameSummaryDialog) {
+        if (uiState.isGameOver || uiState.isLastChance || uiState.showGameSummaryDialog) {
+            clearLocalDialogs()
+        }
+    }
+
+    LaunchedEffect(currentEarnedTier, uiState.isGameOver, uiState.isLastChance, uiState.showGameSummaryDialog, anyDialogShowing) {
         val lastObservedTier = runCatching {
             TrophyTier.valueOf(lastObservedTierName)
         }.getOrDefault(TrophyTier.UNRANKED)
@@ -188,7 +228,11 @@ fun GameScreen(
             currentEarnedTier != TrophyTier.UNRANKED &&
             currentEarnedTier.ordinal > lastObservedTier.ordinal
         ) {
-            pendingTierUnlock = currentEarnedTier
+            if (gameDialogWaitingOrShowing || anyDialogShowing) {
+                deferredTierUnlock = currentEarnedTier
+            } else {
+                pendingTierUnlock = currentEarnedTier
+            }
             lastObservedTierName = currentEarnedTier.name
         } else if (currentEarnedTier.ordinal < lastObservedTier.ordinal) {
             lastObservedTierName = currentEarnedTier.name
@@ -346,7 +390,12 @@ fun GameScreen(
 
                 Header(
                     uiState = uiState,
-                    onMenuClicked = { showMenuDialog = true }
+                    onMenuClicked = {
+                        if (!anyDialogShowing) {
+                            clearLocalDialogs()
+                            showMenuDialog = true
+                        }
+                    }
                 )
 
                 // =====================
@@ -544,7 +593,7 @@ fun GameScreen(
                 // =====================
                 // MENU / SETTINGS DIALOG
                 // =====================
-                if (!LocalInspectionMode.current && showMenuDialog) {
+                if (!LocalInspectionMode.current && showMenuDialog && !highPriorityDialogShowing) {
                     GameMenuDialog(
                         uiState = uiState,
                         onDismiss = { showMenuDialog = false },
@@ -574,11 +623,14 @@ fun GameScreen(
                     onUseRainbowImmediately = onUseRainbowImmediately,
                     onColorWipeClick = {
                         Log.d("GameScreen", "BottomBar.onColorWipeClick -> checking color wipe inventory")
-                        if (uiState.colorWipeCount <= 0) {
-                            // Prompt user to buy color wipes from the shop
-                            showBuyColorWipeDialog = true
-                        } else {
-                            showColorWheelDialog = true
+                        if (!anyDialogShowing) {
+                            clearLocalDialogs()
+                            if (uiState.colorWipeCount <= 0) {
+                                // Prompt user to buy color wipes from the shop
+                                showBuyColorWipeDialog = true
+                            } else {
+                                showColorWheelDialog = true
+                            }
                         }
                     },
                     onDragStart = { block, previewOffset ->
@@ -624,7 +676,7 @@ fun GameScreen(
         // DEBUG: Log composition
         // =====================
         // Color wheel dialog rendering (debug logs)
-        if (!LocalInspectionMode.current && showColorWheelDialog) {
+        if (!LocalInspectionMode.current && showColorWheelDialog && !highPriorityDialogShowing) {
             Log.d("GameScreen", "showColorWheelDialog == true -> rendering ColorWheelDialog")
             ColorWheelDialog(
                 board = uiState.board,
@@ -646,7 +698,7 @@ fun GameScreen(
         }
 
         // Buy / Purchase prompt when user has zero color wipes
-        if (!LocalInspectionMode.current && showBuyColorWipeDialog) {
+        if (!LocalInspectionMode.current && showBuyColorWipeDialog && !highPriorityDialogShowing && !showColorWheelDialog) {
             AlertDialog(
                 onDismissRequest = { showBuyColorWipeDialog = false },
                 title = { Text(text = "No Color Wipes", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
@@ -671,7 +723,7 @@ fun GameScreen(
         }
 
         // --- Rainbow Earned Dialog (earned by filling special meter) ---
-        if (!LocalInspectionMode.current && uiState.showRainbowEarnedDialog) {
+        if (!LocalInspectionMode.current && uiState.showRainbowEarnedDialog && !highPriorityDialogShowing && !localDialogShowing && !uiState.showFirstGameOverDialog) {
             AlertDialog(
                 onDismissRequest = { onDismissRainbowEarned() },
                 title = { Text(text = "CONGRATULATIONS!", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
@@ -697,7 +749,7 @@ fun GameScreen(
         }
 
         // --- First-Time Game Over Reward Dialog (awards 3 rainbows on first-ever game over) ---
-        if (!LocalInspectionMode.current && uiState.showFirstGameOverDialog) {
+        if (!LocalInspectionMode.current && uiState.showFirstGameOverDialog && !highPriorityDialogShowing && !localDialogShowing) {
             AlertDialog(
                 onDismissRequest = { onDismissFirstGameOver() },
                 title = { Text(text = "WELCOME!", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
@@ -724,7 +776,14 @@ fun GameScreen(
 
         // --- Trophy Unlock Dialog (shown immediately when score reaches a new trophy tier) ---
         pendingTierUnlock?.let { unlockedTier ->
-            if (!LocalInspectionMode.current) {
+            if (
+                !LocalInspectionMode.current &&
+                !highPriorityDialogShowing &&
+                !localDialogShowing &&
+                !uiState.showFirstGameOverDialog &&
+                !uiState.showRainbowEarnedDialog &&
+                !uiState.showZeroCoinsDialog
+            ) {
                 TierUnlockDialog(
                     tier = unlockedTier,
                     onDismiss = { pendingTierUnlock = null }
@@ -746,7 +805,6 @@ fun GameScreen(
         // ----------------------------------------------------------------------
         val gameOverAnimator = remember { com.betterblocks.animation.GameOverAnimator() }
         var gameOverAnimState by remember { mutableStateOf(com.betterblocks.animation.GameOverAnimationState()) }
-        var showGameOverDialogLocal by remember { mutableStateOf(false) }
 
         // Persisted counter for games played to gate interstitials
         var gamesPlayed by rememberSaveable { mutableStateOf(0) }
@@ -853,8 +911,15 @@ fun GameScreen(
             }
         }
 
+        LaunchedEffect(anyDialogShowing, pendingTierUnlock, deferredTierUnlock) {
+            if (!anyDialogShowing && pendingTierUnlock == null && deferredTierUnlock != null) {
+                pendingTierUnlock = deferredTierUnlock
+                deferredTierUnlock = null
+            }
+        }
+
         // --- Zero Coins Dialog ---
-        if (!LocalInspectionMode.current && uiState.showZeroCoinsDialog) {
+        if (!LocalInspectionMode.current && uiState.showZeroCoinsDialog && !highPriorityDialogShowing && !localDialogShowing && !uiState.showFirstGameOverDialog && !uiState.showRainbowEarnedDialog && pendingTierUnlock == null) {
             ZeroCoinsDialog(
                 onDismiss = onDismissZeroCoins,
                 onWatchAd = {

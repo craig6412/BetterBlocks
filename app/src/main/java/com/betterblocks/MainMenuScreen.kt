@@ -2,8 +2,11 @@ package com.betterblocks.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,7 +19,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -27,38 +29,30 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
-import com.betterblocks.ui.sdp
-import com.betterblocks.ui.ssp
-import com.betterblocks.ui.sw
-import com.betterblocks.ui.sh
-import android.app.Activity
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import kotlinx.coroutines.delay
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.border
+import android.app.Activity
 import android.util.Log
-import com.betterblocks.R
-import com.betterblocks.GameUiState
-import com.betterblocks.GameViewModel
 import com.betterblocks.BuildConfig
 import com.betterblocks.DeepBlue
+import com.betterblocks.DeviceClass
+import com.betterblocks.GameUiState
+import com.betterblocks.GameViewModel
 import com.betterblocks.LightText
 import com.betterblocks.Oswald
 import com.betterblocks.Pink_Jackie
-import androidx.compose.ui.zIndex
-import com.betterblocks.DeviceClass
+import com.betterblocks.PreviewGameViewModel
+import com.betterblocks.R
 import com.betterblocks.SpecialPurple
 import com.betterblocks.SuccessGreen
-import com.betterblocks.PreviewGameViewModel
 import com.betterblocks.ads.AdManager
-import com.betterblocks.PREFS_NAME
 import com.betterblocks.trophyColorForTier
 import com.betterblocks.trophyDisplayName
-import com.betterblocks.trophyRequirementText
 import com.betterblocks.trophyRes
-
+import com.betterblocks.ui.sdp
+import com.betterblocks.ui.sh
+import com.betterblocks.ui.ssp
+import com.betterblocks.ui.sw
+import kotlinx.coroutines.delay
 
 // Gradient colors for background
 val BannerBlueTop = Color(0xFF011133)
@@ -73,7 +67,7 @@ data class ViewModelCallbacks(
 )
 
 // -----------------------
-// Device helpers + FreeCoinsButton
+// Device helpers
 // Use the shared `DeviceClass` enum declared in GameScreen.kt (same package).
 // -----------------------
 
@@ -98,195 +92,18 @@ private fun deviceCategory(forcePreviewFold: Boolean = false): DeviceClass {
 }
 
 @Composable
-fun FreeCoinsButton(
-    viewModelBackedCallbacks: ViewModelCallbacks,
-    onGoToShop: () -> Unit,
-    forcePreviewFold: Boolean = false
-) {
-    val ctx = LocalContext.current
-    val category = deviceCategory(forcePreviewFold)
-    val activity = remember(ctx) { ctx as? Activity }
-
-    val rewardedLoaded = AdManager.isRewardedLoaded.value
-
-
-    var isLoadingAd by remember { mutableStateOf(false) }
-    var showAdUnavailableDialog by remember { mutableStateOf(false) }
-    var loadRequestId by remember { mutableStateOf(0) }
-
-    val sizeDp = when (category) {
-        DeviceClass.Phone -> sw(0.14f)
-        DeviceClass.Tablet -> sw(0.11f)
-        DeviceClass.Foldable -> sw(0.16f)
-    }
-    val topPad = when (category) {
-        DeviceClass.Phone -> sh(0.02f)
-        DeviceClass.Tablet -> sh(0.035f)
-        DeviceClass.Foldable -> sh(0.02f)
-    }
-    val endPad = when (category) {
-        DeviceClass.Phone -> sw(0.03f)
-        DeviceClass.Tablet -> sw(0.04f)
-        DeviceClass.Foldable -> sw(0.03f)
-    }
-
-    fun awardFreeCoins() {
-        try {
-            viewModelBackedCallbacks.addCoins(AdManager.REWARDED_COINS)
-            Log.d("FreeCoinsButton", "Reward completed: added ${AdManager.REWARDED_COINS} coins")
-        } catch (t: Throwable) {
-            Log.w("FreeCoinsButton", "Failed to add rewarded coins", t)
-        }
-    }
-
-    fun showRewardedOrFail(act: Activity) {
-        isLoadingAd = false
-        AdManager.showRewarded(
-            act,
-            onRewardEarned = { awardFreeCoins() },
-            onFailed = {
-                isLoadingAd = false
-                showAdUnavailableDialog = true
-                AdManager.preloadRewarded(ctx)
-            }
-        )
-    }
-// If an existing preload finishes while the loading dialog is open, launch the ad automatically.
-    LaunchedEffect(isLoadingAd, rewardedLoaded) {
-        if (isLoadingAd && rewardedLoaded) {
-            activity?.let { showRewardedOrFail(it) }
-        }
-    }
-    LaunchedEffect(isLoadingAd, loadRequestId) {
-        if (isLoadingAd) {
-            delay(12_000L)
-            if (isLoadingAd) {
-                isLoadingAd = false
-                showAdUnavailableDialog = true
-                AdManager.preloadRewarded(ctx)
-            }
-        }
-    }
-
-    val extraVerticalOffset = sh(0.10f)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = topPad + extraVerticalOffset, end = endPad)
-                .size(sizeDp)
-                .zIndex(1000f)
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.free_coins),
-                contentDescription = "Free Coins",
-                modifier = Modifier
-                    .size(sizeDp)
-                    .clickable(
-                        enabled = !isLoadingAd,
-                        indication = LocalIndication.current,
-                        interactionSource = remember { MutableInteractionSource() }
-                    ) {
-                        val act = activity
-                        if (act == null) {
-                            AdManager.preloadRewarded(ctx)
-                            showAdUnavailableDialog = true
-                            return@clickable
-                        }
-
-                        showAdUnavailableDialog = false
-
-                        if (AdManager.isRewardedLoaded.value) {
-                            showRewardedOrFail(act)
-                        } else {
-                            isLoadingAd = true
-                            val requestId = loadRequestId + 1
-                            loadRequestId = requestId
-
-                            AdManager.preloadRewarded(
-                                ctx,
-                                onLoaded = {
-                                    if (isLoadingAd && loadRequestId == requestId) {
-                                        showRewardedOrFail(act)
-                                    }
-                                },
-                                onFailed = {
-                                    if (loadRequestId == requestId) {
-                                        isLoadingAd = false
-                                        showAdUnavailableDialog = true
-                                    }
-                                }
-                            )
-                        }
-                    }
-            )
-        }
-
-        if (isLoadingAd) {
-            AlertDialog(
-                onDismissRequest = {},
-                title = { Text("Loading Reward") },
-                text = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                        Text("Getting your free coins video ready...")
-                    }
-                },
-                confirmButton = {},
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            isLoadingAd = false
-                            AdManager.preloadRewarded(ctx)
-                        }
-                    ) {
-                        Text("Cancel")
-                    }
-                }
-            )
-        }
-
-        if (showAdUnavailableDialog) {
-            AlertDialog(
-                onDismissRequest = { showAdUnavailableDialog = false },
-                title = { Text("Reward unavailable") },
-                text = { Text("No reward video is ready right now. Try again in a moment, or visit the shop.") },
-                confirmButton = {
-                    TextButton(onClick = { showAdUnavailableDialog = false }) {
-                        Text("OK")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            showAdUnavailableDialog = false
-                            onGoToShop()
-                        }
-                    ) {
-                        Text("Shop")
-                    }
-                }
-            )
-        }
-    }
-}
-@Composable
 fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = sw(0.03f), vertical = sh(0.004f))
             .width(sw(0.9f)),
-        shape = RoundedCornerShape(sdp(0.02f)), // Slightly smaller corners
+        shape = RoundedCornerShape(sdp(0.02f)),
         colors = CardDefaults.cardColors(
             containerColor = DeepBlue.copy(alpha = 0.9f)
         ),
         elevation = CardDefaults.cardElevation(sdp(0.006f)),
-        border = BorderStroke(sdp(0.0015f), Pink_Jackie.copy(alpha = 0.3f)) // Thinner border
+        border = BorderStroke(sdp(0.0015f), Pink_Jackie.copy(alpha = 0.3f))
     ) {
         Row(
             modifier = Modifier
@@ -304,28 +121,25 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Coins
             StatItem(
                 emoji = "💰",
                 value = uiState.coins.toString(),
                 backgroundColor = Pink_Jackie.copy(alpha = 0.2f)
             )
 
-            // Rainbow Wipes
             StatItem(
                 emoji = "🌈",
                 value = uiState.rainbowBlockCount.toString(),
                 backgroundColor = SpecialPurple.copy(alpha = 0.2f)
             )
 
-            // Color Wipes
             Row(
                 modifier = Modifier
                     .background(
                         color = SuccessGreen.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(sdp(0.01f)) // Smaller radius
+                        shape = RoundedCornerShape(sdp(0.01f))
                     )
-                    .padding(horizontal = sdp(0.02f), vertical = sdp(0.01f)), // Reduced padding
+                    .padding(horizontal = sdp(0.02f), vertical = sdp(0.01f)),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -333,13 +147,13 @@ fun PowerupHeader(uiState: GameUiState, modifier: Modifier = Modifier) {
                     painter = painterResource(id = R.drawable.ic_palette_colorwipe),
                     contentDescription = "Color Wipe",
                     tint = Color.Unspecified,
-                    modifier = Modifier.size(sdp(0.03f)) // Slightly smaller icon
+                    modifier = Modifier.size(sdp(0.03f))
                 )
                 Spacer(Modifier.width(sdp(0.005f)))
                 Text(
                     text = uiState.colorWipeCount.toString(),
                     color = Color.White,
-                    fontSize = ssp(0.02f), // Reduced font size
+                    fontSize = ssp(0.02f),
                     fontWeight = FontWeight.Bold,
                     fontFamily = Oswald
                 )
@@ -354,97 +168,326 @@ fun StatItem(emoji: String, value: String, backgroundColor: Color) {
         modifier = Modifier
             .background(
                 color = backgroundColor,
-                shape = RoundedCornerShape(sdp(0.01f)) // Smaller radius
+                shape = RoundedCornerShape(sdp(0.01f))
             )
-            .padding(horizontal = sdp(0.02f), vertical = sdp(0.01f)), // Reduced padding
+            .padding(horizontal = sdp(0.02f), vertical = sdp(0.01f)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         Text(
             text = emoji,
-            fontSize = ssp(0.018f) // Reduced from 24sp
+            fontSize = ssp(0.018f)
         )
         Spacer(Modifier.width(sdp(0.005f)))
         Text(
             text = value,
             color = Color.White,
-            fontSize = ssp(0.02f), // Reduced from 20sp
+            fontSize = ssp(0.02f),
             fontWeight = FontWeight.Bold,
             fontFamily = Oswald
         )
     }
 }
 
-
+/**
+ * Concept-style hero card:
+ * Left side = current trophy. Right side = full clickable Free Coins rewarded-ad CTA.
+ */
 @Composable
-fun CurrentTrophyCard(uiState: GameUiState, modifier: Modifier = Modifier) {
+fun MainMenuHeroCard(
+    uiState: GameUiState,
+    viewModelBackedCallbacks: ViewModelCallbacks,
+    onGoToShop: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val ctx = LocalContext.current
+    val activity = remember(ctx) { ctx as? Activity }
+    val rewardedLoaded = AdManager.isRewardedLoaded.value
+
+    var isLoadingAd by remember { mutableStateOf(false) }
+    var showAdUnavailableDialog by remember { mutableStateOf(false) }
+    var loadRequestId by remember { mutableStateOf(0) }
+
     val tier = uiState.trophyTier
     val tierColor = trophyColorForTier(tier)
+
+    fun awardFreeCoins() {
+        try {
+            viewModelBackedCallbacks.addCoins(AdManager.REWARDED_COINS)
+            Log.d("MainMenuHeroCard", "Reward completed: added ${AdManager.REWARDED_COINS} coins")
+        } catch (t: Throwable) {
+            Log.w("MainMenuHeroCard", "Failed to add rewarded coins", t)
+        }
+    }
+
+    fun showRewardedOrFail(act: Activity) {
+        isLoadingAd = false
+        AdManager.showRewarded(
+            act,
+            onRewardEarned = { awardFreeCoins() },
+            onFailed = {
+                isLoadingAd = false
+                showAdUnavailableDialog = true
+                AdManager.preloadRewarded(ctx)
+            }
+        )
+    }
+
+    fun requestReward() {
+        val act = activity
+        if (act == null) {
+            AdManager.preloadRewarded(ctx)
+            showAdUnavailableDialog = true
+            return
+        }
+
+        showAdUnavailableDialog = false
+
+        if (AdManager.isRewardedLoaded.value) {
+            showRewardedOrFail(act)
+        } else {
+            isLoadingAd = true
+            val requestId = loadRequestId + 1
+            loadRequestId = requestId
+
+            AdManager.preloadRewarded(
+                ctx,
+                onLoaded = {
+                    if (isLoadingAd && loadRequestId == requestId) {
+                        showRewardedOrFail(act)
+                    }
+                },
+                onFailed = {
+                    if (loadRequestId == requestId) {
+                        isLoadingAd = false
+                        showAdUnavailableDialog = true
+                    }
+                }
+            )
+        }
+    }
+
+    LaunchedEffect(isLoadingAd, rewardedLoaded) {
+        if (isLoadingAd && rewardedLoaded) {
+            activity?.let { showRewardedOrFail(it) }
+        }
+    }
+
+    LaunchedEffect(isLoadingAd, loadRequestId) {
+        if (isLoadingAd) {
+            delay(12_000L)
+            if (isLoadingAd) {
+                isLoadingAd = false
+                showAdUnavailableDialog = true
+                AdManager.preloadRewarded(ctx)
+            }
+        }
+    }
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = sw(0.03f)),
-        shape = RoundedCornerShape(sdp(0.018f)),
+            .height(sh(0.102f)),
+        shape = RoundedCornerShape(sdp(0.024f)),
         colors = CardDefaults.cardColors(
-            containerColor = DeepBlue.copy(alpha = 0.72f)
+            containerColor = DeepBlue.copy(alpha = 0.94f)
         ),
-        border = BorderStroke(sdp(0.0015f), tierColor.copy(alpha = 0.55f)),
-        elevation = CardDefaults.cardElevation(sdp(0.004f))
+        elevation = CardDefaults.cardElevation(sdp(0.01f)),
+        border = BorderStroke(sdp(0.0022f), Color(0xFF7C4DFF).copy(alpha = 0.9f))
     ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
                         colors = listOf(
                             tierColor.copy(alpha = 0.18f),
-                            DeepBlue.copy(alpha = 0.9f),
-                            tierColor.copy(alpha = 0.10f)
+                            DeepBlue.copy(alpha = 0.98f),
+                            Color(0xFF160A3D).copy(alpha = 0.96f),
+                            Pink_Jackie.copy(alpha = 0.13f)
                         )
                     )
                 )
-                .padding(horizontal = sw(0.035f), vertical = sh(0.007f)),
+                .padding(horizontal = sw(0.028f), vertical = sh(0.007f)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                painter = painterResource(id = trophyRes(tier)),
-                contentDescription = trophyDisplayName(tier),
-                modifier = Modifier.size(sdp(0.042f)),
-                contentScale = ContentScale.Fit
+            // LEFT SIDE: current trophy progression
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(sdp(0.064f))
+                        .background(
+                            color = tierColor.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(sdp(0.016f))
+                        )
+                        .border(
+                            BorderStroke(sdp(0.0015f), tierColor.copy(alpha = 0.65f)),
+                            shape = RoundedCornerShape(sdp(0.016f))
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = trophyRes(tier)),
+                        contentDescription = trophyDisplayName(tier),
+                        modifier = Modifier.size(sdp(0.047f)),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(sw(0.018f)))
+
+                Column(
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "CURRENT TROPHY",
+                        color = LightText.copy(alpha = 0.68f),
+                        fontSize = ssp(0.0115f),
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = Oswald,
+                        letterSpacing = ssp(0.0015f)
+                    )
+                    Spacer(modifier = Modifier.height(sh(0.001f)))
+                    Text(
+                        text = trophyDisplayName(tier).uppercase(),
+                        color = tierColor,
+                        fontSize = ssp(0.019f),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = Oswald,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            // Center neon divider
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight(0.68f)
+                    .width(sdp(0.0022f))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color(0xFF7C4DFF).copy(alpha = 0.95f),
+                                Pink_Jackie.copy(alpha = 0.8f),
+                                Color.Transparent
+                            )
+                        )
+                    )
             )
 
-            Spacer(modifier = Modifier.width(sdp(0.018f)))
-
-            Column(
-                modifier = Modifier.weight(1f)
+            // RIGHT SIDE: full-panel clickable rewarded-ad CTA
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(
+                        enabled = !isLoadingAd,
+                        indication = LocalIndication.current,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) { requestReward() },
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "CURRENT TROPHY",
-                    color = LightText.copy(alpha = 0.62f),
-                    fontSize = ssp(0.014f),
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = Oswald
-                )
-                Text(
-                    text = trophyDisplayName(tier).uppercase(),
-                    color = LightText,
-                    fontSize = ssp(0.022f),
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = Oswald
-                )
-                Text(
-                    text = trophyRequirementText(tier),
-                    color = LightText.copy(alpha = 0.68f),
-                    fontSize = ssp(0.0125f),
-                    fontFamily = Oswald,
-                    maxLines = 1
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.free_coins),
+                        contentDescription = "Free Coins",
+                        modifier = Modifier.size(sdp(0.052f)),
+                        contentScale = ContentScale.Fit
+                    )
+
+                    Spacer(modifier = Modifier.width(sw(0.014f)))
+
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "FREE COINS",
+                            color = Pink_Jackie,
+                            fontSize = ssp(0.019f),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = Oswald,
+                            letterSpacing = ssp(0.0015f)
+                        )
+                        Text(
+                            text = if (isLoadingAd) "LOADING AD..." else "WATCH AD",
+                            color = LightText.copy(alpha = 0.78f),
+                            fontSize = ssp(0.0115f),
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = Oswald
+                        )
+                        Text(
+                            text = "+${AdManager.REWARDED_COINS}",
+                            color = SuccessGreen,
+                            fontSize = ssp(0.021f),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = Oswald
+                        )
+                    }
+                }
             }
         }
     }
-}
 
+    if (isLoadingAd) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Loading Reward") },
+            text = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                    Text("Getting your free coins video ready...")
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        isLoadingAd = false
+                        AdManager.preloadRewarded(ctx)
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showAdUnavailableDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdUnavailableDialog = false },
+            title = { Text("Reward unavailable") },
+            text = { Text("No reward video is ready right now. Try again in a moment, or visit the shop.") },
+            confirmButton = {
+                TextButton(onClick = { showAdUnavailableDialog = false }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showAdUnavailableDialog = false
+                        onGoToShop()
+                    }
+                ) {
+                    Text("Shop")
+                }
+            }
+        )
+    }
+}
 
 @Composable
 fun MainMenuScreen(
@@ -457,7 +500,6 @@ fun MainMenuScreen(
     onDeveloperClicked: () -> Unit,
     banner: @Composable (() -> Unit)? = null
 ) {
-    // Production entrypoint: read state from ViewModel and delegate to pure UI function
     val uiState = viewModel.uiState.collectAsState().value
     MainMenuScreenContent(
         uiState = uiState,
@@ -523,28 +565,26 @@ private fun MainMenuScreenContent(
 ) {
     val context = LocalContext.current
 
-    // Check daily reward on first composition — call through the provided callbacks if available
+    // Check daily reward on first composition
     LaunchedEffect(Unit) {
         try {
             viewModelBackedCallbacks.checkDailyReward()
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
     }
 
-    // Preload rewarded ads proactively so the Free Coins flow can show immediately
+    // Preload rewarded ads proactively so the Free Coins hero panel can show immediately
     LaunchedEffect(Unit) {
-        com.betterblocks.ads.AdManager.preloadRewarded(context)
+        AdManager.preloadRewarded(context)
     }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color.Transparent
     ) {
-
         Box(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Main content column
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -557,48 +597,43 @@ private fun MainMenuScreenContent(
                     .padding(horizontal = sdp(0.03f)),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // PowerupHeader at top with proper spacing
-                Spacer(modifier = Modifier.height(sh(0.005f)))
+                Spacer(modifier = Modifier.height(sh(0.001f)))
 
                 PowerupHeader(
                     uiState = uiState,
-                    modifier = Modifier
-                        .padding(horizontal = 0.dp)
-                        .offset(
-                            x = 0.dp,
-                            y = sh(-0.01f)   // move header up by ~1% of screen height
-                        )
+                    modifier = Modifier.padding(horizontal = 0.dp)
                 )
 
-                CurrentTrophyCard(
+                Spacer(modifier = Modifier.height(sh(0.008f)))
+
+                MainMenuHeroCard(
                     uiState = uiState,
-                    modifier = Modifier.offset(y = sh(-0.006f))
+                    viewModelBackedCallbacks = viewModelBackedCallbacks,
+                    onGoToShop = onShopClicked,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = sw(0.01f))
                 )
 
-                Spacer(modifier = Modifier.height(sh(0.008f))) // Space between trophy card and banner
-
-                // Flexible space before banner
-                Spacer(modifier = Modifier.weight(0.6f))
+                Spacer(modifier = Modifier.height(sh(0.006f)))
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .zIndex(50f)
+                        .height(sh(0.245f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Make the banner much taller while preserving width so its visual height is ~3x
                     Image(
                         painter = painterResource(id = R.drawable.banner),
                         contentDescription = "Better Blocks Game Title",
                         modifier = Modifier
-                            .fillMaxWidth(0.95f)
-                            .aspectRatio(1.5f) // previously 6f (very wide/short); 2f increases banner height ~3x
-                            .offset(x = sw(0.01f), y = sh(-0.01f))
-                            .zIndex(50f),
+                            .fillMaxWidth(0.78f)
+                            .aspectRatio(1.5f),
                         contentScale = ContentScale.Fit
                     )
                 }
 
-                Spacer(modifier = Modifier.height(sh(0.03f)))
+                Spacer(modifier = Modifier.height(sh(0.006f)))
 
                 MenuButton(
                     text = "PLAY",
@@ -606,10 +641,10 @@ private fun MainMenuScreenContent(
                     onClick = onPlayClicked,
                     containerColor = Color(0xFF673AB7),
                     contentColor = Color.White,
-                    height = sh(0.08f)
+                    height = sh(0.064f)
                 )
 
-                Spacer(modifier = Modifier.height(sh(0.02f)))
+                Spacer(modifier = Modifier.height(sh(0.009f)))
 
                 MenuButton(
                     text = "SHOP",
@@ -619,27 +654,30 @@ private fun MainMenuScreenContent(
                     border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(sh(0.018f)))
+                Spacer(modifier = Modifier.height(sh(0.009f)))
 
-                // Replace HIGH SCORES MenuButton with inline Button that uses trophy PNG image
                 Button(
                     onClick = onHighScoresClicked,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(sh(0.08f)),
+                        .height(sh(0.058f)),
                     shape = RoundedCornerShape(sdp(0.02f)),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DeepBlue,
                         contentColor = LightText
                     ),
-                    border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
+                    border = BorderStroke(sdp(0.003f), Color(0xFF673AB7)),
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = sdp(0.008f),
+                        pressedElevation = sdp(0.0025f)
+                    )
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Image(
-                            painter = painterResource(id = com.betterblocks.trophyRes(com.betterblocks.model.TrophyTier.UNRANKED)),
+                            painter = painterResource(id = trophyRes(uiState.trophyTier)),
                             contentDescription = null,
                             modifier = Modifier.size(sdp(0.035f)),
                             contentScale = ContentScale.Fit
@@ -655,7 +693,7 @@ private fun MainMenuScreenContent(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(sh(0.018f)))
+                Spacer(modifier = Modifier.height(sh(0.009f)))
 
                 MenuButton(
                     text = "STATS",
@@ -665,7 +703,7 @@ private fun MainMenuScreenContent(
                     border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(sh(0.018f)))
+                Spacer(modifier = Modifier.height(sh(0.009f)))
 
                 MenuButton(
                     text = "SETTINGS",
@@ -675,9 +713,7 @@ private fun MainMenuScreenContent(
                     border = BorderStroke(sdp(0.003f), Color(0xFF673AB7))
                 )
 
-                Spacer(modifier = Modifier.height(sh(0.018f)))
-
-                // Only show developer entry in debug builds
+                Spacer(modifier = Modifier.height(sh(0.009f)))
 
                 if (BuildConfig.DEBUG) {
                     MenuButton(
@@ -685,22 +721,27 @@ private fun MainMenuScreenContent(
                         icon = Icons.Default.Build,
                         onClick = onDeveloperClicked,
                         containerColor = Color(0xFF607D8B),
-                        height = sh(0.05f)
+                        height = sh(0.04f)
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(0.8f))
+                Spacer(modifier = Modifier.height(sh(0.004f)))
 
                 if (!LocalInspectionMode.current && BuildConfig.DEBUG) {
-                    Text("Test Ad", color = Color.Gray, fontSize = ssp(0.012f))
+                    Text("Test Ad", color = Color.Gray, fontSize = ssp(0.010f))
                 }
 
-                Spacer(modifier = Modifier.height(sh(0.01f)))
+                banner?.let {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(sh(0.052f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        it.invoke()
+                    }
+                }
 
-                banner?.invoke()
-
-                Spacer(modifier = Modifier.height(sh(0.01f)))
-//version number location
                 Text(
                     text = "v2.7",
                     color = Color.Gray,
@@ -708,41 +749,26 @@ private fun MainMenuScreenContent(
                     fontFamily = Oswald
                 )
 
-                // --------- ONE-TIME DIALOGS (AUTHORITATIVE ORDER) ---------
-                // Power-ups tutorial popup removed.
                 val suppressOtherDialogs = false
 
-                // Daily Reward Dialog
                 if (!LocalInspectionMode.current && uiState.showDailyRewardDialog && !suppressOtherDialogs) {
                     DailyRewardDialog(
                         day = uiState.dailyRewardDay,
                         streak = uiState.dailyRewardStreak,
                         coins = uiState.dailyRewardCoins,
                         hasRainbowWipe = uiState.dailyRewardRainbow,
-                        onClaimReward = { try { viewModelBackedCallbacks.claimDailyReward() } catch (_: Throwable) {} }
+                        onClaimReward = {
+                            try {
+                                viewModelBackedCallbacks.claimDailyReward()
+                            } catch (_: Throwable) {
+                            }
+                        }
                     )
                 }
-
-                // Player name onboarding has been moved to the end of the first game over (see GameScreen).
-
-                val config = LocalConfiguration.current
-                val screenWidth = config.screenWidthDp.dp
-                val screenHeight = config.screenHeightDp.dp
-
-                // Free Coins floating overlay (device-aware placement)
             }
-
-            // Place FreeCoinsButton as sibling to the main Column so it can align to the
-            // outer full-screen Box and use TopEnd alignment reliably.
-            FreeCoinsButton(
-                viewModelBackedCallbacks = viewModelBackedCallbacks,
-                onGoToShop = onShopClicked
-            )
         }
     }
 }
-
-
 
 // ----------------------
 // Menu Button Composable
@@ -754,8 +780,8 @@ fun MenuButton(
     onClick: () -> Unit,
     containerColor: Color,
     contentColor: Color = LightText,
-    height: Dp = 60.dp,
-    border: BorderStroke? = null // New optional border parameter
+    height: Dp = 54.dp,
+    border: BorderStroke? = null
 ) {
     Button(
         onClick = onClick,
@@ -767,12 +793,11 @@ fun MenuButton(
             containerColor = containerColor,
             contentColor = contentColor
         ),
-
         elevation = ButtonDefaults.buttonElevation(
             defaultElevation = sdp(0.008f),
             pressedElevation = sdp(0.0025f)
         ),
-        border = border // Apply the border if provided
+        border = border
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -786,7 +811,7 @@ fun MenuButton(
             Spacer(modifier = Modifier.width(sdp(0.015f)))
             Text(
                 text = text,
-                fontSize = ssp(0.025f),
+                fontSize = ssp(0.023f),
                 fontWeight = FontWeight.Bold,
                 fontFamily = Oswald,
                 letterSpacing = ssp(0.0015f)
@@ -801,6 +826,9 @@ fun MenuButton(
     showSystemUi = true,
     device = "spec:width=800dp,height=1280dp,dpi=480"
 )
+
+// need to check that the main menu is structured in a way that it scales correctly across all devices.
+//also
 @Composable
 fun MainMenuScreenPreview() {
     val vm = PreviewGameViewModel()
@@ -814,3 +842,4 @@ fun MainMenuScreenPreview() {
         onDeveloperClicked = {}
     )
 }
+ 

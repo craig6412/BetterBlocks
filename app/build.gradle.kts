@@ -14,8 +14,8 @@ android {
         applicationId = "com.betterblocks"
         minSdk = 24
         targetSdk = 35
-        versionCode = 22
-        versionName = "2.7"
+        versionCode = 25
+        versionName = "2.9"
     }
 
     buildTypes {
