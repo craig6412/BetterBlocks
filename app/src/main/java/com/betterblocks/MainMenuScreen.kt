@@ -743,7 +743,7 @@ private fun MainMenuScreenContent(
                 }
 
                 Text(
-                    text = "v2.7",
+                    text = "v2.9.1",
                     color = Color.Gray,
                     fontSize = ssp(0.012f),
                     fontFamily = Oswald
