@@ -17,6 +17,10 @@ class ShopRepository private constructor(context: Context) {
         @Volatile
         private var INSTANCE: ShopRepository? = null
 
+        private const val STARTER_COINS = 100
+        private const val STARTER_RAINBOW_WIPES = 5
+        private const val STARTER_COLOR_WIPES = 10
+
         fun get(context: Context): ShopRepository =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: ShopRepository(context.applicationContext).also { INSTANCE = it }
@@ -28,24 +32,28 @@ class ShopRepository private constructor(context: Context) {
     // simple lock for synchronizing multi-step read/validate/write operations
     private val lock = Any()
 
-    private val _coins = MutableStateFlow(prefs.getInt(KEY_COINS, 0))
+    init {
+        ensureFreshInstallStarterInventory()
+    }
+
+    private val _coins = MutableStateFlow(prefs.getInt(KEY_COINS, STARTER_COINS))
     val coins: StateFlow<Int> = _coins.asStateFlow()
 
-    private val _rainbow = MutableStateFlow(prefs.getInt(KEY_RAINBOW_COUNT, 0))
+    private val _rainbow = MutableStateFlow(prefs.getInt(KEY_RAINBOW_COUNT, STARTER_RAINBOW_WIPES))
     val rainbowWipes: StateFlow<Int> = _rainbow.asStateFlow()
 
-    private val _color = MutableStateFlow(prefs.getInt(KEY_COLOR_WIPE_COUNT, 0))
+    private val _color = MutableStateFlow(prefs.getInt(KEY_COLOR_WIPE_COUNT, STARTER_COLOR_WIPES))
     val colorWipes: StateFlow<Int> = _color.asStateFlow()
 
-    private val _lifetime = MutableStateFlow(prefs.getInt(KEY_LIFETIME_COINS, 0))
+    private val _lifetime = MutableStateFlow(prefs.getInt(KEY_LIFETIME_COINS, prefs.getInt(KEY_COINS, STARTER_COINS)))
     val lifetimeCoins: StateFlow<Int> = _lifetime.asStateFlow()
 
     private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         when (key) {
-            KEY_COINS -> _coins.value = prefs.getInt(KEY_COINS, 0)
-            KEY_RAINBOW_COUNT -> _rainbow.value = prefs.getInt(KEY_RAINBOW_COUNT, 0)
-            KEY_COLOR_WIPE_COUNT -> _color.value = prefs.getInt(KEY_COLOR_WIPE_COUNT, 0)
-            KEY_LIFETIME_COINS -> _lifetime.value = prefs.getInt(KEY_LIFETIME_COINS, 0)
+            KEY_COINS -> _coins.value = prefs.getInt(KEY_COINS, STARTER_COINS)
+            KEY_RAINBOW_COUNT -> _rainbow.value = prefs.getInt(KEY_RAINBOW_COUNT, STARTER_RAINBOW_WIPES)
+            KEY_COLOR_WIPE_COUNT -> _color.value = prefs.getInt(KEY_COLOR_WIPE_COUNT, STARTER_COLOR_WIPES)
+            KEY_LIFETIME_COINS -> _lifetime.value = prefs.getInt(KEY_LIFETIME_COINS, prefs.getInt(KEY_COINS, STARTER_COINS))
         }
     }
 
@@ -53,9 +61,55 @@ class ShopRepository private constructor(context: Context) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
     }
 
+    /**
+     * Guarantees the intended starter inventory for true fresh installs in both
+     * debug and release builds:
+     *
+     * - 100 coins
+     * - 5 rainbow wipes
+     * - 10 color wipes / color wheels
+     *
+     * This also repairs the bad fresh-install state where all three inventory values
+     * already exist as 0 after first launch. Existing players with progress are left
+     * untouched.
+     */
+    private fun ensureFreshInstallStarterInventory() {
+        synchronized(lock) {
+            val hasCoins = prefs.contains(KEY_COINS)
+            val hasRainbow = prefs.contains(KEY_RAINBOW_COUNT)
+            val hasColorWipe = prefs.contains(KEY_COLOR_WIPE_COUNT)
+
+            val allStarterKeysMissing = !hasCoins && !hasRainbow && !hasColorWipe
+
+            val allStarterValuesZero =
+                prefs.getInt(KEY_COINS, 0) == 0 &&
+                        prefs.getInt(KEY_RAINBOW_COUNT, 0) == 0 &&
+                        prefs.getInt(KEY_COLOR_WIPE_COUNT, 0) == 0
+
+            val hasPlayerProgress =
+                prefs.getInt(KEY_HIGH_SCORE, 0) > 0 ||
+                        prefs.getInt(KEY_SAVED_SCORE, 0) > 0 ||
+                        prefs.getInt(KEY_LIFETIME_COINS, 0) > 0 ||
+                        prefs.contains(KEY_SAVED_BOARD)
+
+            val looksLikeBadFreshInstall = allStarterValuesZero && !hasPlayerProgress
+
+            if (allStarterKeysMissing || looksLikeBadFreshInstall) {
+                prefs.edit()
+                    .putInt(KEY_COINS, STARTER_COINS)
+                    .putInt(KEY_RAINBOW_COUNT, STARTER_RAINBOW_WIPES)
+                    .putInt(KEY_COLOR_WIPE_COUNT, STARTER_COLOR_WIPES)
+                    .putInt(KEY_LIFETIME_COINS, STARTER_COINS)
+                    // Fresh installs should not receive the old one-time update gift on top.
+                    .putBoolean(KEY_UPDATE_GIFTS_APPLIED, true)
+                    .commit()
+            }
+        }
+    }
+
     fun addCoins(amount: Int) {
         synchronized(lock) {
-            val new = prefs.getInt(KEY_COINS, 0) + amount
+            val new = prefs.getInt(KEY_COINS, STARTER_COINS) + amount
             prefs.edit().putInt(KEY_COINS, new).commit()
             _coins.value = new
         }
@@ -66,7 +120,7 @@ class ShopRepository private constructor(context: Context) {
      */
     fun useCoins(amount: Int): Boolean {
         synchronized(lock) {
-            val current = prefs.getInt(KEY_COINS, 0)
+            val current = prefs.getInt(KEY_COINS, STARTER_COINS)
             if (current < amount) return false
             val new = current - amount
             val ok = prefs.edit().putInt(KEY_COINS, new).commit()
@@ -85,7 +139,7 @@ class ShopRepository private constructor(context: Context) {
 
     fun addRainbowWipe(count: Int = 1) {
         synchronized(lock) {
-            val new = prefs.getInt(KEY_RAINBOW_COUNT, 0) + count
+            val new = prefs.getInt(KEY_RAINBOW_COUNT, STARTER_RAINBOW_WIPES) + count
             prefs.edit().putInt(KEY_RAINBOW_COUNT, new).commit()
             _rainbow.value = new
         }
@@ -93,7 +147,7 @@ class ShopRepository private constructor(context: Context) {
 
     fun addColorWipe(count: Int = 1) {
         synchronized(lock) {
-            val new = prefs.getInt(KEY_COLOR_WIPE_COUNT, 0) + count
+            val new = prefs.getInt(KEY_COLOR_WIPE_COUNT, STARTER_COLOR_WIPES) + count
             prefs.edit().putInt(KEY_COLOR_WIPE_COUNT, new).commit()
             _color.value = new
         }
@@ -115,7 +169,7 @@ class ShopRepository private constructor(context: Context) {
 
     fun recordLifetimeCoins(amount: Int) {
         synchronized(lock) {
-            val new = prefs.getInt(KEY_LIFETIME_COINS, 0) + amount
+            val new = prefs.getInt(KEY_LIFETIME_COINS, prefs.getInt(KEY_COINS, STARTER_COINS)) + amount
             prefs.edit().putInt(KEY_LIFETIME_COINS, new).commit()
             _lifetime.value = new
         }
@@ -123,7 +177,7 @@ class ShopRepository private constructor(context: Context) {
 
     fun setLifetimeIfHigher(totalCoins: Int) {
         synchronized(lock) {
-            val previous = prefs.getInt(KEY_LIFETIME_COINS, 0)
+            val previous = prefs.getInt(KEY_LIFETIME_COINS, prefs.getInt(KEY_COINS, STARTER_COINS))
             if (totalCoins > previous) {
                 prefs.edit().putInt(KEY_LIFETIME_COINS, totalCoins).commit()
                 _lifetime.value = totalCoins
