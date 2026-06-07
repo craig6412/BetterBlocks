@@ -42,7 +42,7 @@ const val COINS_PER_REWARD = 10 // Coins given per threshold
 const val INITIAL_FREE_ROTATIONS = 3
 const val RAINBOW_BLOCK_SCORE = 1000 // Special score for board wipe
 
-const val INITIAL_RAINBOW_COUNT = 3 // Standard start count
+const val INITIAL_RAINBOW_COUNT = 5 // Standard start count
 const val SPECIAL_METER_MAX = 50 // Meter fills in 5 combo steps
 
 // --- SHOP COSTS ---
@@ -50,10 +50,11 @@ const val SPECIAL_METER_MAX = 50 // Meter fills in 5 combo steps
 val RAINBOW_WIPE_COST: Int get() = EconomyConfig.RAINBOW_WIPE_COST
 val COLOR_WIPE_COST: Int get() = EconomyConfig.COLOR_WIPE_COST
 
-// --- DEVELOPER OVERRIDES ---
-private const val DEV_INITIAL_COINS = 150// $9,999 for development
-private const val DEV_INITIAL_RAINBOW = 2 // starting rainbow wipes for new installs
-private const val DEV_INITIAL_COLOR_WIPE = 5 // Start with 5 Color Wipes
+// --- FRESH INSTALL STARTER INVENTORY ---
+// These values apply to both debug and release defaults.
+private const val DEV_INITIAL_COINS = 100
+private const val DEV_INITIAL_RAINBOW = 5
+private const val DEV_INITIAL_COLOR_WIPE = 10
 
 // Prefs schema version to force default reset on first run after update
 const val PREFS_SCHEMA_VERSION = 3
@@ -449,6 +450,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- UI Actions ---
 
+    private fun playBlockPlaceSfx() {
+        runCatching { SoundManager.playBlockPlace() }
+            .onFailure { Log.w("GameViewModel", "Failed to play block placement SFX: ${it.message}") }
+    }
+
+    private fun playBadPlacementSfx() {
+        runCatching { SoundManager.playBadPlacement() }
+            .onFailure { Log.w("GameViewModel", "Failed to play bad placement SFX: ${it.message}") }
+    }
+
+    private fun playLineClearSfx() {
+        runCatching { SoundManager.playLineClear() }
+            .onFailure { Log.w("GameViewModel", "Failed to play line clear SFX: ${it.message}") }
+    }
+
+    private fun playRainbowClearSfx() {
+        runCatching { SoundManager.playRainbowClear() }
+            .onFailure { Log.w("GameViewModel", "Failed to play rainbow clear SFX: ${it.message}") }
+    }
+
+    private fun stopWheelSpinSfx() {
+        runCatching { SoundManager.stopWheelSpinLoop() }
+            .onFailure { Log.w("GameViewModel", "Failed to stop color wheel SFX: ${it.message}") }
+    }
+
     fun toggleSound() {
         val newState = !_uiState.value.isSoundEnabled
         saveSoundEnabled(newState)
@@ -526,10 +552,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
      */
     // Patch: Add diagnostics and clearer logging to onColorWipeSpinResult with deep-copying to avoid aliasing bugs
     fun onColorWipeSpinResult(colorIndex: Int) {
+        stopWheelSpinSfx()
+
         val currentState = _uiState.value
         Log.d("GameViewModel", "onColorWipeSpinResult called colorIndex=$colorIndex colorWipeCount=${currentState.colorWipeCount}")
 
         if (currentState.colorWipeCount <= 0) {
+            playBadPlacementSfx()
             Log.d("GameViewModel", "onColorWipeSpinResult aborting: no color wipes available")
             return
         }
@@ -546,6 +575,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             COLOR_WIPE_DRAWABLES[colorIndex]
         } catch (t: Throwable) {
             Log.e("GameViewModel", "Invalid colorIndex=$colorIndex for COLOR_WIPE_DRAWABLES", t)
+            playBadPlacementSfx()
             return
         }
 
@@ -562,6 +592,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             if (cellsToClear.isNotEmpty()) {
+                playLineClearSfx()
+
                 // For LineClearAnimator integration we set clearingCells and let the animator + onClearAnimationFinished handle
                 // the visual sweep and the final board mutation. This keeps animations consistent with normal clears.
                 _uiState.update {
@@ -580,6 +612,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // completes and will perform the actual board changes and scoring. This ensures we reuse the existing sweep
                 // timing and particle effects implemented in LineClearAnimator.
             } else {
+                playBadPlacementSfx()
+
                 // Nothing to clear but item is consumed; ensure flags reset
                 Log.d("GameViewModel", "No matching blocks found for colorIndex=$colorIndex; nothing cleared")
                 _uiState.update { it.copy(clearingCells = emptySet(), isColorWipeAnimating = false) }
@@ -601,6 +635,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // No occupied cells, nothing to animate or clear
         if (occupiedCells.isEmpty()) return
+
+        playRainbowClearSfx()
 
         // FIXED: Set animation flags but keep board intact during animation
         // The board will be cleared by onClearAnimationFinished when animation completes
@@ -1039,8 +1075,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         for (offset in block.shape) {
             val r = row + offset.row
             val c = col + offset.col
-            if (r !in 0 until GRID_SIZE || c !in 0 until GRID_SIZE) return
-            if (board[r][c] != null) return
+            if (r !in 0 until GRID_SIZE || c !in 0 until GRID_SIZE) {
+                playBadPlacementSfx()
+                return
+            }
+            if (board[r][c] != null) {
+                playBadPlacementSfx()
+                return
+            }
         }
 
         // Apply block
@@ -1091,6 +1133,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         var points = block.shape.size
         if (hasLineClear) {
             points += (rowsToClear.size + colsToClear.size) * 100
+        }
+
+        playBlockPlaceSfx()
+        if (hasLineClear) {
+            playLineClearSfx()
         }
 
         val remainingBlocks = current.availableBlocks.filter { it.id != block.id }
@@ -1380,6 +1427,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val spent = shopRepo.useCoins(EconomyConfig.ROTATION_COST)
                 if (!spent) {
                     // If spend failed concurrenty, show zero-coins dialog
+                    playBadPlacementSfx()
                     _uiState.update { it.copy(showZeroCoinsDialog = true) }
                     return
                 }
@@ -1388,6 +1436,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 shopRepo.setLifetimeIfHigher(newCoins)
             } else {
                 // No free rotations and not enough coins — show the zero-coins dialog prompting shop or ad
+                playBadPlacementSfx()
                 _uiState.update { it.copy(showZeroCoinsDialog = true) }
                 return
             }
@@ -1437,6 +1486,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun selectRainbowBlock() {
         val state = _uiState.value
         if (state.rainbowBlockCount <= 0) {
+            playBadPlacementSfx()
             _uiState.update { it.copy(showZeroCoinsDialog = true) }
             return
         }
