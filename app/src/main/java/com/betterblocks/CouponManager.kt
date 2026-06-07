@@ -24,7 +24,9 @@ object CouponManager {
         "RandyPeterson",
         "WayneGreen",
         "TonjaGreen",
-        "JackieRebardi"
+        "CieraUngaro",
+        "JamesGreen"
+
     )
 
     sealed class CouponResult {
