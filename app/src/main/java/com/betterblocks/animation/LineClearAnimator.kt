@@ -235,7 +235,7 @@ object SweepEngine {
 object UltraGlowEngine {
     internal const val BASE_TILE_SIZE = 38f
     internal const val BLOOM_INNER_SCALE = 0.40f // As per request
-    internal const val BLOOM_OUTER_SCALE = 2.10f // As per request
+    internal const val BLOOM_OUTER_SCALE = 0.95f // confined: prevents cleared cells from blooming into neighbors
 
     fun flashWhite(timeSinceHit: Float): Float {
         return when {
@@ -299,27 +299,42 @@ object ParticleEngine {
         isRowClear: Boolean
     ): List<Particle> {
         val particles = mutableListOf<Particle>()
-        val particleCount = (10 + (cellPixelSize / 6f)).toInt()
+
+        // Short, premium-looking shard burst. No image resources needed:
+        // tiny glowing rectangles travel with the same left-to-right / top-to-bottom sweep.
+        val particleCount = (8 + (cellPixelSize / 12f)).toInt().coerceIn(8, 14)
+
         for (i in 0 until particleCount) {
-            // Directional Bias
-            val vx = if (isRowClear) (Random.nextFloat() - 0.5f) * (cellPixelSize * 2.5f) else (Random.nextFloat() - 0.5f) * (cellPixelSize * 1.2f) + if (centerX > 0.5f * cellPixelSize * 9) -cellPixelSize else cellPixelSize
-            val vy = if (isRowClear) (Random.nextFloat() - 0.5f) * (cellPixelSize * 1.2f) + if (centerY > 0.5f * cellPixelSize * 9) -cellPixelSize else cellPixelSize else (Random.nextFloat() - 0.5f) * (cellPixelSize * 2.5f)
-             val px = centerX
-             val py = centerY
-             particles.add(
-                 Particle(
-                     position = Offset(px, py),
-                     velocity = Offset(vx, vy),
-                     color = tintColor,
-                     size = (cellPixelSize * (0.05f + Random.nextFloat() * 0.08f)),
-                     alpha = 1f,
-                     lifetime = 0f,
-                     maxLifetime = PARTICLE_LIFETIME_MS,
-                     rotation = Random.nextFloat() * 360f,
-                     angularVelocity = (Random.nextFloat() - 0.5f) * 30f // -15 to 15
-                 )
-             )
-         }
+            val forward = cellPixelSize * (1.25f + Random.nextFloat() * 1.35f)
+            val sideways = (Random.nextFloat() - 0.5f) * cellPixelSize * 0.62f
+
+            val vx = if (isRowClear) {
+                forward
+            } else {
+                sideways
+            }
+
+            val vy = if (isRowClear) {
+                sideways
+            } else {
+                forward
+            }
+
+            particles.add(
+                Particle(
+                    position = Offset(centerX, centerY),
+                    velocity = Offset(vx, vy),
+                    color = tintColor,
+                    size = cellPixelSize * (0.045f + Random.nextFloat() * 0.075f),
+                    alpha = 1f,
+                    lifetime = 0f,
+                    maxLifetime = PARTICLE_LIFETIME_MS,
+                    rotation = Random.nextFloat() * 360f,
+                    angularVelocity = (Random.nextFloat() - 0.5f) * 220f
+                )
+            )
+        }
+
         return particles
     }
 
@@ -374,9 +389,17 @@ object CellAnimationEngine {
         gridSize: Int
     ): CellAnimationState {
         // Propagation Delay
-        val lineCenter = if (lineInfo.isRow) lineInfo.cells.map { it.col }.average() else lineInfo.cells.map { it.row }.average()
-        val distance = if (lineInfo.isRow) abs(cell.col - lineCenter) else abs(cell.row - lineCenter)
-        val delay = distance.toFloat() * 0.03f // 30ms per cell distance
+        // Single-line clears now travel like a premium block-blast: left -> right for rows,
+        // top -> bottom for columns. Full-board/rainbow clears keep a soft radial feel.
+        val order = if (lineInfo.fullBoardClear) {
+            val center = (gridSize - 1) / 2f
+            abs(cell.col - center) + abs(cell.row - center)
+        } else if (lineInfo.isRow) {
+            cell.col.toFloat()
+        } else {
+            cell.row.toFloat()
+        }
+        val delay = order * 0.045f
         val delayedProgress = (sweepProgress - delay).coerceIn(0f, 1f)
 
         if (delayedProgress <= 0f) return CellAnimationState()
@@ -511,8 +534,8 @@ class LineClearAnimator {
             val totalSizePx = gridSize * cellPixelSize
             val sweepPos = state.sweepProgress * totalSizePx
 
-            // WIDER than the line (this is the key)
-            val glowThickness = cellPixelSize * 2.4f
+            // Confined glow: stay close to the cleared row/column
+            val glowThickness = cellPixelSize * 0.65f
 
             // Compute band bounds so the glow is constrained to the cleared row/column
             if (line.isRow) {
@@ -542,7 +565,7 @@ class LineClearAnimator {
                 val innerBrush = Brush.verticalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        Color.White.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.16f),
                         Color.Transparent
                     ),
                     startY = sweepPos - glowThickness,
@@ -582,7 +605,7 @@ class LineClearAnimator {
                 val innerBrush = Brush.horizontalGradient(
                     colors = listOf(
                         Color.Transparent,
-                        Color.White.copy(alpha = 0.22f),
+                        Color.White.copy(alpha = 0.16f),
                         Color.Transparent
                     ),
                     startX = sweepPos - glowThickness,

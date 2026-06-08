@@ -18,6 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.betterblocks.*
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.sqrt
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.painterResource
@@ -83,7 +85,7 @@ fun SweepOverlay(
         // Draw a subtle, wide outer glow behind the sweep to make it feel cinematic.
         // This glow uses a smoothed, slightly desaturated rainbow and should be constrained to the cleared band.
         try {
-            val glowThickness = cellSizePx * 2.6f // ~2.5-3.0x cell height as requested
+            val glowThickness = cellSizePx * 0.55f // confined glow: keeps a single-line clear on the cleared row/column
             if (isRow) {
                 val centerY = (lineIndex + 0.5f) * cellSizePx
                 val top = (centerY - glowThickness).coerceAtLeast(0f)
@@ -183,7 +185,7 @@ fun SweepOverlay(
                     Color(0x00000000)
                 ),
                 center = Offset(arcPosition, centerY),
-                radius = cellSizePx * 2.5f
+                radius = cellSizePx * 0.85f
             )
             drawRect(
                 brush = arcBrush,
@@ -202,7 +204,7 @@ fun SweepOverlay(
                         Color(0xFF00E5FF).copy(alpha = 0.6f),
                         Color(0xFFFFFFFF).copy(alpha = 0.7f)
                     ),
-                    startX = trailStart - cellSizePx * 3f,
+                    startX = trailStart - cellSizePx * 1.1f,
                     endX = arcPosition
                 )
                 drawRect(
@@ -244,7 +246,7 @@ fun SweepOverlay(
                         Color(0x00000000)
                     ),
                     center = Offset(arcPosition, centerY),
-                    radius = cellSizePx * 1.2f
+                    radius = cellSizePx * 0.75f
                 )
                 drawRect(
                     brush = coreBrush,
@@ -269,7 +271,7 @@ fun SweepOverlay(
                     Color(0x00000000)
                 ),
                 center = Offset(centerX, arcPosition),
-                radius = cellSizePx * 2.5f
+                radius = cellSizePx * 0.85f
             )
             drawRect(
                 brush = arcBrush,
@@ -288,7 +290,7 @@ fun SweepOverlay(
                         Color(0xFF00E5FF).copy(alpha = 0.6f),
                         Color(0xFFFFFFFF).copy(alpha = 0.7f)
                     ),
-                    startY = trailStart - cellSizePx * 3f,
+                    startY = trailStart - cellSizePx * 1.1f,
                     endY = arcPosition
                 )
                 drawRect(
@@ -330,7 +332,7 @@ fun SweepOverlay(
                         Color(0x00000000)
                     ),
                     center = Offset(centerX, arcPosition),
-                    radius = cellSizePx * 1.2f
+                    radius = cellSizePx * 0.75f
                 )
                 drawRect(
                     brush = coreBrush,
@@ -498,6 +500,29 @@ private fun pickTintColor(index: Int): Color {
     return preClearTintColors[index % preClearTintColors.size]
 }
 
+private data class PreviewClearLines(
+    val rows: Set<Int> = emptySet(),
+    val cols: Set<Int> = emptySet()
+) {
+    val hasAny: Boolean get() = rows.isNotEmpty() || cols.isNotEmpty()
+}
+
+private fun hueShiftPreviewColor(cellValue: Int?, fallback: Color): Color {
+    if (cellValue == null || cellValue <= 0) return fallback
+
+    val palette = listOf(
+        Color(0xFFFF4FD8), // blue -> neon pink feel
+        Color(0xFFB45CFF), // orange -> purple feel
+        Color(0xFF5DFF8B), // purple -> green feel
+        Color(0xFFFFD166), // green -> gold feel
+        Color(0xFF00E5FF), // red/pink -> cyan feel
+        Color(0xFFFF6B6B)  // cyan/yellow -> coral feel
+    )
+
+    val index = kotlin.math.abs(cellValue) % palette.size
+    return palette[index]
+}
+
 // kotlin
 @Composable
 fun AnimatedGameBoard(
@@ -539,17 +564,27 @@ fun AnimatedGameBoard(
     )
 
     // Always derive preview lines from the ghost placement so preview appears while dragging.
-    val previewClearLinesSet: Set<Int> = remember(board, ghostBlock, ghostOrigin, uiState.previewIsRow) {
+    // Return BOTH rows and columns so cross-clears preview correctly before the player drops the block.
+    val previewClearLines = remember(board, ghostBlock, ghostOrigin) {
         computePreviewClearLinesFromGhost(
             board = board,
             gridSize = gridSize,
             ghostBlock = ghostBlock,
-            ghostOrigin = ghostOrigin,
-            previewIsRow = uiState.previewIsRow
+            ghostOrigin = ghostOrigin
         )
     }
-    val previewClearLines = previewClearLinesSet.toList()
     val previewTintColor = pickTintColor(uiState.moveNumber)
+
+    val infinite = rememberInfiniteTransition()
+    val pulseAlpha by infinite.animateFloat(
+        initialValue = 0.20f,
+        targetValue = 0.30f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
 
     var boardWindowPos by remember { mutableStateOf(Offset.Zero) }
 
@@ -604,7 +639,7 @@ fun AnimatedGameBoard(
                 // Ghost block tint suppressed here — handled by dedicated ghost layer.
                 val ghostColor = Color.Transparent
 
-                val isPreviewTinted = if (uiState.previewIsRow) (r in previewClearLines) else (c in previewClearLines)
+                val isPreviewTinted = (r in previewClearLines.rows) || (c in previewClearLines.cols)
 
                 AnimatedBoardCell(
                     cell = cell,
@@ -616,6 +651,13 @@ fun AnimatedGameBoard(
                     cellDp = cellDp,
                     tintColor = previewTintColor.copy(alpha = 0.65f),
                     isPreviewTinted = isPreviewTinted,
+                    previewPulseAlpha = pulseAlpha,
+                    previewDrawableResId = previewDrawableForCell(
+                        row = r,
+                        col = c,
+                        moveNumber = uiState.moveNumber,
+                        existingCellValue = cellValue
+                    ),
                     onCellClick = { onCellClick(r, c) }
                 )
             }
@@ -686,102 +728,11 @@ fun AnimatedGameBoard(
         }
 
         // ----------------------------------------------------------------------
-        // LAYER 1.75 — PREVIEW GLOW
+        // LAYER 1.75 — PREVIEW LINE BACKDROP
         // ----------------------------------------------------------------------
-        val infinite = rememberInfiniteTransition()
-        val pulseAlpha by infinite.animateFloat(
-            initialValue = 0.20f,
-            targetValue = 0.30f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(900, easing = LinearEasing),
-                repeatMode = RepeatMode.Reverse
-            )
-        )
-
-        // Render preview glow only when ghost exists and is valid; computation above still runs so preview is available immediately during drag
-        if (ghostBlock != null && ghostOrigin != null && isGhostValid && previewClearLines.isNotEmpty()) {
-            for (lineIndex in previewClearLines) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val cellPx = cellDp.toPx()
-                    // Slightly desaturate preview color (mix toward gray)
-                    val c = previewTintColor
-                    val gray = (c.red + c.green + c.blue) / 3f
-                    val desatFactor = 0.22f
-                    val desatColor = Color(
-                        red = c.red + (gray - c.red) * desatFactor,
-                        green = c.green + (gray - c.green) * desatFactor,
-                        blue = c.blue + (gray - c.blue) * desatFactor,
-                        alpha = c.alpha
-                    )
-
-                    // Pulse modulation: pulseAlpha is ~0.20..0.30; center is 0.25 -> map to ±10% modulation
-                    val modulation = 1f + (pulseAlpha - 0.25f) * 2f // ±0.1 range
-
-                    // Glow sizing
-                    val extension = cellPx * 0.4f // feather extends ~0.4 cell beyond the line
-                    val glowThickness = cellPx // base band equals cell height/width
-
-                    if (uiState.previewIsRow) {
-                        val y = lineIndex * cellPx
-                        val center = y + cellPx * 0.5f
-                        val top = (center - glowThickness / 2f - extension).coerceAtLeast(0f)
-                        val bandHeight = ((glowThickness + extension * 2f).coerceAtMost(size.height - top)).coerceAtLeast(0f)
-
-                        // Layer A: subtle base fill (very low alpha)
-                        val baseFillAlpha = (0.12f * modulation).coerceIn(0f, 0.2f)
-                        drawRect(
-                            color = desatColor.copy(alpha = baseFillAlpha),
-                            topLeft = Offset(0f, top),
-                            size = androidx.compose.ui.geometry.Size(size.width, bandHeight)
-                        )
-
-                        // Layer B: perpendicular feather (vertical gradient) centered on band
-                        val edgeAlpha = (0.45f * modulation).coerceIn(0f, 0.6f)
-                        val mask = Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.5f to desatColor.copy(alpha = edgeAlpha),
-                            1f to Color.Transparent,
-                            startY = top,
-                            endY = top + bandHeight
-                        )
-                        drawRect(
-                            brush = mask,
-                            topLeft = Offset(0f, top),
-                            size = androidx.compose.ui.geometry.Size(size.width, bandHeight)
-                        )
-
-                    } else {
-                        val x = lineIndex * cellPx
-                        val center = x + cellPx * 0.5f
-                        val left = (center - glowThickness / 2f - extension).coerceAtLeast(0f)
-                        val bandWidth = ((glowThickness + extension * 2f).coerceAtMost(size.width - left)).coerceAtLeast(0f)
-
-                        // Layer A: subtle base fill (very low alpha)
-                        val baseFillAlpha = (0.12f * modulation).coerceIn(0f, 0.2f)
-                        drawRect(
-                            color = desatColor.copy(alpha = baseFillAlpha),
-                            topLeft = Offset(left, 0f),
-                            size = androidx.compose.ui.geometry.Size(bandWidth, size.height)
-                        )
-
-                        // Layer B: perpendicular feather (horizontal gradient) centered on band
-                        val edgeAlpha = (0.45f * modulation).coerceIn(0f, 0.6f)
-                        val mask = Brush.horizontalGradient(
-                            0f to Color.Transparent,
-                            0.5f to desatColor.copy(alpha = edgeAlpha),
-                            1f to Color.Transparent,
-                            startX = left,
-                            endX = left + bandWidth
-                        )
-                        drawRect(
-                            brush = mask,
-                            topLeft = Offset(left, 0f),
-                            size = androidx.compose.ui.geometry.Size(bandWidth, size.height)
-                        )
-                    }
-                }
-            }
-        }
+        // Intentionally empty. The pre-clear preview is now cell-confined only:
+        // each affected cell renders with a solid block drawable preview color.
+        // This avoids full-row/column beams and glow bleed into neighboring cells.
 
         // ----------------------------------------------------------------------
         // LAYER 2 — SWEEP BAR
@@ -832,6 +783,8 @@ fun AnimatedBoardCell(
     cellDp: Dp,
     tintColor: Color,
     isPreviewTinted: Boolean,
+    previewPulseAlpha: Float = 0f,
+    previewDrawableResId: Int? = null,
     onCellClick: () -> Unit
 ) {
     // Minimal, robust cell renderer to avoid crashes from TODO
@@ -839,7 +792,19 @@ fun AnimatedBoardCell(
     val padding = 0.dp
 
     val bgColor = if (isOccupied) Color(0xFF0F0C14) else Color.Transparent
-   // val alpha = if (isClearing) 0.4f else 1f
+
+    // During a clear, the CellAnimationEngine now hits cells left-to-right.
+    // Use that per-cell state to make the actual block texture shrink/fade as it explodes.
+    val clearAlpha = if (isClearing) {
+        (cellAnimState?.alpha ?: 1f).coerceIn(0f, 1f)
+    } else {
+        1f
+    }
+    val clearScale = if (isClearing) {
+        (cellAnimState?.scale ?: 1f).coerceIn(0.72f, 1.18f)
+    } else {
+        1f
+    }
 
     Box(
         modifier = Modifier
@@ -851,11 +816,17 @@ fun AnimatedBoardCell(
         contentAlignment = Alignment.Center
     ) {
 
-        if (cellValue != null && cellValue > 0) {
+        val displayCellValue = if (isPreviewTinted && previewDrawableResId != null) {
+            previewDrawableResId
+        } else {
+            cellValue
+        }
+
+        if (displayCellValue != null && displayCellValue > 0) {
             val context = LocalContext.current
-            val resType = remember(cellValue) {
+            val resType = remember(displayCellValue) {
                 try {
-                    context.resources.getResourceTypeName(cellValue)
+                    context.resources.getResourceTypeName(displayCellValue)
                 } catch (_: Exception) {
                     null
                 }
@@ -863,10 +834,10 @@ fun AnimatedBoardCell(
 
             if (resType == "drawable") {
                 // Allow only raster or vector images; if painterResource fails (unsupported XML types), fall back to Drawable->Bitmap
-                val painterFallback = remember(cellValue) {
+                val painterFallback = remember(displayCellValue) {
                     // Attempt to load a Drawable and convert to Bitmap for compose when needed
                     try {
-                        val dr: Drawable? = AppCompatResources.getDrawable(context, cellValue)
+                        val dr: Drawable? = AppCompatResources.getDrawable(context, displayCellValue)
                         if (dr == null) return@remember null
 
                         // If it's already a BitmapDrawable use its bitmap else render to bitmap
@@ -875,7 +846,7 @@ fun AnimatedBoardCell(
                             else -> drawableToBitmap(dr)
                         }
                     } catch (t: Throwable) {
-                        Log.w("BoardCell", "drawable fallback failed for id=$cellValue", t)
+                        Log.w("BoardCell", "drawable fallback failed for id=$displayCellValue", t)
                         null
                     }
                 }
@@ -887,7 +858,7 @@ fun AnimatedBoardCell(
                 // } catch (iae: IllegalArgumentException) {
                 //     // fallback to bitmap painter if we were able to produce one
                 //     painter = painterFallback?.let { bmp -> BitmapPainter(bmp.asImageBitmap()) }
-                //     Log.w("BoardCell", "painterResource unsupported for id=$cellValue -> falling back to BitmapPainter")
+                //     Log.w("BoardCell", "painterResource unsupported for id=$displayCellValue -> falling back to BitmapPainter")
                 // }
 
                 // Compose doesn't allow try/catch around composable invocations like painterResource.
@@ -901,13 +872,14 @@ fun AnimatedBoardCell(
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
-                            .scale(BLOCK_TEXTURE_SCALE)
+                            .scale(BLOCK_TEXTURE_SCALE * clearScale)
+                            .alpha(clearAlpha)
                     )
                 } else {
                     Log.e(
                         "BoardCellError",
                         "Invalid drawable used as block texture: ${runCatching {
-                            context.resources.getResourceEntryName(cellValue)
+                            context.resources.getResourceEntryName(displayCellValue)
                         }.getOrNull()}"
                     )
                 }
@@ -915,21 +887,45 @@ fun AnimatedBoardCell(
                 Log.e(
                     "BoardCellError",
                     "Invalid drawable used as block texture: ${runCatching {
-                        context.resources.getResourceEntryName(cellValue)
+                        context.resources.getResourceEntryName(displayCellValue)
                     }.getOrNull()}"
                 )
             }
         }
 
-
-
-        // Preview tint overlay (for previewed clear rows/cols)
-        if (isPreviewTinted) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(tintColor.copy(alpha = 0.14f))
+        if (isClearing && cellAnimState != null) {
+            CellTintGlowLayer(
+                tintColor = tintColor,
+                animState = cellAnimState,
+                modifier = Modifier.matchParentSize()
             )
+            CellFragmentBurstLayer(
+                animState = cellAnimState,
+                tintColor = tintColor,
+                modifier = Modifier.matchParentSize()
+            )
+        }
+
+
+
+        // Cell-confined pre-clear preview accent.
+        // The preview color comes from a real block drawable. This border only marks
+        // the exact cells that will clear without creating row/column beams or bleed.
+        if (isPreviewTinted) {
+            val pulseBoost = ((previewPulseAlpha - 0.20f) / 0.10f).coerceIn(0f, 1f)
+            val accent = Color.White.copy(alpha = 0.18f + pulseBoost * 0.10f)
+
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val cornerPx = size.minDimension * 0.16f
+                drawRoundRect(
+                    color = accent,
+                    topLeft = Offset.Zero,
+                    size = size,
+                    cornerRadius = CornerRadius(cornerPx, cornerPx),
+                    style = Stroke(width = size.minDimension * 0.024f),
+                    blendMode = BlendMode.Screen
+                )
+            }
         }
 
         // Ghost outline
@@ -957,10 +953,10 @@ private fun CellTintGlowLayer(
     Canvas(modifier = modifier) {
         val cx = size.width / 2f
         val cy = size.height / 2f
-        val maxRadius = minOf(size.width, size.height) * 0.6f * (animState.scale.takeIf { it > 0f } ?: 1f)
+        val maxRadius = minOf(size.width, size.height) * 0.42f * (animState.scale.takeIf { it > 0f } ?: 1f)
 
         val radii = listOf(0.45f, 0.75f, 1.0f)
-        val alphas = listOf(0.50f, 0.35f, 0.28f)
+        val alphas = listOf(0.45f, 0.28f, 0.18f)
 
         for (i in radii.indices) {
             val r = maxRadius * radii[i]
@@ -971,7 +967,7 @@ private fun CellTintGlowLayer(
         // soft outer ring
         drawCircle(
             color = tintColor.copy(alpha = (0.18f * baseAlpha)),
-            radius = maxRadius * 1.2f,
+            radius = maxRadius * 0.95f,
             center = Offset(cx, cy),
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = maxRadius * 0.04f)
         )
@@ -1010,51 +1006,54 @@ private fun CellFragmentBurstLayer(
     // Stable fragment specs keyed on animState.hashCode()
     val specs = remember(animState.hashCode()) {
         val rnd = java.util.Random(animState.hashCode().toLong())
-        val count = 5 + rnd.nextInt(8) // 5..12
+        val count = 8 + rnd.nextInt(7) // 8..14 shards: richer but still cheap
         List(count) {
-            val ox = (rnd.nextFloat() - 0.5f)
-            val oy = (rnd.nextFloat() - 0.5f)
+            // Bias shards forward so each cell feels like it pops in the sweep direction.
+            val ox = 0.20f + rnd.nextFloat() * 0.95f
+            val oy = (rnd.nextFloat() - 0.5f) * 0.85f
             FragmentSpec(
                 offsetX = ox,
                 offsetY = oy,
-                rot = (rnd.nextFloat() - 0.5f) * 60f,
-                baseSize = 6f + rnd.nextFloat() * 10f,
-                delay = rnd.nextFloat() * 0.12f,
-                speed = 0.7f + rnd.nextFloat() * 1.0f
+                rot = (rnd.nextFloat() - 0.5f) * 110f,
+                baseSize = 4f + rnd.nextFloat() * 8f,
+                delay = rnd.nextFloat() * 0.08f,
+                speed = 0.65f + rnd.nextFloat() * 0.85f
             )
         }
     }
 
     Canvas(modifier = modifier) {
-        val cx = size.width / 2f
-        val cy = size.height / 2f
-        val cellMax = minOf(size.width, size.height)
-        val travelBase = cellMax * 0.9f * (animState.scale.takeIf { it > 0f } ?: 1f)
+        clipRect(left = 0f, top = 0f, right = size.width, bottom = size.height) {
+            val cx = size.width / 2f
+            val cy = size.height / 2f
+            val cellMax = minOf(size.width, size.height)
+            val travelBase = cellMax * 0.62f * (animState.scale.takeIf { it > 0f } ?: 1f)
 
-        for (spec in specs) {
-            val p = ((eased - spec.delay) / (1f - spec.delay)).coerceIn(0f, 1f)
-            if (p <= 0f) continue
+            for (spec in specs) {
+                val p = ((eased - spec.delay) / (1f - spec.delay)).coerceIn(0f, 1f)
+                if (p <= 0f) continue
 
-            val move = spec.speed * travelBase * p
-            val dx = spec.offsetX * move
-            val dy = spec.offsetY * move
+                val move = spec.speed * travelBase * p
+                val dx = spec.offsetX * move
+                val dy = spec.offsetY * move
 
-            val fragScale = lerp(1f, 1.4f, p)
-            val fragRot = spec.rot * p
-            val fragAlpha = ((1f - p) * 0.65f * visibleAlpha).coerceIn(0f, 1f)
+                val fragScale = lerp(1f, 1.4f, p)
+                val fragRot = spec.rot * p
+                val fragAlpha = ((1f - p) * 0.82f * visibleAlpha).coerceIn(0f, 1f)
 
-            val w = spec.baseSize * fragScale
-            val h = spec.baseSize * fragScale * (0.7f + (kotlin.math.abs(spec.offsetX) * 0.6f))
+                val w = spec.baseSize * fragScale
+                val h = spec.baseSize * fragScale * (0.7f + (kotlin.math.abs(spec.offsetX) * 0.6f))
 
-            // Translate to fragment center, rotate, then draw fragment centered at origin
-            translate(left = cx + dx, top = cy + dy) {
-                rotate(degrees = fragRot) {
-                    drawRoundRect(
-                        color = tintColor.copy(alpha = fragAlpha),
-                        topLeft = Offset(-w / 2f, -h / 2f),
-                        size = androidx.compose.ui.geometry.Size(w, h),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
-                    )
+                // Translate to fragment center, rotate, then draw fragment centered at origin
+                translate(left = cx + dx, top = cy + dy) {
+                    rotate(degrees = fragRot) {
+                        drawRoundRect(
+                            color = tintColor.copy(alpha = fragAlpha),
+                            topLeft = Offset(-w / 2f, -h / 2f),
+                            size = androidx.compose.ui.geometry.Size(w, h),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2f, 2f)
+                        )
+                    }
                 }
             }
         }
@@ -1072,54 +1071,90 @@ private data class FragmentSpec(
 
 private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
+
+private fun previewDrawableForCell(
+    row: Int,
+    col: Int,
+    moveNumber: Int,
+    existingCellValue: Int?
+): Int? {
+    val choices = COLOR_WIPE_DRAWABLES.ifEmpty {
+        if (existingCellValue != null) listOf(existingCellValue) else emptyList()
+    }
+
+    if (choices.isEmpty()) return existingCellValue
+
+    // Deterministic "random" per move + cell. This prevents flicker during recomposition
+    // while still changing the preview color from move to move.
+    val seed = (moveNumber * 31) + (row * 17) + (col * 13)
+    val safeIndex = kotlin.math.abs(seed) % choices.size
+    val picked = choices[safeIndex]
+
+    // Try not to preview with the same exact texture already in the cell.
+    return if (existingCellValue != null && picked == existingCellValue && choices.size > 1) {
+        choices[(safeIndex + 1) % choices.size]
+    } else {
+        picked
+    }
+}
+
 private fun computePreviewClearLinesFromGhost(
     board: GameGrid,
     gridSize: Int,
     ghostBlock: Block?,
-    ghostOrigin: Pair<Int, Int>?,
-    previewIsRow: Boolean
-): Set<Int> {
-    if (ghostBlock == null || ghostOrigin == null) return emptySet()
+    ghostOrigin: Pair<Int, Int>?
+): PreviewClearLines {
+    if (ghostBlock == null || ghostOrigin == null) return PreviewClearLines()
 
     val flat = board.flatten()
-    // snapshot current board into a nullable Int grid
+
+    // Snapshot current board into a nullable Int grid.
     val snapshot = Array(gridSize) { r ->
         MutableList<Int?>(gridSize) { c ->
             flat.getOrNull(r * gridSize + c)
         }
     }
 
-    // stamp ghost block into snapshot using a non-null marker (-1)
+    // Only preview a line clear if the held block could actually be dropped there.
+    // This prevents invalid/overlapping ghost positions from lighting up rows or columns.
     for (shapeCell in ghostBlock.shape) {
         val r = ghostOrigin.first + shapeCell.row
         val c = ghostOrigin.second + shapeCell.col
-        if (r in 0 until gridSize && c in 0 until gridSize) {
-            snapshot[r][c] = -1
+
+        if (r !in 0 until gridSize || c !in 0 until gridSize) {
+            return PreviewClearLines()
         }
+
+        if (snapshot[r][c] != null) {
+            return PreviewClearLines()
+        }
+    }
+
+    // Stamp ghost block only after the whole placement is known valid.
+    for (shapeCell in ghostBlock.shape) {
+        val r = ghostOrigin.first + shapeCell.row
+        val c = ghostOrigin.second + shapeCell.col
+        snapshot[r][c] = -1
     }
 
     val rows = mutableSetOf<Int>()
     val cols = mutableSetOf<Int>()
 
-    // full rows
     for (r in 0 until gridSize) {
         if (snapshot[r].all { it != null }) rows.add(r)
     }
 
-    // full columns
     for (c in 0 until gridSize) {
         var full = true
         for (r in 0 until gridSize) {
-            if (snapshot[r][c] == null) { full = false; break }
+            if (snapshot[r][c] == null) {
+                full = false
+                break
+            }
         }
         if (full) cols.add(c)
     }
 
-    return if (previewIsRow) rows else cols
+    return PreviewClearLines(rows = rows, cols = cols)
 }
-
-
-
-
-
 

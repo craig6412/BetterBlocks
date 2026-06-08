@@ -201,8 +201,7 @@ fun GameScreen(
         showMenuDialog || showColorWheelDialog || showBuyColorWipeDialog
 
     val vmNonGameDialogShowing =
-        uiState.showFirstGameOverDialog ||
-                uiState.showRainbowEarnedDialog ||
+        uiState.showRainbowEarnedDialog ||
                 uiState.showZeroCoinsDialog
 
     val anyDialogShowing =
@@ -738,7 +737,7 @@ fun GameScreen(
         }
 
         // --- Rainbow Earned Dialog (earned by filling special meter) ---
-        if (!LocalInspectionMode.current && uiState.showRainbowEarnedDialog && !highPriorityDialogShowing && !localDialogShowing && !uiState.showFirstGameOverDialog) {
+        if (!LocalInspectionMode.current && uiState.showRainbowEarnedDialog && !highPriorityDialogShowing && !localDialogShowing) {
             AlertDialog(
                 onDismissRequest = { onDismissRainbowEarned() },
                 title = { Text(text = "CONGRATULATIONS!", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
@@ -763,39 +762,12 @@ fun GameScreen(
             )
         }
 
-        // --- First-Time Game Over Reward Dialog (awards 3 rainbows on first-ever game over) ---
-        if (!LocalInspectionMode.current && uiState.showFirstGameOverDialog && !highPriorityDialogShowing && !localDialogShowing) {
-            AlertDialog(
-                onDismissRequest = { onDismissFirstGameOver() },
-                title = { Text(text = "WELCOME!", color = Pink_Jackie, fontFamily = Oswald, fontWeight = FontWeight.ExtraBold) },
-                text = {
-                    Column {
-                        Text(text = "This is your first game over — congratulations!", color = LightText)
-                        Spacer(modifier = Modifier.height(sdp(0.006f)))
-                        Text(text = "We've awarded you 3 free Rainbow Wipes to help you get back in the game.", color = LightText.copy(alpha = 0.9f))
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        // Let the user use one immediately if they want
-                        onUseRainbowImmediately()
-                        onDismissFirstGameOver()
-                    }) { Text("USE ONE NOW") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { onDismissFirstGameOver() }) { Text("GOT IT") }
-                },
-                properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = true, dismissOnBackPress = true)
-            )
-        }
-
         // --- Trophy Unlock Dialog (shown immediately when score reaches a new trophy tier) ---
         pendingTierUnlock?.let { unlockedTier ->
             if (
                 !LocalInspectionMode.current &&
                 !highPriorityDialogShowing &&
                 !localDialogShowing &&
-                !uiState.showFirstGameOverDialog &&
                 !uiState.showRainbowEarnedDialog &&
                 !uiState.showZeroCoinsDialog
             ) {
@@ -934,7 +906,7 @@ fun GameScreen(
         }
 
         // --- Zero Coins Dialog ---
-        if (!LocalInspectionMode.current && uiState.showZeroCoinsDialog && !highPriorityDialogShowing && !localDialogShowing && !uiState.showFirstGameOverDialog && !uiState.showRainbowEarnedDialog && pendingTierUnlock == null) {
+        if (!LocalInspectionMode.current && uiState.showZeroCoinsDialog && !highPriorityDialogShowing && !localDialogShowing && !uiState.showRainbowEarnedDialog && pendingTierUnlock == null) {
             ZeroCoinsDialog(
                 onDismiss = onDismissZeroCoins,
                 onWatchAd = {

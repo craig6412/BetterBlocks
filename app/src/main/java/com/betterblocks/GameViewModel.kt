@@ -1284,46 +1284,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // Show game summary dialog immediately
             _uiState.update { it.copy(showGameSummaryDialog = true) }
         }
-
-        // FIRST-TIME GAME OVER: award 3 free rainbow wipes on initial install and show dialog
-        try {
-            val firstShown = prefs.getBoolean(KEY_FIRST_GAME_OVER_SHOWN, false)
-            if (updated.isGameOver && !firstShown) {
-                val newCount = updated.rainbowBlockCount + 3
-                saveRainbowCount(newCount)
-                prefs.edit().putBoolean(KEY_FIRST_GAME_OVER_SHOWN, true).apply()
-                _uiState.update {
-                    it.copy(
-                        rainbowBlockCount = newCount,
-                        showFirstGameOverDialog = true,
-                        selectedBlock = null
-                    )
-                }
-                val post = _uiState.value
-                persistGameSnapshot(
-                    board = post.board,
-                    blocks = post.availableBlocks,
-                    coins = post.coins,
-                    rainbowCount = post.rainbowBlockCount,
-                    colorWipeCount = post.colorWipeCount,
-                    score = post.score,
-                    meterValue = post.specialMeterValue,
-                    freeRotations = post.freeRotations,
-                    lastRotatedBlockId = post.lastRotatedBlockId,
-                    selectedBlockId = post.selectedBlock?.id,
-                    isGameOver = post.isGameOver,
-                    isLastChance = post.isLastChance
-                )
-            }
-        } catch (t: Throwable) {
-            Log.w("GameViewModel", "Failed to award first-game rainbow: ${t.message}")
-        }
     }
 
-    // Dismiss the first-game-over reward dialog (UI call)
+    // Legacy no-op kept for the existing GameScreen callback.
+    // The first-time game-over reward dialog was removed because the Last Chance
+    // rainbow flow already handles first-game-over recovery.
     fun dismissFirstGameOverDialog() {
         _uiState.update { it.copy(showFirstGameOverDialog = false) }
-        // Persist the flag in prefs already set when awarding; snapshot persisted already
     }
 
     // DEV-ONLY: Apply values from GameSettings test knobs into the live game state.

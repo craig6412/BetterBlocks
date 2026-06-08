@@ -69,6 +69,7 @@ class BillingManager(
             override fun onBillingSetupFinished(billingResult: BillingResult) {
                 if (billingResult.responseCode == BillingResponseCode.OK) {
                     Log.d(TAG, "Billing connected")
+                    deliverPendingCoinGrants()
                     queryAvailableProducts()
                     queryExistingPurchases() // 🔒 CRITICAL FIX
                 } else {
@@ -160,6 +161,45 @@ class BillingManager(
         }
     }
 
+    /**
+     * Recovery path for the tiny crash window after Play consumes a purchase but before
+     * coins are delivered. Pending grants are written before consumeAsync and cleared
+     * only after the coins are granted and the purchase token is marked processed.
+     */
+    private fun deliverPendingCoinGrants() {
+        val prefs = context.getSharedPreferences(BILLING_PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.all.forEach { (key, value) ->
+            if (!key.startsWith(PENDING_COIN_PREFIX)) return@forEach
+
+            val token = key.removePrefix(PENDING_COIN_PREFIX)
+            val processedKey = processedPurchaseKey(token)
+            val coins = value as? Int ?: return@forEach
+
+            if (coins <= 0 || prefs.getBoolean(processedKey, false)) {
+                prefs.edit().remove(key).apply()
+                return@forEach
+            }
+
+            Log.w(TAG, "Recovering pending coin grant: token=$token coins=$coins")
+            coroutineScope.launch(Dispatchers.Main) {
+                try {
+                    onCoinsPurchased(coins)
+                    prefs.edit()
+                        .putBoolean(processedKey, true)
+                        .remove(key)
+                        .apply()
+                    Log.d(TAG, "Recovered pending coin grant for token=$token coins=$coins")
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Failed to recover pending coin grant for token=$token", ex)
+                }
+            }
+        }
+    }
+
+    private fun processedPurchaseKey(token: String): String = "$PROCESSED_PURCHASE_PREFIX$token"
+
+    private fun pendingCoinKey(token: String): String = "$PENDING_COIN_PREFIX$token"
+
     // -----------------------------
     // PURCHASE FLOW
     // -----------------------------
@@ -215,38 +255,47 @@ class BillingManager(
 
         // If this is a coin pack (consumable), consume it then grant coins in the consume callback.
         if (coins > 0) {
+            val token = purchase.purchaseToken
+            val prefs = context.getSharedPreferences(BILLING_PREFS_NAME, Context.MODE_PRIVATE)
+            val processedKey = processedPurchaseKey(token)
+            val pendingKey = pendingCoinKey(token)
+
+            // 🔒 Prevent duplicate coin grants for the same purchase token.
+            if (prefs.getBoolean(processedKey, false)) {
+                Log.w(TAG, "Purchase already processed, skipping grant: $productId")
+                return
+            }
+
+            // Save a durable pending grant before consuming. If the app dies after consume
+            // succeeds but before delivery, deliverPendingCoinGrants() can recover it.
+            prefs.edit()
+                .putInt(pendingKey, coins)
+                .apply()
+
             // Even if purchase.isAcknowledged is true, consumables should be consumed to allow repurchase.
             val consumeParams = ConsumeParams.newBuilder()
-                .setPurchaseToken(purchase.purchaseToken)
+                .setPurchaseToken(token)
                 .build()
 
             billingClient.consumeAsync(consumeParams) { result, _ ->
                 if (result.responseCode == BillingResponseCode.OK) {
-                    val token = purchase.purchaseToken
-                    val prefs = context.getSharedPreferences("billing_prefs", Context.MODE_PRIVATE)
-
-                    // 🔒 Prevent duplicate coin grants
-                    if (prefs.getBoolean(token, false)) {
-                        Log.w(TAG, "Purchase already processed, skipping grant: $productId")
-                        return@consumeAsync
-                    }
-
-                    // Mark as processed BEFORE granting coins
-                    prefs.edit().putBoolean(token, true).apply()
-
                     Log.d(TAG, "Consumed purchase $productId -> granting $coins coins")
                     coroutineScope.launch(Dispatchers.Main) {
                         try {
                             onCoinsPurchased(coins)
+                            prefs.edit()
+                                .putBoolean(processedKey, true)
+                                .remove(pendingKey)
+                                .apply()
+                            Log.d(TAG, "Delivered and marked processed: $productId")
                         } catch (ex: Exception) {
-                            Log.e(TAG, "Error delivering coins for $productId", ex)
+                            Log.e(TAG, "Error delivering coins for $productId; pending grant retained", ex)
                         }
                     }
                 } else {
                     Log.e(TAG, "Consume failed for $productId: ${result.debugMessage}")
                 }
             }
-
 
             return
         }
@@ -276,5 +325,8 @@ class BillingManager(
     companion object {
         private const val TAG = "BillingManager"
         private const val BILLING_MAP_TAG = "BILLING_MAP"
+        private const val BILLING_PREFS_NAME = "billing_prefs"
+        private const val PROCESSED_PURCHASE_PREFIX = "processed_"
+        private const val PENDING_COIN_PREFIX = "pending_coin_"
     }
 }

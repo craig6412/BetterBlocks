@@ -68,22 +68,24 @@ class ShopActivity : ComponentActivity() {
         window.statusBarColor = "#1E214A".toColorInt() // DarkBackground
         window.navigationBarColor = "#1E214A".toColorInt()
 
+        // repository singleton must be ready before BillingManager connects, because
+        // purchase recovery can call onCoinsPurchased immediately after connection.
+        shopRepo = ShopRepository.get(applicationContext)
+
         // 2. Initialize Billing Manager
         billingManager = BillingManager(
             this,
             lifecycleScope,
             onCoinsPurchased = { coinsPurchased ->
-                // This callback runs when a purchase is SUCCESSFUL
-                // Centralize updates through ShopRepository
+                // This callback runs when a purchase is SUCCESSFUL.
+                // Centralize updates through ShopRepository and count bought coins toward lifetime progress.
                 shopRepo.addCoins(coinsPurchased)
+                shopRepo.recordLifetimeCoins(coinsPurchased)
                 purchasedCoins = coinsPurchased
                 showPurchaseSuccessDialog = true
             }
         )
         billingManager.startConnection()
-
-        // repository singleton
-        shopRepo = ShopRepository.get(applicationContext)
 
         setContent {
             BetterBlocksTheme {
@@ -209,8 +211,6 @@ class ShopActivity : ComponentActivity() {
      * Sequential unlock only applies to score-based progression
      */
     private fun handleTrophyPurchase(tier: TrophyTier, cost: Int) {
-        val currentCoins = shopRepo.coins.value
-        val lifetimeCoins = shopRepo.lifetimeCoins.value
         val currentTierOrdinal = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getInt(KEY_HIGHEST_TIER_UNLOCKED, TrophyTier.UNRANKED.ordinal)
         val currentTier = TrophyTier.fromOrdinalSafe(currentTierOrdinal)
 
@@ -224,8 +224,8 @@ class ShopActivity : ComponentActivity() {
         // You can buy Elite tier directly if you have 250,000 coins
 
         if (shopRepo.useCoins(cost)) {
-            // update lifetime coins and unlock tier through repo + prefs
-            shopRepo.recordLifetimeCoins(cost)
+            // Spending coins should not increase lifetime coins.
+            // Unlock tier through repo + prefs.
             shopRepo.unlockTier(tier.ordinal)
             shopRepo.addPremiumTier(tier.name)
 
@@ -491,10 +491,13 @@ fun CompactCoinCard(
 ) {
     val context = LocalContext.current
 
-    val formattedPrice = productDetailsMap[item.id]
+    val productDetails = productDetailsMap[item.id]
+    val canStartPurchase = BuildConfig.DEBUG || productDetails != null
+
+    val formattedPrice = productDetails
         ?.oneTimePurchaseOfferDetails
         ?.formattedPrice
-        ?: "—"
+        ?: if (BuildConfig.DEBUG) "TEST" else "—"
 
     val imageName = remember(item.imageResId) {
         try {
@@ -516,6 +519,7 @@ fun CompactCoinCard(
     Surface(
         modifier = modifier
             .clickable(
+                enabled = canStartPurchase,
                 role = Role.Button,
                 onClick = {
                     // Log on TAP (before billing flow) so diagnosis works even when purchases can't complete.
@@ -545,11 +549,11 @@ fun CompactCoinCard(
             )
 
             Text(
-                formattedPrice,
+                text = if (canStartPurchase) formattedPrice else "Store unavailable",
                 fontFamily = Oswald,
-                fontSize = 12.sp,
+                fontSize = if (canStartPurchase) 12.sp else 10.sp,
                 fontWeight = FontWeight.Bold,
-                color = LightText,
+                color = if (canStartPurchase) LightText else LightText.copy(alpha = 0.55f),
                 maxLines = 1
             )
 
