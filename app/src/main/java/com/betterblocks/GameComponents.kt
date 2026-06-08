@@ -61,7 +61,6 @@ import androidx.compose.ui.graphics.ColorFilter.Companion.tint
 import android.util.Log
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.positionInWindow
 import kotlinx.coroutines.delay
 import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.drawableRes
@@ -266,7 +265,7 @@ fun BlockPreviewCard(
     onDragEnd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // The card's top-left corner in WINDOW coordinates
+    // The card's top-left corner in root coordinates
     var cardWindowPos by remember(block.id) { mutableStateOf(Offset.Zero) }
 
     val onStartState = rememberUpdatedState(onDragStart)
@@ -287,8 +286,8 @@ fun BlockPreviewCard(
         modifier = modifier
             .size(cardSize)
             .onGloballyPositioned { coords ->
-                // store window coordinates to match grid/window coordinates
-                cardWindowPos = coords.positionInWindow()
+                // store root coordinates to match the drag overlay and rendered board
+                cardWindowPos = coords.positionInRoot()
             }
             .pointerInput(block.id) {
                 detectSimpleDragOrTap(
@@ -297,13 +296,13 @@ fun BlockPreviewCard(
                         pendingStartWindowPos = cardWindowPos + localPos
                     },
                     onDrag = { localPos ->
-                        val windowPos = cardWindowPos + localPos
+                        val rootPos = cardWindowPos + localPos
                         // If we have a buffered start, this is the first movement -> now start drag
                         pendingStartWindowPos?.let { startPos ->
                             onStartState.value(startPos)
                             pendingStartWindowPos = null
                         }
-                        onDragState.value(windowPos)
+                        onDragState.value(rootPos)
                     },
                     onDragEnd = {
                         // Clear any pending start and forward end
@@ -342,7 +341,7 @@ fun BlockPreviewCard(
 
 // kotlin
 // File: `app/src/main/java/com/betterblocks/GameComponents.kt`
-// Modified: SpecialBlockButton - use positionInWindow()
+// Modified: SpecialBlockButton - use positionInRoot()
 @Composable
 fun BlockGrid(
     block: Block,
@@ -610,11 +609,11 @@ fun SpecialBlockButton(
 ) {
     if (count <= 0) return
 
-    var buttonWindowPos by remember { mutableStateOf(Offset.Zero) }
+    var buttonRootPos by remember { mutableStateOf(Offset.Zero) }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.onGloballyPositioned { buttonWindowPos = it.positionInWindow() }
+        modifier = Modifier.onGloballyPositioned { buttonRootPos = it.positionInRoot() }
     ) {
         Surface(
             color = Pink_Jackie,
@@ -647,14 +646,14 @@ fun SpecialBlockButton(
                 .pointerInput(Unit) {
                     detectSimpleDragOrTap(
                         onDragStart = { localPos ->
-                            val windowPos = buttonWindowPos + localPos
-                            Log.d("SpecialBlockButton", "onDragStart localPos=$localPos buttonWindowPos=$buttonWindowPos windowPos=$windowPos")
-                            onDragStart(RAINBOW_BLOCK, windowPos)
+                            val rootPos = buttonRootPos + localPos
+                            Log.d("SpecialBlockButton", "onDragStart localPos=$localPos buttonRootPos=$buttonRootPos rootPos=$rootPos")
+                            onDragStart(RAINBOW_BLOCK, rootPos)
                         },
                         onDrag = { localPos ->
-                            val windowPos = buttonWindowPos + localPos
-                            Log.d("SpecialBlockButton", "onDrag localPos=$localPos windowPos=$windowPos")
-                            onDrag(windowPos)
+                            val rootPos = buttonRootPos + localPos
+                            Log.d("SpecialBlockButton", "onDrag localPos=$localPos rootPos=$rootPos")
+                            onDrag(rootPos)
                         },
                         onDragEnd = {
                             onDragEnd()

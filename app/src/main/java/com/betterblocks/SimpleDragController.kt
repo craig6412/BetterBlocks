@@ -2,10 +2,10 @@
 // File: `app/src/main/java/com/betterblocks/SimpleDragController.kt`
 package com.betterblocks
 
+import android.util.Log
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
-import android.util.Log
-import kotlin.math.floor
+import kotlin.math.roundToInt
 
 class SimpleDragController {
 
@@ -23,7 +23,7 @@ class SimpleDragController {
     // How far above finger the block floats (px)
     private var liftOffset = 0f
 
-    // Grid information (set by GameScreen)
+    // Grid information. This should be set from the actual rendered board.
     var gridTopLeft by mutableStateOf(Offset.Zero)
     var gridSizePx by mutableStateOf(0f)
     var cellSizePx by mutableStateOf(0f)
@@ -31,29 +31,37 @@ class SimpleDragController {
     // Visual offset (stroke/padding/inset) that should be added to gridTopLeft
     var gridVisualOffset by mutableStateOf(Offset.Zero)
 
-    // Ghost preview position (row, col)
+    /**
+     * Compatibility name kept because GameScreen / AnimatedBoardRenderer already consume it.
+     * For the no-ghost system, this is the truthful snapped placement position.
+     */
     var ghostPosition: Pair<Int, Int>? by mutableStateOf(null)
         private set
 
-    // Precise ghost top-left in root pixels (snapped) and its center for rendering
+    /**
+     * Compatibility name kept because existing code expects it.
+     * For the no-ghost system, this is the truthful snapped top-left for the dragged block.
+     */
     var ghostTopLeftPx: Offset? by mutableStateOf(null)
         private set
+
+    /**
+     * Compatibility name kept because existing code expects it.
+     * For the no-ghost system, this is the truthful snapped center for the dragged block.
+     */
     var ghostCenterPx: Offset? by mutableStateOf(null)
         private set
-
-    //New drag and drop feature that saves last grid position when finger leaves grid and updates that state when returning to grid
-
-    private var lastValidGhostPosition: Pair<Int, Int>? = null
-    private var lastValidGhostTopLeftPx: Offset? = null
-    private var lastValidGhostCenterPx: Offset? = null
-
 
     fun setGridMetrics(topLeft: Offset, totalGridPx: Float, cellPx: Float, visualOffset: Offset = Offset.Zero) {
         gridTopLeft = topLeft
         gridSizePx = totalGridPx
         cellSizePx = cellPx
         gridVisualOffset = visualOffset
-        Log.d("SimpleDrag", "setGridMetrics: gridTopLeft=$gridTopLeft gridSizePx=$gridSizePx cellPx=$cellSizePx visualOffset=$gridVisualOffset")
+        Log.d(
+            "SimpleDrag",
+            "setGridMetrics: gridTopLeft=$gridTopLeft gridSizePx=$gridSizePx cellPx=$cellSizePx visualOffset=$gridVisualOffset"
+        )
+        updateSnapPosition()
     }
 
     fun startDrag(block: Block, fingerPosRoot: Offset, liftPx: Float) {
@@ -63,7 +71,7 @@ class SimpleDragController {
         draggedBlock = block
         fingerPosition = fingerPosRoot
         liftOffset = liftPx
-        updateGhost()
+        updateSnapPosition()
     }
 
     fun updatePosition(newFingerPos: Offset) {
@@ -71,13 +79,12 @@ class SimpleDragController {
             Log.w("SimpleDrag", "updatePosition called but not dragging! newPos=$newFingerPos")
             return
         }
-        Log.d("SimpleDrag", "updatePosition: from=$fingerPosition to=$newFingerPos")
         fingerPosition = newFingerPos
-        updateGhost()
+        updateSnapPosition()
     }
 
     fun endDrag(board: GameGrid): Pair<Int, Int>? {
-        Log.d("SimpleDrag", "END called: current ghost=$ghostPosition draggedBlock=${draggedBlock?.id}")
+        Log.d("SimpleDrag", "END called: placement=$ghostPosition draggedBlock=${draggedBlock?.id}")
         val block = draggedBlock
         val pos = ghostPosition
 
@@ -102,100 +109,94 @@ class SimpleDragController {
         isDragging = false
         draggedBlock = null
         fingerPosition = Offset.Zero
-        ghostPosition = null
-        ghostTopLeftPx = null
-        ghostCenterPx = null
-
-        lastValidGhostPosition = null
-        lastValidGhostTopLeftPx = null
-        lastValidGhostCenterPx = null
-
+        clearSnapPosition()
         liftOffset = 0f
     }
 
     /**
-     * Returns the center that should be used for rendering the floating preview.
-     * If a snapped ghost center exists prefer that so preview and ghost align exactly.
+     * The dragged block itself is the preview.
+     * Outside the board it follows the finger. Over the board it uses the exact snapped placement center.
      */
     fun getBlockCenter(): Offset {
-        return ghostCenterPx ?: (fingerPosition - Offset(0f, liftOffset))
+        return ghostCenterPx ?: getFloatingBlockCenter()
     }
 
-    private fun updateGhost() {
+    fun getBlockTopLeft(): Offset {
+        val block = draggedBlock
+        val snappedTopLeft = ghostTopLeftPx
+        if (block != null && snappedTopLeft != null) return snappedTopLeft
+
+        val center = getFloatingBlockCenter()
+        val widthPx = ((block?.boundingBoxWidth ?: 1) * cellSizePx).takeIf { it > 0f } ?: cellSizePx.coerceAtLeast(1f)
+        val heightPx = ((block?.boundingBoxHeight ?: 1) * cellSizePx).takeIf { it > 0f } ?: cellSizePx.coerceAtLeast(1f)
+        return Offset(
+            x = center.x - widthPx / 2f,
+            y = center.y - heightPx / 2f
+        )
+    }
+
+    private fun getFloatingBlockCenter(): Offset {
+        return fingerPosition - Offset(0f, liftOffset)
+    }
+
+    private fun clearSnapPosition() {
+        ghostPosition = null
+        ghostTopLeftPx = null
+        ghostCenterPx = null
+    }
+
+    private fun updateSnapPosition() {
         val block = draggedBlock
         if (block == null || !isDragging || gridSizePx <= 0f || cellSizePx <= 0f) {
-            ghostPosition = lastValidGhostPosition
-            ghostTopLeftPx = lastValidGhostTopLeftPx
-            ghostCenterPx = lastValidGhostCenterPx
+            clearSnapPosition()
             return
         }
 
-        val blockCenterFromFinger = fingerPosition - Offset(0f, liftOffset)
-
-        // Use corrected top-left that includes any visual inset/padding/stroke
+        val blockCenterFromFinger = getFloatingBlockCenter()
         val boardTopLeft = gridTopLeft + gridVisualOffset
 
-        // Find block center relative to corrected grid top-left
         val relX = blockCenterFromFinger.x - boardTopLeft.x
         val relY = blockCenterFromFinger.y - boardTopLeft.y
 
-        Log.d(
-            "SimpleDrag",
-            "updateGhost: finger=$fingerPosition blockCenterFromFinger=$blockCenterFromFinger boardTopLeft=$boardTopLeft rel=($relX,$relY) gridSizePx=$gridSizePx cellPx=$cellSizePx visualOffset=$gridVisualOffset"
-        )
-
-        // Quick out-of-bounds if center is fully outside extended grid bounds
-        if (relX < -cellSizePx || relY < -cellSizePx || relX > gridSizePx + cellSizePx || relY > gridSizePx + cellSizePx) {
-            ghostPosition = lastValidGhostPosition
-            ghostTopLeftPx = lastValidGhostTopLeftPx
-            ghostCenterPx = lastValidGhostCenterPx
+        // The block is not over the board yet. No stale placement is allowed.
+        if (relX < 0f || relY < 0f || relX > gridSizePx || relY > gridSizePx) {
+            clearSnapPosition()
             return
         }
 
-        // Compute top-left origin so block's bounding-box aligns to cells.
         val halfWidthPx = (block.boundingBoxWidth * cellSizePx) / 2f
         val halfHeightPx = (block.boundingBoxHeight * cellSizePx) / 2f
 
         val originColFloat = (relX - halfWidthPx) / cellSizePx
         val originRowFloat = (relY - halfHeightPx) / cellSizePx
 
-        val col = floor(originColFloat).toInt()
-        val row = floor(originRowFloat).toInt()
-
-        // Clamp to valid origin range (so block doesn't overflow grid)
         val maxCol = 9 - block.boundingBoxWidth
         val maxRow = 9 - block.boundingBoxHeight
-
-        if (row < 0 || col < 0 || row > maxRow || col > maxCol) {
-            ghostPosition = lastValidGhostPosition
-            ghostTopLeftPx = lastValidGhostTopLeftPx
-            ghostCenterPx = lastValidGhostCenterPx
+        if (maxCol < 0 || maxRow < 0) {
+            clearSnapPosition()
             return
         }
 
-        val snappedRow = row.coerceIn(0, maxRow)
-        val snappedCol = col.coerceIn(0, maxCol)
-        ghostPosition = Pair(snappedRow, snappedCol)
-
-        // Top-left pixel snapped to integer cell indices (uses corrected boardTopLeft)
-        val snappedTopLeft = Offset(boardTopLeft.x + snappedCol * cellSizePx, boardTopLeft.y + snappedRow * cellSizePx)
-        ghostTopLeftPx = snappedTopLeft
-
-        // Compute and expose the snapped center for rendering so preview & ghost agree
-        val centerPx = Offset(
+        val snappedCol = originColFloat.roundToInt().coerceIn(0, maxCol)
+        val snappedRow = originRowFloat.roundToInt().coerceIn(0, maxRow)
+        val snappedPosition = Pair(snappedRow, snappedCol)
+        val snappedTopLeft = Offset(
+            x = boardTopLeft.x + snappedCol * cellSizePx,
+            y = boardTopLeft.y + snappedRow * cellSizePx
+        )
+        val snappedCenter = Offset(
             x = snappedTopLeft.x + (block.boundingBoxWidth * cellSizePx) / 2f,
             y = snappedTopLeft.y + (block.boundingBoxHeight * cellSizePx) / 2f
         )
-        ghostCenterPx = centerPx
+
+        ghostPosition = snappedPosition
+        ghostTopLeftPx = snappedTopLeft
+        ghostCenterPx = snappedCenter
 
         Log.d(
             "SimpleDrag",
-            "Ghost updated: origin=($snappedRow,$snappedCol) originFloat=($originRowFloat,$originColFloat) ghostTopLeftPx=$ghostTopLeftPx ghostCenterPx=$ghostCenterPx"
+            "Snap updated: origin=$snappedPosition originFloat=($originRowFloat,$originColFloat) topLeft=$snappedTopLeft center=$snappedCenter"
         )
-        lastValidGhostPosition = ghostPosition
-        lastValidGhostTopLeftPx = ghostTopLeftPx
-        lastValidGhostCenterPx = ghostCenterPx
-
     }
 
     private fun isValidPlacement(board: GameGrid, block: Block, origin: Pair<Int, Int>): Boolean {
@@ -214,10 +215,10 @@ class SimpleDragController {
         return true
     }
 
-    // Rotate the currently dragged block clockwise (90 degrees) and update the ghost.
+    // Rotate the currently dragged block clockwise (90 degrees) and update the truthful snap position.
     fun rotateDraggedBlockClockwise() {
         draggedBlock = draggedBlock?.rotate()
-        updateGhost()
+        updateSnapPosition()
         Log.d("SimpleDragController", "rotateDraggedBlockClockwise -> draggedBlock now=${draggedBlock?.id}")
     }
 }

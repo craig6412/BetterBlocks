@@ -639,7 +639,14 @@ fun AnimatedGameBoard(
                 // Ghost block tint suppressed here — handled by dedicated ghost layer.
                 val ghostColor = Color.Transparent
 
-                val isPreviewTinted = (r in previewClearLines.rows) || (c in previewClearLines.cols)
+                val isPreviewLineCell = (r in previewClearLines.rows) || (c in previewClearLines.cols)
+                val isPreviewGhostCell = isGhostValid && isGhostCell(
+                    row = r,
+                    col = c,
+                    ghostBlock = ghostBlock,
+                    ghostOrigin = ghostOrigin
+                )
+                val isPreviewTinted = isGhostValid && isPreviewLineCell
 
                 AnimatedBoardCell(
                     cell = cell,
@@ -651,12 +658,15 @@ fun AnimatedGameBoard(
                     cellDp = cellDp,
                     tintColor = previewTintColor.copy(alpha = 0.65f),
                     isPreviewTinted = isPreviewTinted,
+                    isPreviewGhostCell = isPreviewGhostCell,
                     previewPulseAlpha = pulseAlpha,
                     previewDrawableResId = previewDrawableForCell(
                         row = r,
                         col = c,
                         moveNumber = uiState.moveNumber,
-                        existingCellValue = cellValue
+                        existingCellValue = cellValue,
+                        previewRows = previewClearLines.rows,
+                        previewCols = previewClearLines.cols
                     ),
                     onCellClick = { onCellClick(r, c) }
                 )
@@ -678,25 +688,32 @@ fun AnimatedGameBoard(
                 val corner = cellSizePx * 0.22f
 
                 ghostBlock.shape.forEach { shapeCell ->
-                    val gx = (ghostOrigin.second + shapeCell.col) * cellSizePx
-                    val gy = (ghostOrigin.first + shapeCell.row) * cellSizePx
+                    val row = ghostOrigin.first + shapeCell.row
+                    val col = ghostOrigin.second + shapeCell.col
+                    val belongsToPreviewLine =
+                        isGhostValid && ((row in previewClearLines.rows) || (col in previewClearLines.cols))
 
-                    // Soft fill behind
-                    drawRoundRect(
-                        color = fillColor,
-                        topLeft = Offset(gx, gy),
-                        size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
-                        cornerRadius = CornerRadius(corner, corner)
-                    )
+                    if (!belongsToPreviewLine) {
+                        val gx = col * cellSizePx
+                        val gy = row * cellSizePx
 
-                    // Neon outline
-                    drawRoundRect(
-                        color = outlineColor,
-                        topLeft = Offset(gx, gy),
-                        size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
-                        cornerRadius = CornerRadius(corner, corner),
-                        style = Stroke(width = strokeWidth)
-                    )
+                        // Soft fill behind
+                        drawRoundRect(
+                            color = fillColor,
+                            topLeft = Offset(gx, gy),
+                            size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
+                            cornerRadius = CornerRadius(corner, corner)
+                        )
+
+                        // Neon outline
+                        drawRoundRect(
+                            color = outlineColor,
+                            topLeft = Offset(gx, gy),
+                            size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
+                            cornerRadius = CornerRadius(corner, corner),
+                            style = Stroke(width = strokeWidth)
+                        )
+                    }
                 }
             }
         }
@@ -783,6 +800,7 @@ fun AnimatedBoardCell(
     cellDp: Dp,
     tintColor: Color,
     isPreviewTinted: Boolean,
+    isPreviewGhostCell: Boolean = false,
     previewPulseAlpha: Float = 0f,
     previewDrawableResId: Int? = null,
     onCellClick: () -> Unit
@@ -816,7 +834,7 @@ fun AnimatedBoardCell(
         contentAlignment = Alignment.Center
     ) {
 
-        val displayCellValue = if (isPreviewTinted && previewDrawableResId != null) {
+        val displayCellValue = if ((isPreviewTinted || isPreviewGhostCell) && previewDrawableResId != null) {
             previewDrawableResId
         } else {
             cellValue
@@ -909,16 +927,37 @@ fun AnimatedBoardCell(
 
 
         // Cell-confined pre-clear preview accent.
-        // The preview color comes from a real block drawable. This border only marks
-        // the exact cells that will clear without creating row/column beams or bleed.
-        if (isPreviewTinted) {
+        // The preview color comes from one shared block drawable per clearing line.
+        // This adds a small pulsing glow without drawing full-row/column beams.
+        if (isPreviewTinted || isPreviewGhostCell) {
             val pulseBoost = ((previewPulseAlpha - 0.20f) / 0.10f).coerceIn(0f, 1f)
-            val accent = Color.White.copy(alpha = 0.18f + pulseBoost * 0.10f)
+            val accentColor = hueShiftPreviewColor(previewDrawableResId, tintColor)
+            val glowAlpha = 0.12f + pulseBoost * 0.10f
+            val borderAlpha = 0.30f + pulseBoost * 0.18f
 
             Canvas(modifier = Modifier.matchParentSize()) {
                 val cornerPx = size.minDimension * 0.16f
+
+                // Small pulsing glow, clipped to this cell only.
                 drawRoundRect(
-                    color = accent,
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = glowAlpha),
+                            accentColor.copy(alpha = glowAlpha * 0.55f),
+                            Color.Transparent
+                        ),
+                        center = Offset(size.width * 0.5f, size.height * 0.5f),
+                        radius = size.minDimension * 0.58f
+                    ),
+                    topLeft = Offset.Zero,
+                    size = size,
+                    cornerRadius = CornerRadius(cornerPx, cornerPx),
+                    blendMode = BlendMode.Screen
+                )
+
+                // Tight border for the exact cells that will clear.
+                drawRoundRect(
+                    color = Color.White.copy(alpha = borderAlpha),
                     topLeft = Offset.Zero,
                     size = size,
                     cornerRadius = CornerRadius(cornerPx, cornerPx),
@@ -1072,30 +1111,69 @@ private data class FragmentSpec(
 private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
 
 
+
+
+private fun isGhostCell(
+    row: Int,
+    col: Int,
+    ghostBlock: Block?,
+    ghostOrigin: Pair<Int, Int>?
+): Boolean {
+    if (ghostBlock == null || ghostOrigin == null) return false
+
+    for (shapeCell in ghostBlock.shape) {
+        val r = ghostOrigin.first + shapeCell.row
+        val c = ghostOrigin.second + shapeCell.col
+        if (row == r && col == c) return true
+    }
+
+    return false
+}
+
+private fun previewDrawableForLine(
+    lineIndex: Int,
+    isRow: Boolean,
+    moveNumber: Int
+): Int? {
+    val choices = COLOR_WIPE_DRAWABLES
+    if (choices.isEmpty()) return null
+
+    // Stable line-level random color. Every cell in the same row/column gets the same drawable.
+    val seed = if (isRow) {
+        (moveNumber * 37) + (lineIndex * 101) + 19
+    } else {
+        (moveNumber * 41) + (lineIndex * 103) + 29
+    }
+
+    return choices[kotlin.math.abs(seed) % choices.size]
+}
+
 private fun previewDrawableForCell(
     row: Int,
     col: Int,
     moveNumber: Int,
-    existingCellValue: Int?
+    existingCellValue: Int?,
+    previewRows: Set<Int>,
+    previewCols: Set<Int>
 ): Int? {
-    val choices = COLOR_WIPE_DRAWABLES.ifEmpty {
-        if (existingCellValue != null) listOf(existingCellValue) else emptyList()
-    }
-
-    if (choices.isEmpty()) return existingCellValue
-
-    // Deterministic "random" per move + cell. This prevents flicker during recomposition
-    // while still changing the preview color from move to move.
-    val seed = (moveNumber * 31) + (row * 17) + (col * 13)
-    val safeIndex = kotlin.math.abs(seed) % choices.size
-    val picked = choices[safeIndex]
-
-    // Try not to preview with the same exact texture already in the cell.
-    return if (existingCellValue != null && picked == existingCellValue && choices.size > 1) {
-        choices[(safeIndex + 1) % choices.size]
+    // Row wins at intersections so a horizontal clear reads as one uninterrupted color.
+    val rowDrawable = if (row in previewRows) {
+        previewDrawableForLine(row, isRow = true, moveNumber = moveNumber)
     } else {
-        picked
+        null
     }
+
+    val colDrawable = if (col in previewCols) {
+        previewDrawableForLine(col, isRow = false, moveNumber = moveNumber)
+    } else {
+        null
+    }
+
+    val picked = rowDrawable ?: colDrawable ?: existingCellValue
+
+    // Do not force a different color per cell. Same-line consistency is more important
+    // than avoiding a same-color match on one existing block.
+    return picked
 }
 
 private fun computePreviewClearLinesFromGhost(

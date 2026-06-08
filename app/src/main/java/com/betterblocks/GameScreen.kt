@@ -38,7 +38,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import android.app.Activity
 import androidx.compose.ui.platform.LocalDensity
@@ -52,6 +51,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -81,6 +81,7 @@ import com.betterblocks.model.TrophyTier
 import com.betterblocks.model.getPlayerTier
 import com.betterblocks.trophyColorForTier
 import kotlin.times
+import kotlin.math.roundToInt
 
 // Add the missing UI helper imports and TextStyle/Shadow here near the top
 import com.betterblocks.ui.AvailableBlocks
@@ -241,11 +242,11 @@ fun GameScreen(
     // How far above finger block appears
     val liftPx = with(density) { sh(0.12f).toPx() }
 
-    // Ghost info (controller output)
+    // Truth placement info (kept as ghostPosition for compatibility)
     val ghostPosition = drag.ghostPosition  // ✅ Correct property name
 
-    // Ghost validity (placement check)
-    val isGhostValid = remember(ghostPosition, drag.draggedBlock?.id, uiState.board) {
+    // Truth-preview validity (same row/col used for final placement)
+    val isGhostValid = remember(ghostPosition, drag.draggedBlock, uiState.board) {
         val block = drag.draggedBlock
         ghostPosition != null && block != null &&
                 isValidPlacement(uiState.board, block, ghostPosition)
@@ -451,25 +452,13 @@ fun GameScreen(
                                 )
                                 // capture measured values during layout into local state, apply to drag in LaunchedEffect
                                 .onGloballyPositioned { coordinates ->
-                                    // use window coords to match AnimatedGameBoard which reports window coords
-                                    measuredGridTopLeftWindow = coordinates.positionInWindow()
+                                    // use root coords to match AnimatedGameBoard and the drag overlay
+                                    measuredGridTopLeftWindow = coordinates.positionInRoot()
                                     measuredGridSizePx = coordinates.size.width.toFloat()
                                 }
                         ) {
-                            // apply captured metrics to the drag controller after layout to avoid snapshot writes during measure
-                            LaunchedEffect(measuredGridTopLeftWindow, measuredGridSizePx) {
-                                if (measuredGridTopLeftWindow != Offset.Zero && measuredGridSizePx > 0f) {
-                                    // compute an even integer pixel cell size so rendering and drag math align
-                                    val rawCellPx = measuredGridSizePx / 9f
-                                    var cellPxInt = rawCellPx.toInt().coerceAtLeast(1)
-                                    if (cellPxInt % 2 != 0) cellPxInt -= 1 // make even
-
-                                    drag.gridTopLeft = measuredGridTopLeftWindow
-                                    drag.gridSizePx = measuredGridSizePx
-                                    drag.cellSizePx = cellPxInt.toFloat()
-                                    Log.d("GameScreen", "Deferred drag metrics set: topLeftWindow=$measuredGridTopLeftWindow sizePx=$measuredGridSizePx cellPx=$cellPxInt")
-                                }
-                            }
+                            // Drag metrics are now set by AnimatedGameBoard only.
+                            // That keeps placement math tied to the actual rendered board.
 
                             // Visual border drawn slightly larger than the grid so there is a ~5.dp gap
                             val borderGap = sdp(0.005f)
@@ -512,7 +501,8 @@ fun GameScreen(
                                     board = uiState.board,
                                     gridSize = 9,
                                     cellDp = effectiveCellDp,
-                                    // Let the AnimatedGameBoard draw the ghost preview using the controller's dragged block and computed ghost origin
+                                    // Keep placement data available for clear-line preview math.
+                                    // The separate ghost block is disabled; the dragged block overlay is the visible truth.
                                     ghostBlock = drag.draggedBlock,
                                     ghostOrigin = drag.ghostPosition,
                                     isGhostValid = isGhostValid,
@@ -676,9 +666,38 @@ fun GameScreen(
             }
 
             // =====================
-            // GHOST BLOCK (Preview of dragged block)
+            // DRAGGED BLOCK PREVIEW — the visible block is the truth
             // =====================
-            // Ghost preview rendering is provided by the AnimatedGameBoard overlay and drag overlay elsewhere.
+            if (drag.isDragging && drag.draggedBlock != null && drag.ghostPosition == null) {
+                val block = drag.draggedBlock!!
+                val draggedCellDp = if (drag.cellSizePx > 0f) {
+                    with(density) { drag.cellSizePx.toDp() }
+                } else {
+                    cellSize()
+                }
+                val draggedTopLeft = drag.getBlockTopLeft()
+
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(
+                                x = draggedTopLeft.x.roundToInt(),
+                                y = draggedTopLeft.y.roundToInt()
+                            )
+                        }
+                        .size(
+                            width = draggedCellDp * block.boundingBoxWidth.toFloat(),
+                            height = draggedCellDp * block.boundingBoxHeight.toFloat()
+                        )
+                        .zIndex(50f)
+                ) {
+                    BlockGrid(
+                        block = block,
+                        cellSize = draggedCellDp,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+            }
 
             // =====================
             // HAPTIC FEEDBACK TRIGGER (for testing)
