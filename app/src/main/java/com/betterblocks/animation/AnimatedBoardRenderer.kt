@@ -3,6 +3,7 @@ package com.betterblocks.animation
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.betterblocks.*
 import com.betterblocks.BoardBackground
@@ -36,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.sqrt
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.clipRect
@@ -640,12 +643,9 @@ fun AnimatedGameBoard(
                 val ghostColor = Color.Transparent
 
                 val isPreviewLineCell = (r in previewClearLines.rows) || (c in previewClearLines.cols)
-                val isPreviewGhostCell = isGhostValid && isGhostCell(
-                    row = r,
-                    col = c,
-                    ghostBlock = ghostBlock,
-                    ghostOrigin = ghostOrigin
-                )
+                // Option 1 drag truth: do not paint the dragged block into fixed grid cells here.
+                // The live dragged piece is rendered once in the soft magnetic preview layer below.
+                val isPreviewGhostCell = false
                 val isPreviewTinted = isGhostValid && isPreviewLineCell
 
                 AnimatedBoardCell(
@@ -674,46 +674,59 @@ fun AnimatedGameBoard(
         }
 
         // ----------------------------------------------------------------------
-        // LAYER 1.25 — CLEAN BLOCK BLAST GHOST (Outline + faint fill)
+        // LAYER 1.25 — TRUE PREVIEW WITH SOFT SETTLE
         // ----------------------------------------------------------------------
+        // Option 1 final behavior:
+        // - No ghost piece.
+        // - The visible dragged block is the placement truth while over the board.
+        // - It is positioned from ghostOrigin, the same row/col used on drop.
+        // - Movement is softened by a short animation between snap cells instead of
+        //   following raw finger pixels or hard-teleporting.
         if (ghostBlock != null && ghostOrigin != null) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val outlineColor = if (isGhostValid)
-                    Color(0xFF00FFAA)     // neon teal
-                else
-                    Color(0xFFFF5577)     // neon red/pink
+            val targetX = cellDp * ghostOrigin.second.toFloat()
+            val targetY = cellDp * ghostOrigin.first.toFloat()
 
-                val fillColor = outlineColor.copy(alpha = 0.08f)
-                val strokeWidth = cellSizePx * 0.10f
-                val corner = cellSizePx * 0.22f
+            val animatedX by animateDpAsState(
+                targetValue = targetX,
+                animationSpec = tween(
+                    durationMillis = 75,
+                    easing = FastOutSlowInEasing
+                ),
+                label = "truthPreviewX"
+            )
+            val animatedY by animateDpAsState(
+                targetValue = targetY,
+                animationSpec = tween(
+                    durationMillis = 75,
+                    easing = FastOutSlowInEasing
+                ),
+                label = "truthPreviewY"
+            )
 
-                ghostBlock.shape.forEach { shapeCell ->
-                    val row = ghostOrigin.first + shapeCell.row
-                    val col = ghostOrigin.second + shapeCell.col
-                    val belongsToPreviewLine =
-                        isGhostValid && ((row in previewClearLines.rows) || (col in previewClearLines.cols))
+            val previewShape = RoundedCornerShape(cellDp * 0.18f)
+            val invalidOverlayColor = Color(0xFFFF1744).copy(alpha = 0.22f)
 
-                    if (!belongsToPreviewLine) {
-                        val gx = col * cellSizePx
-                        val gy = row * cellSizePx
+            Box(
+                modifier = Modifier
+                    .offset(x = animatedX, y = animatedY)
+                    .size(
+                        width = cellDp * ghostBlock.boundingBoxWidth.toFloat(),
+                        height = cellDp * ghostBlock.boundingBoxHeight.toFloat()
+                    )
+                    .zIndex(4f)
+            ) {
+                BlockGrid(
+                    block = ghostBlock,
+                    cellSize = cellDp,
+                    modifier = Modifier.fillMaxSize()
+                )
 
-                        // Soft fill behind
-                        drawRoundRect(
-                            color = fillColor,
-                            topLeft = Offset(gx, gy),
-                            size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
-                            cornerRadius = CornerRadius(corner, corner)
-                        )
-
-                        // Neon outline
-                        drawRoundRect(
-                            color = outlineColor,
-                            topLeft = Offset(gx, gy),
-                            size = androidx.compose.ui.geometry.Size(cellSizePx, cellSizePx),
-                            cornerRadius = CornerRadius(corner, corner),
-                            style = Stroke(width = strokeWidth)
-                        )
-                    }
+                if (!isGhostValid) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(invalidOverlayColor, previewShape)
+                    )
                 }
             }
         }

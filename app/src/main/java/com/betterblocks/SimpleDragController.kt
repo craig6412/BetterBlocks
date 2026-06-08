@@ -123,15 +123,19 @@ class SimpleDragController {
 
     fun getBlockTopLeft(): Offset {
         val block = draggedBlock
-        val snappedTopLeft = ghostTopLeftPx
-        if (block != null && snappedTopLeft != null) return snappedTopLeft
 
-        val center = getFloatingBlockCenter()
+        // If the block has a snap target, the preview piece must be the truth.
+        // The renderer may animate toward this target for feel, but the controller
+        // always exposes the exact final placement top-left.
+        ghostTopLeftPx?.let { return it }
+
+        val floatingCenter = getFloatingBlockCenter()
         val widthPx = ((block?.boundingBoxWidth ?: 1) * cellSizePx).takeIf { it > 0f } ?: cellSizePx.coerceAtLeast(1f)
         val heightPx = ((block?.boundingBoxHeight ?: 1) * cellSizePx).takeIf { it > 0f } ?: cellSizePx.coerceAtLeast(1f)
+
         return Offset(
-            x = center.x - widthPx / 2f,
-            y = center.y - heightPx / 2f
+            x = floatingCenter.x - widthPx / 2f,
+            y = floatingCenter.y - heightPx / 2f
         )
     }
 
