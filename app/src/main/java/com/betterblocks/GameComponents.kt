@@ -167,7 +167,7 @@ fun Header(uiState: GameUiState, onMenuClicked: () -> Unit) {
         }
 
         // Special Meter
-        SpecialMeterDisplay(currentValue = uiState.specialMeterValue, maxValue = 5)
+        SpecialMeterDisplay(currentValue = uiState.specialMeterValue, maxValue = SPECIAL_METER_MAX)
 
         // Score Row
         Row(

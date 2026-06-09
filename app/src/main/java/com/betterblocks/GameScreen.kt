@@ -994,7 +994,7 @@ fun GameScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "AD • ${'$'}overlaySeconds s",
+                            text = "AD • $overlaySeconds s",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             color = Color.White,
                             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold)

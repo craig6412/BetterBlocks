@@ -43,7 +43,7 @@ const val INITIAL_FREE_ROTATIONS = 3
 const val RAINBOW_BLOCK_SCORE = 1000 // Special score for board wipe
 
 const val INITIAL_RAINBOW_COUNT = 5 // Standard start count
-const val SPECIAL_METER_MAX = 50 // Meter fills in 5 combo steps
+const val SPECIAL_METER_MAX = 50 // Meter fills after 50 combo clears
 
 // --- SHOP COSTS ---
 // Centralized in EconomyConfig (do not duplicate tuning values here)
@@ -1247,7 +1247,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Re-evaluate persisted flag at call time to handle ViewModel recreation
         val persistedFlag = prefs.getBoolean(KEY_LAST_CHANCE_OFFERED, false)
         val alreadyOffered = lastChanceOfferedThisGame || persistedFlag
-        Log.d("GameViewModel", "checkGameOverOrLastChance -> state.rainbow=${'$'}{state.rainbowBlockCount} lastChanceThisGame=$lastChanceOfferedThisGame persistedLastChance=$persistedFlag isLastChance=${'$'}{state.isLastChance} isGameOver=${'$'}{state.isGameOver}")
+        Log.d("GameViewModel", "checkGameOverOrLastChance -> state.rainbow=${state.rainbowBlockCount} lastChanceThisGame=$lastChanceOfferedThisGame persistedLastChance=$persistedFlag isLastChance=${state.isLastChance} isGameOver=${state.isGameOver}")
 
         val updated = if (state.rainbowBlockCount > 0 && !alreadyOffered) {
             // Offer last-chance once per game
@@ -1258,7 +1258,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             state.copy(isLastChance = true, selectedBlock = null)
         } else {
             // Either no rainbows, or we've already offered the last chance this game; finalize game over
-            Log.d("GameViewModel", "checkGameOverOrLastChance -> FINALIZE game over (alreadyOffered=$alreadyOffered rainbow=${'$'}{state.rainbowBlockCount})")
+            Log.d("GameViewModel", "checkGameOverOrLastChance -> FINALIZE game over (alreadyOffered=$alreadyOffered rainbow=${state.rainbowBlockCount})")
             state.copy(isGameOver = true, selectedBlock = null)
         }
 
