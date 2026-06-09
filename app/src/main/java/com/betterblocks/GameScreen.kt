@@ -157,6 +157,9 @@ fun GameScreen(
     var measuredGridTopLeftWindow by remember { mutableStateOf(Offset.Zero) }
     var measuredGridSizePx by remember { mutableStateOf(0f) }
 
+    // Root-space origin of the floating-preview overlay container (see below).
+    var overlayOriginRoot by remember { mutableStateOf(Offset.Zero) }
+
     var showMenuDialog by remember { mutableStateOf(false) }
     var showColorWheelDialog by remember { mutableStateOf(false) }
     var showBuyColorWipeDialog by remember { mutableStateOf(false) }
@@ -405,7 +408,13 @@ fun GameScreen(
         color = DarkBackground
     ) {
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                // Capture this Box's own origin in ROOT coords. The floating drag preview
+                // is positioned with .offset {} relative to THIS Box, but getBlockTopLeft()
+                // is in root coords, so we subtract this origin. This is what fixes the
+                // "preview ~one cell too low" caused by the safeDrawing inset.
+                .onGloballyPositioned { overlayOriginRoot = it.positionInRoot() }
         ) {
 
             // =====================
@@ -666,23 +675,36 @@ fun GameScreen(
             }
 
             // =====================
-            // DRAGGED BLOCK PREVIEW — the visible block is the truth
+            // DRAGGED BLOCK PREVIEW — single free-floating piece, the visible truth
             // =====================
-            if (drag.isDragging && drag.draggedBlock != null && drag.ghostPosition == null) {
+            // Rendered for the WHOLE drag (over the board AND over the tray). It follows
+            // the finger freely and is never grid-locked or clamped. The snap candidate
+            // (drag.ghostPosition) is derived from this exact same top-left, so the
+            // landing position always matches what the player sees.
+            if (drag.isDragging && drag.draggedBlock != null) {
                 val block = drag.draggedBlock!!
                 val draggedCellDp = if (drag.cellSizePx > 0f) {
                     with(density) { drag.cellSizePx.toDp() }
                 } else {
                     cellSize()
                 }
-                val draggedTopLeft = drag.getBlockTopLeft()
+
+                // previewTopLeft is in ROOT coords; convert into this overlay Box's local space.
+                val topLeftRoot = drag.getBlockTopLeft()
+                val drawX = topLeftRoot.x - overlayOriginRoot.x
+                val drawY = topLeftRoot.y - overlayOriginRoot.y
+
+                val previewShape = RoundedCornerShape(draggedCellDp * 0.18f)
+                val invalidOverlayColor = Color(0xFFFF1744).copy(alpha = 0.22f)
+                // Invalid only when the piece is over the board but the cell is taken / out of range.
+                val showInvalid = drag.ghostPosition != null && !isGhostValid
 
                 Box(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                x = draggedTopLeft.x.roundToInt(),
-                                y = draggedTopLeft.y.roundToInt()
+                                x = drawX.roundToInt(),
+                                y = drawY.roundToInt()
                             )
                         }
                         .size(
@@ -696,6 +718,14 @@ fun GameScreen(
                         cellSize = draggedCellDp,
                         modifier = Modifier.fillMaxSize()
                     )
+
+                    if (showInvalid) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(invalidOverlayColor, previewShape)
+                        )
+                    }
                 }
             }
 

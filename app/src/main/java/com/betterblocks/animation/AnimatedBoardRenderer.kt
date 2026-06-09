@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.res.painterResource
 import kotlin.div
@@ -548,10 +549,9 @@ fun AnimatedGameBoard(
     val totalBoardPx = cellSizePx * gridSize
     val totalBoardSize = cellDp * gridSize
 
-    // Match the border width used by the Box so logic compensates for the visual inset.
-    val borderStrokePx = with(density) { 3.dp.toPx() }
-    // visual inset to adjust for border/padding; tweak if necessary
-    val visualInset = Offset(x = borderStrokePx, y = borderStrokePx)
+    // (Removed) border-derived visual inset. The grid content fills from (0,0);
+    // the board border is drawn over it and does not shift the grid, so there is
+    // no inset to compensate for in the placement math.
 
     // Animation state for line clears
     val animationSpeed = if (uiState.isColorWipeAnimating) {
@@ -595,10 +595,16 @@ fun AnimatedGameBoard(
         modifier = Modifier
             .size(totalBoardSize)
             .offset(y = 10.dp)
-            // capture window coords into local state during layout; apply to controller from LaunchedEffect
+            // capture ROOT coords into local state during layout; apply to controller from LaunchedEffect.
+            // Root space is used because the finger position is delivered in root space (fingerPosRoot).
             .onGloballyPositioned { coords ->
-                // store window pos into a local state (safe during measure)
-                boardWindowPos = coords.positionInWindow()
+                boardWindowPos = coords.positionInRoot()
+                // Diagnostic: root vs window differ by the window top inset (status bar / cutout).
+                // If finger lands ~one cell off in Y, compare these two in Logcat.
+                Log.d(
+                    "BoardRender",
+                    "boardOrigin root=${coords.positionInRoot()} window=${coords.positionInWindow()}"
+                )
             }
             .clip(RoundedCornerShape(8.dp))
             .background(BoardBackground)
@@ -616,9 +622,11 @@ fun AnimatedGameBoard(
                     topLeft = boardWindowPos,
                     totalGridPx = totalBoardPx,
                     cellPx = cellSizePx,
-                    visualOffset = visualInset
+                    // The LazyVerticalGrid fills from (0,0) of this Box; the 1.dp border is
+                    // drawn on top and does NOT inset content. So there is no visual offset.
+                    visualOffset = Offset.Zero
                 )
-                Log.d("BoardRender", "setGridMetrics (deferred) topLeftWindow=$boardWindowPos totalBoardPx=$totalBoardPx cellSizePx=$cellSizePx visualInset=$visualInset")
+                Log.d("BoardRender", "setGridMetrics (deferred) topLeftRoot=$boardWindowPos totalBoardPx=$totalBoardPx cellSizePx=$cellSizePx visualOffset=ZERO")
             }
         }
 
@@ -674,62 +682,13 @@ fun AnimatedGameBoard(
         }
 
         // ----------------------------------------------------------------------
-        // LAYER 1.25 — TRUE PREVIEW WITH SOFT SETTLE
+        // LAYER 1.25 — (removed) board-local snapped preview piece
         // ----------------------------------------------------------------------
-        // Option 1 final behavior:
-        // - No ghost piece.
-        // - The visible dragged block is the placement truth while over the board.
-        // - It is positioned from ghostOrigin, the same row/col used on drop.
-        // - Movement is softened by a short animation between snap cells instead of
-        //   following raw finger pixels or hard-teleporting.
-        if (ghostBlock != null && ghostOrigin != null) {
-            val targetX = cellDp * ghostOrigin.second.toFloat()
-            val targetY = cellDp * ghostOrigin.first.toFloat()
-
-            val animatedX by animateDpAsState(
-                targetValue = targetX,
-                animationSpec = tween(
-                    durationMillis = 75,
-                    easing = FastOutSlowInEasing
-                ),
-                label = "truthPreviewX"
-            )
-            val animatedY by animateDpAsState(
-                targetValue = targetY,
-                animationSpec = tween(
-                    durationMillis = 75,
-                    easing = FastOutSlowInEasing
-                ),
-                label = "truthPreviewY"
-            )
-
-            val previewShape = RoundedCornerShape(cellDp * 0.18f)
-            val invalidOverlayColor = Color(0xFFFF1744).copy(alpha = 0.22f)
-
-            Box(
-                modifier = Modifier
-                    .offset(x = animatedX, y = animatedY)
-                    .size(
-                        width = cellDp * ghostBlock.boundingBoxWidth.toFloat(),
-                        height = cellDp * ghostBlock.boundingBoxHeight.toFloat()
-                    )
-                    .zIndex(4f)
-            ) {
-                BlockGrid(
-                    block = ghostBlock,
-                    cellSize = cellDp,
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                if (!isGhostValid) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(invalidOverlayColor, previewShape)
-                    )
-                }
-            }
-        }
+        // The dragged piece is now drawn ONCE as a single free-floating overlay in
+        // GameScreen, in root coordinates, so the visual always matches the snap
+        // candidate. ghostBlock/ghostOrigin are still consumed above ONLY to drive
+        // the cell-confined line-clear tint preview (computePreviewClearLinesFromGhost),
+        // never to draw the piece. This removes the stiff cell-locked second preview.
 
         // ----------------------------------------------------------------------
         // LAYER 1.5 — GRID LINES
