@@ -353,7 +353,7 @@ fun BlockGrid(
             Row {
                 for (c in 0 until block.boundingBoxWidth) {
 
-                    val isPresent = block.shape.any { it.row == r && it.col == c }
+                    val isPresent = block.shapeSet.contains(Coord(r, c))
 
                     Box(
                         modifier = Modifier
@@ -690,7 +690,7 @@ fun BlockShapeDisplay(block: Block, cellSize: Dp) {
         for (r in 0 until block.boundingBoxHeight) {
             Row {
                 for (c in 0 until block.boundingBoxWidth) {
-                    val isPresent = block.shape.any { it.row == r && it.col == c }
+                    val isPresent = block.shapeSet.contains(Coord(r, c))
                     Box(
                         modifier = Modifier
                             .size(cellSize)
@@ -816,7 +816,6 @@ fun MenuToggleRow(label: String, checked: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(sh(0.05f))
-            .safeClickable(onClick = onClick)
             .padding(vertical = sdp(0.004f)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween

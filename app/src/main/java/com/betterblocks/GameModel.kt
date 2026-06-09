@@ -57,6 +57,9 @@ data class Block(
 
     val boundingBoxHeight: Int
         get() = (shape.maxOfOrNull { it.row } ?: -1) + 1
+
+    /** Pre-built set for O(1) membership checks in BlockGrid and drag previews. */
+    val shapeSet: Set<Coord> = shape.toHashSet()
 }
 
 /**

@@ -58,6 +58,14 @@ object AdManager {
         MobileAds.initialize(context)
     }
 
+    /**
+     * Call from Activity.onDestroy() to cancel any running countdown ticks.
+     * Prevents the Handler from posting callbacks after the Activity is gone.
+     */
+    fun cleanup() {
+        clearRewardedCountdown()
+    }
+
     // Helper to start and clear the countdown state (ticks once/second on main thread)
     private fun startRewardedCountdown(totalSeconds: Int) {
         // Cancel any previous countdown loop

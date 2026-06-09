@@ -368,21 +368,9 @@ private fun StatRow(
     }
 }
 
-@Composable
-private fun ConfettiParticles() {
-    // Simple confetti particle burst effect
-    val particles = remember { List(20) { GameSummaryConfettiParticle() } }
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        particles.forEach { particle ->
-            ConfettiParticleItem(particle)
-        }
-    }
-}
-
 private data class GameSummaryConfettiParticle(
     val x: Float = Random.nextFloat(),
-    val y: Float = Random.nextFloat() * 0.3f, // Start from top
+    val startY: Float = Random.nextFloat() * 0.3f,
     val color: Color = listOf(
         Color(0xFFFFD700), // Gold
         Color(0xFFFF69B4), // Pink
@@ -394,27 +382,36 @@ private data class GameSummaryConfettiParticle(
 )
 
 @Composable
-private fun ConfettiParticleItem(particle: GameSummaryConfettiParticle) {
-    var offsetY by remember { mutableStateOf(particle.y) }
+private fun ConfettiParticles() {
+    val particles = remember { List(20) { GameSummaryConfettiParticle() } }
+    // Single list of Y offsets driven by ONE coroutine — avoids 20 individual LaunchedEffects
+    val yOffsets = remember { particles.map { mutableStateOf(it.startY) } }
 
     LaunchedEffect(Unit) {
-        while (offsetY < 1.2f) {
+        while (yOffsets.any { it.value < 1.2f }) {
             delay(16)
-            offsetY += 0.01f
+            yOffsets.forEachIndexed { i, state ->
+                if (state.value < 1.2f) state.value += 0.01f
+            }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .wrapContentSize(Alignment.TopStart)
-            .offset(
-                x = (particle.x * 400).dp,
-                y = (offsetY * 800).dp
+    Box(modifier = Modifier.fillMaxSize()) {
+        particles.forEachIndexed { i, particle ->
+            val offsetY by yOffsets[i]
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .wrapContentSize(Alignment.TopStart)
+                    .offset(
+                        x = (particle.x * 400).dp,
+                        y = (offsetY * 800).dp
+                    )
+                    .size(particle.size.dp)
+                    .background(particle.color, shape = androidx.compose.foundation.shape.CircleShape)
             )
-            .size(particle.size.dp)
-            .background(particle.color, shape = androidx.compose.foundation.shape.CircleShape)
-    )
+        }
+    }
 }
 
 /**

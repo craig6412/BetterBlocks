@@ -79,10 +79,13 @@ object NotificationManagerHelper {
     }
 
     // Public API for UI wiring
+    /**
+     * Mark notifications as enabled. Callers (e.g. SettingsActivity) are responsible for
+     * requesting POST_NOTIFICATIONS permission on Android 13+ before calling this.
+     */
     fun enableNotifications(context: Context) {
         val appContext = context.applicationContext
         prefs(appContext).edit().putBoolean(PREF_ENABLED, true).apply()
-        // TODO: The UI should request POST_NOTIFICATIONS permission (Android 13+) before scheduling.
     }
 
     fun disableNotifications(context: Context) {

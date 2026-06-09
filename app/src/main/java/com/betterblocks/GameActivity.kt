@@ -16,6 +16,11 @@ import com.betterblocks.ads.AdManager
 import com.betterblocks.ui.theme.BetterBlocksTheme
 
 class GameActivity : ComponentActivity() {
+    override fun onDestroy() {
+        AdManager.cleanup()
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 

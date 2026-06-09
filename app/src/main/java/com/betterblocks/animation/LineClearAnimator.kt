@@ -63,18 +63,24 @@ data class CellAnimationState(
     val sweepHit: Boolean = false
 )
 
-@Immutable
-data class Particle(
-    val position: Offset,
-    val velocity: Offset,
-    val color: Color,
+// Mutable to allow in-place update inside the particle loop — avoids a full list
+// copy (mapNotNull) every 16 ms frame during animation.
+class Particle(
+    var posX: Float,
+    var posY: Float,
+    var velX: Float,
+    var velY: Float,
+    val color: Color,        // Color shifts are small; we keep a mutable field below
+    var tintedColor: Color,
     val size: Float,
-    val alpha: Float,
-    val lifetime: Float,
+    var alpha: Float,
+    var lifetime: Float,
     val maxLifetime: Float,
-    val rotation: Float,
+    var rotation: Float,
     val angularVelocity: Float
-)
+) {
+    val position: Offset get() = Offset(posX, posY) // compat accessor for ParticleRenderer
+}
 
 // -------------------------
 // SweepEngine
@@ -298,33 +304,21 @@ object ParticleEngine {
         tintColor: Color,
         isRowClear: Boolean
     ): List<Particle> {
-        val particles = mutableListOf<Particle>()
-
-        // Short, premium-looking shard burst. No image resources needed:
-        // tiny glowing rectangles travel with the same left-to-right / top-to-bottom sweep.
         val particleCount = (8 + (cellPixelSize / 12f)).toInt().coerceIn(8, 14)
-
+        val result = ArrayList<Particle>(particleCount)
         for (i in 0 until particleCount) {
             val forward = cellPixelSize * (1.25f + Random.nextFloat() * 1.35f)
             val sideways = (Random.nextFloat() - 0.5f) * cellPixelSize * 0.62f
-
-            val vx = if (isRowClear) {
-                forward
-            } else {
-                sideways
-            }
-
-            val vy = if (isRowClear) {
-                sideways
-            } else {
-                forward
-            }
-
-            particles.add(
+            val vx = if (isRowClear) forward else sideways
+            val vy = if (isRowClear) sideways else forward
+            result.add(
                 Particle(
-                    position = Offset(centerX, centerY),
-                    velocity = Offset(vx, vy),
+                    posX = centerX,
+                    posY = centerY,
+                    velX = vx,
+                    velY = vy,
                     color = tintColor,
+                    tintedColor = tintColor,
                     size = cellPixelSize * (0.045f + Random.nextFloat() * 0.075f),
                     alpha = 1f,
                     lifetime = 0f,
@@ -334,46 +328,42 @@ object ParticleEngine {
                 )
             )
         }
-
-        return particles
+        return result
     }
 
-    fun updateParticles(
-        particles: List<Particle>,
-        deltaMs: Float
-    ): List<Particle> {
-        if (particles.isEmpty()) return emptyList()
+    /**
+     * Mutates particles in-place and removes dead ones.
+     * Avoids creating a new List every 16 ms — eliminates significant GC pressure during animation.
+     */
+    fun updateParticles(particles: MutableList<Particle>, deltaMs: Float) {
+        if (particles.isEmpty()) return
         val dt = deltaMs / 1000f
         val gravity = BASE_TILE_SIZE * 2.5f * dt
         val drag = 0.90f
-        return particles.mapNotNull { p ->
-            val newLifetime = p.lifetime + deltaMs
-            if (newLifetime >= p.maxLifetime) return@mapNotNull null
-            val vx = p.velocity.x * drag
-            val vy = (p.velocity.y * drag) + gravity
-            val newRotation = p.rotation + p.angularVelocity * dt
-             val newPos = Offset(
-                 p.position.x + vx * dt,
-                 p.position.y + vy * dt
-             )
-            val fadeProgress = newLifetime / p.maxLifetime
-            val newAlpha = 1f - (fadeProgress * fadeProgress * fadeProgress)
-            val shiftedColor = Color(
+        val iter = particles.iterator()
+        while (iter.hasNext()) {
+            val p = iter.next()
+            p.lifetime += deltaMs
+            if (p.lifetime >= p.maxLifetime) {
+                iter.remove()
+                continue
+            }
+            p.velX *= drag
+            p.velY = p.velY * drag + gravity
+            p.posX += p.velX * dt
+            p.posY += p.velY * dt
+            p.rotation += p.angularVelocity * dt
+            val fade = p.lifetime / p.maxLifetime
+            p.alpha = 1f - (fade * fade * fade)
+            // Subtle warm shift on each tick
+            p.tintedColor = Color(
                 red = (p.color.red + 0.1f).coerceIn(0f, 1f),
                 green = (p.color.green + 0.05f).coerceIn(0f, 1f),
                 blue = p.color.blue,
                 alpha = 1f
             )
-            p.copy(
-                position = newPos,
-                velocity = Offset(vx, vy),
-                alpha = newAlpha,
-                lifetime = newLifetime,
-                color = shiftedColor,
-                rotation = newRotation
-             )
-         }
-     }
+        }
+    }
 }
 
 // -------------------------
@@ -497,12 +487,8 @@ class LineClearAnimator {
                 }
             }
 
-            val updatedParticles = ParticleEngine.updateParticles(
-                particles = particles,
-                deltaMs = SWEEP_DURATION.toFloat() / 60f
-            )
-            particles.clear()
-            particles += updatedParticles
+            // Mutate in-place — no new List allocation each frame
+            ParticleEngine.updateParticles(particles, SWEEP_DURATION.toFloat() / 60f)
 
             updateState(
                 LineClearAnimationState(
@@ -629,9 +615,7 @@ class LineClearAnimator {
         var elapsed = 0f
         // Use the dedicated particle fade duration
         while (elapsed < PARTICLE_FADE_DURATION && particles.isNotEmpty()) {
-            val updated = ParticleEngine.updateParticles(particles, PARTICLE_FRAME_MS.toFloat())
-            particles.clear()
-            particles += updated
+            ParticleEngine.updateParticles(particles, PARTICLE_FRAME_MS.toFloat()) // mutates in-place
             // During fadeout, cellStates are empty but particles are still live
             updateState(
                 LineClearAnimationState(
@@ -824,9 +808,9 @@ fun ParticleRenderer(
         drawIntoCanvas { canvas ->
              particles.forEach { p ->
                  particlePaint.color = Color(
-                     red = p.color.red,
-                     green = p.color.green,
-                     blue = p.color.blue,
+                     red = p.tintedColor.red,
+                     green = p.tintedColor.green,
+                     blue = p.tintedColor.blue,
                      alpha = p.alpha
                  )
                 canvas.save()

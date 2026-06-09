@@ -20,9 +20,10 @@ fun BannerAdView(modifier: Modifier = Modifier) {
                 loadAd(AdRequest.Builder().build())
             }
         },
-        update = { view ->
-            // Do NOT set size again — only reload ad safely
-            view.loadAd(AdRequest.Builder().build())
+        update = {
+            // Intentionally empty — ad is loaded once in factory; reloading here would fire
+            // a new AdMob request on every Compose recomposition (every block placement, score
+            // update, etc.) which wastes impressions and risks AdMob invalid-traffic flags.
         }
     )
 }

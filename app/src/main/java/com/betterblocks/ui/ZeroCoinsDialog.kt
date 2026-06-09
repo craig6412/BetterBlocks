@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -26,7 +27,9 @@ fun ZeroCoinsDialog(
     onWatchAd: () -> Unit,
     onGoToShop: () -> Unit
 ) {
-    val isLoaded = AdManager.isRewardedLoaded.value
+    // Read directly as a Compose state delegate so the button re-enables automatically
+    // if the ad finishes loading while this dialog is open.
+    val isLoaded by AdManager.isRewardedLoaded
 
     AlertDialog(
         onDismissRequest = onDismiss,

@@ -25,9 +25,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.betterblocks.*
 import com.betterblocks.BoardBackground
-import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.platform.LocalContext
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import android.util.Log
@@ -50,13 +48,7 @@ import kotlin.div
 import kotlin.math.cos
 import kotlin.math.sin
 
-// New imports for fallback drawable->bitmap painter
-import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
+import com.betterblocks.BuildConfig
 
 // Core palette for Cyber-Void theme
 private val GridPurple = Color(0xFF08060B)             // Game Grid / Empty Slots: Abyssal Purple
@@ -495,9 +487,9 @@ fun RadialBurstOverlay(
 // MAIN BOARD COMPOSABLE
 // --------------------------------------------------------------------------
 private val preClearTintColors = listOf(
-    Color(0xFF42A5F5), // Blue
-    Color(0xFF66BB6A), // Green
-    Color(0xFFF06292)  // Pink (requested)
+    Color(0xFF7B1FA2), // Purple
+    Color(0xFFF06292), // Pink
+    Color(0xFF42A5F5)  // Blue
 )
 
 private fun pickTintColor(index: Int): Color {
@@ -511,20 +503,13 @@ private data class PreviewClearLines(
     val hasAny: Boolean get() = rows.isNotEmpty() || cols.isNotEmpty()
 }
 
-private fun hueShiftPreviewColor(cellValue: Int?, fallback: Color): Color {
-    if (cellValue == null || cellValue <= 0) return fallback
-
-    val palette = listOf(
-        Color(0xFFFF4FD8), // blue -> neon pink feel
-        Color(0xFFB45CFF), // orange -> purple feel
-        Color(0xFF5DFF8B), // purple -> green feel
-        Color(0xFFFFD166), // green -> gold feel
-        Color(0xFF00E5FF), // red/pink -> cyan feel
-        Color(0xFFFF6B6B)  // cyan/yellow -> coral feel
-    )
-
-    val index = kotlin.math.abs(cellValue) % palette.size
-    return palette[index]
+private fun previewAccentColor(drawableResId: Int?, fallback: Color): Color {
+    return when (drawableResId) {
+        com.betterblocks.R.drawable.blue -> Color(0xFF42A5F5)
+        com.betterblocks.R.drawable.pink -> Color(0xFFF06292)
+        com.betterblocks.R.drawable.purple -> Color(0xFF7B1FA2)
+        else -> fallback
+    }
 }
 
 // kotlin
@@ -542,7 +527,7 @@ fun AnimatedGameBoard(
     onClearAnimationFinished: () -> Unit,
     controller: SimpleDragController // <-- new param
 ) {
-    Log.d("BoardRender", "Using ULTRA animation system (clearing=${effectCells.size})")
+    if (BuildConfig.DEBUG) Log.d("BoardRender", "Using ULTRA animation system (clearing=${effectCells.size})")
 
     val density = LocalDensity.current
     val cellSizePx = with(density) { cellDp.toPx() }
@@ -578,15 +563,28 @@ fun AnimatedGameBoard(
     }
     val previewTintColor = pickTintColor(uiState.moveNumber)
 
-    val infinite = rememberInfiniteTransition()
-    val pulseAlpha by infinite.animateFloat(
-        initialValue = 0.20f,
-        targetValue = 0.30f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
+    // Only animate the pulse when a ghost block is actually present — avoids recomposing
+    // all 81 cells at 60 fps permanently when the board is idle.
+    val pulseAlpha = remember { mutableStateOf(0.20f) }
+    val hasGhost = ghostBlock != null
+    LaunchedEffect(hasGhost) {
+        if (hasGhost) {
+            while (true) {
+                androidx.compose.animation.core.animate(
+                    initialValue = 0.20f,
+                    targetValue = 0.30f,
+                    animationSpec = tween(900, easing = LinearEasing)
+                ) { v, _ -> pulseAlpha.value = v }
+                androidx.compose.animation.core.animate(
+                    initialValue = 0.30f,
+                    targetValue = 0.20f,
+                    animationSpec = tween(900, easing = LinearEasing)
+                ) { v, _ -> pulseAlpha.value = v }
+            }
+        } else {
+            pulseAlpha.value = 0.20f
+        }
+    }
 
 
     var boardWindowPos by remember { mutableStateOf(Offset.Zero) }
@@ -599,9 +597,7 @@ fun AnimatedGameBoard(
             // Root space is used because the finger position is delivered in root space (fingerPosRoot).
             .onGloballyPositioned { coords ->
                 boardWindowPos = coords.positionInRoot()
-                // Diagnostic: root vs window differ by the window top inset (status bar / cutout).
-                // If finger lands ~one cell off in Y, compare these two in Logcat.
-                Log.d(
+                if (BuildConfig.DEBUG) Log.d(
                     "BoardRender",
                     "boardOrigin root=${coords.positionInRoot()} window=${coords.positionInWindow()}"
                 )
@@ -626,7 +622,7 @@ fun AnimatedGameBoard(
                     // drawn on top and does NOT inset content. So there is no visual offset.
                     visualOffset = Offset.Zero
                 )
-                Log.d("BoardRender", "setGridMetrics (deferred) topLeftRoot=$boardWindowPos totalBoardPx=$totalBoardPx cellSizePx=$cellSizePx visualOffset=ZERO")
+                if (BuildConfig.DEBUG) Log.d("BoardRender", "setGridMetrics (deferred) topLeftRoot=$boardWindowPos totalBoardPx=$totalBoardPx cellSizePx=$cellSizePx visualOffset=ZERO")
             }
         }
 
@@ -667,7 +663,7 @@ fun AnimatedGameBoard(
                     tintColor = previewTintColor.copy(alpha = 0.65f),
                     isPreviewTinted = isPreviewTinted,
                     isPreviewGhostCell = isPreviewGhostCell,
-                    previewPulseAlpha = pulseAlpha,
+                    previewPulseAlpha = pulseAlpha.value,
                     previewDrawableResId = previewDrawableForCell(
                         row = r,
                         col = c,
@@ -813,73 +809,22 @@ fun AnimatedBoardCell(
         }
 
         if (displayCellValue != null && displayCellValue > 0) {
-            val context = LocalContext.current
-            val resType = remember(displayCellValue) {
-                try {
-                    context.resources.getResourceTypeName(displayCellValue)
-                } catch (_: Exception) {
-                    null
-                }
-            }
+            // Texture lookup from the global pre-decoded cache — zero allocation, zero disk I/O.
+            // The cache is populated once at app start by BlockTextureCache.init().
+            val painter: Painter? = BlockTextureCache.getPainter(displayCellValue)
 
-            if (resType == "drawable") {
-                // Allow only raster or vector images; if painterResource fails (unsupported XML types), fall back to Drawable->Bitmap
-                val painterFallback = remember(displayCellValue) {
-                    // Attempt to load a Drawable and convert to Bitmap for compose when needed
-                    try {
-                        val dr: Drawable? = AppCompatResources.getDrawable(context, displayCellValue)
-                        if (dr == null) return@remember null
-
-                        // If it's already a BitmapDrawable use its bitmap else render to bitmap
-                        when (dr) {
-                            is BitmapDrawable -> dr.bitmap
-                            else -> drawableToBitmap(dr)
-                        }
-                    } catch (t: Throwable) {
-                        Log.w("BoardCell", "drawable fallback failed for id=$displayCellValue", t)
-                        null
-                    }
-                }
-
-                // First try painterResource; it will throw for unsupported XML drawable types
-                // var painter: Painter? = null
-                // try {
-                //     painter = painterResource(id = cellValue)
-                // } catch (iae: IllegalArgumentException) {
-                //     // fallback to bitmap painter if we were able to produce one
-                //     painter = painterFallback?.let { bmp -> BitmapPainter(bmp.asImageBitmap()) }
-                //     Log.w("BoardCell", "painterResource unsupported for id=$displayCellValue -> falling back to BitmapPainter")
-                // }
-
-                // Compose doesn't allow try/catch around composable invocations like painterResource.
-                // Instead, load the Drawable via AppCompatResources (non-composable) and rasterize it to a BitmapPainter.
-                val painter: Painter? = painterFallback?.let { bmp -> BitmapPainter(bmp.asImageBitmap()) }
-
-                if (painter != null) {
-                    Image(
-                        painter = painter,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .scale(BLOCK_TEXTURE_SCALE * clearScale)
-                            .alpha(clearAlpha)
-                    )
-                } else {
-                    Log.e(
-                        "BoardCellError",
-                        "Invalid drawable used as block texture: ${runCatching {
-                            context.resources.getResourceEntryName(displayCellValue)
-                        }.getOrNull()}"
-                    )
-                }
-            } else {
-                Log.e(
-                    "BoardCellError",
-                    "Invalid drawable used as block texture: ${runCatching {
-                        context.resources.getResourceEntryName(displayCellValue)
-                    }.getOrNull()}"
+            if (painter != null) {
+                Image(
+                    painter = painter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .scale(BLOCK_TEXTURE_SCALE * clearScale)
+                        .alpha(clearAlpha)
                 )
+            } else if (BuildConfig.DEBUG) {
+                Log.e("BoardCellError", "No cached texture for drawable id=$displayCellValue — add to BLOCK_DRAWABLES")
             }
         }
 
@@ -903,7 +848,7 @@ fun AnimatedBoardCell(
         // This adds a small pulsing glow without drawing full-row/column beams.
         if (isPreviewTinted || isPreviewGhostCell) {
             val pulseBoost = ((previewPulseAlpha - 0.20f) / 0.10f).coerceIn(0f, 1f)
-            val accentColor = hueShiftPreviewColor(previewDrawableResId, tintColor)
+            val accentColor = previewAccentColor(previewDrawableResId, tintColor)
             val glowAlpha = 0.12f + pulseBoost * 0.10f
             val borderAlpha = 0.30f + pulseBoost * 0.18f
 
@@ -985,16 +930,6 @@ private fun CellTintGlowLayer(
     }
 }
 
-// Helper: convert any Drawable into a Bitmap (uses intrinsic size when available, falls back to 1x1)
-private fun drawableToBitmap(drawable: Drawable): Bitmap {
-    val width = (drawable.intrinsicWidth.takeIf { it > 0 } ?: 1)
-    val height = (drawable.intrinsicHeight.takeIf { it > 0 } ?: 1)
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bitmap)
-    drawable.setBounds(0, 0, canvas.width, canvas.height)
-    drawable.draw(canvas)
-    return bitmap
-}
 
 // --------------------------------------------------------------------------
 // NEW: CellFragmentBurstLayer
@@ -1102,12 +1037,18 @@ private fun isGhostCell(
     return false
 }
 
+private val preClearDrawables = listOf(
+    com.betterblocks.R.drawable.blue,
+    com.betterblocks.R.drawable.pink,
+    com.betterblocks.R.drawable.purple
+)
+
 private fun previewDrawableForLine(
     lineIndex: Int,
     isRow: Boolean,
     moveNumber: Int
 ): Int? {
-    val choices = COLOR_WIPE_DRAWABLES
+    val choices = preClearDrawables
     if (choices.isEmpty()) return null
 
     // Stable line-level random color. Every cell in the same row/column gets the same drawable.

@@ -18,6 +18,8 @@ class BetterBlocksApp : Application() {
             FirestoreManager.init(applicationContext)
             NotificationManagerHelper.initialize(applicationContext)
             AdManager.initialize(applicationContext)
+            // Pre-decode all block textures once so AnimatedBoardCell never allocates Bitmaps during drag.
+            BlockTextureCache.init(applicationContext)
 
             Handler(Looper.getMainLooper()).postDelayed({
                 preloadAdsSafely()

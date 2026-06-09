@@ -168,8 +168,12 @@ fun GlowingRainbowIcon() {
     }
 }
 
+data class ConfettiParticle(val x: Float, val startY: Float, val color: Color)
+
 /**
- * Simple confetti particle effect
+ * Simple confetti particle effect.
+ * Uses a single coroutine to drive all 20 particles — avoids 20 individual
+ * LaunchedEffect while-loops which caused jank on mid-range devices.
  */
 @Composable
 fun ConfettiEffect() {
@@ -177,7 +181,7 @@ fun ConfettiEffect() {
         List(20) {
             ConfettiParticle(
                 x = Random.nextFloat() * 300f,
-                y = -50f,
+                startY = -50f,
                 color = listOf(
                     Color(0xFFFF0000),
                     Color(0xFF00FF00),
@@ -190,18 +194,24 @@ fun ConfettiEffect() {
         }
     }
 
-    particles.forEach { particle ->
-        var yPos by remember { mutableStateOf(particle.y) }
-        var alpha by remember { mutableStateOf(1f) }
+    val yOffsets = remember { particles.map { mutableStateOf(it.startY) } }
+    val alphas = remember { particles.map { mutableStateOf(1f) } }
 
-        LaunchedEffect(Unit) {
-            while (yPos < 500f) {
-                delay(16)
-                yPos += 3f
-                alpha = (1f - (yPos / 500f)).coerceAtLeast(0f)
+    LaunchedEffect(Unit) {
+        while (yOffsets.any { it.value < 500f }) {
+            delay(16)
+            yOffsets.forEachIndexed { i, state ->
+                if (state.value < 500f) {
+                    state.value += 3f
+                    alphas[i].value = (1f - (state.value / 500f)).coerceAtLeast(0f)
+                }
             }
         }
+    }
 
+    particles.forEachIndexed { i, particle ->
+        val yPos by yOffsets[i]
+        val alpha by alphas[i]
         Box(
             modifier = Modifier
                 .offset(x = particle.x.dp, y = yPos.dp)
@@ -211,8 +221,6 @@ fun ConfettiEffect() {
         )
     }
 }
-
-data class ConfettiParticle(val x: Float, val y: Float, val color: Color)
 
 /**
  * TIER UNLOCK CELEBRATION DIALOG

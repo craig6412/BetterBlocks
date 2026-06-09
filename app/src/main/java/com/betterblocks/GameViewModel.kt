@@ -398,12 +398,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         isGameOver: Boolean,
         isLastChance: Boolean
     ) {
-        saveBoard(board)
-        saveBlocks(blocks)
-        saveCoins(coins)
-        saveRainbowCount(rainbowCount)
-        saveColorWipeCount(colorWipeCount)
+        // Batch all direct prefs writes into a single editor — reduces SharedPreferences
+        // lock acquisitions from 3 down to 1 per persist call.
+        val boardJson = BoardSerializer.toJson(board)
+        val blocksJson = BlockSerializer.blocksToJson(blocks)
         prefs.edit()
+            .putString(KEY_SAVED_BOARD, boardJson)
+            .putString(KEY_SAVED_BLOCKS, blocksJson)
             .putInt(KEY_SAVED_SCORE, score)
             .putInt(KEY_SAVED_METER, meterValue)
             .putInt(KEY_FREE_ROTATIONS, freeRotations)
@@ -413,6 +414,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .putBoolean(KEY_IS_LAST_CHANCE, isLastChance)
             // don't overwrite first-game-over flag here
             .apply()
+        // Shop repo writes go through their own synchronized path — kept separate.
+        saveCoins(coins)
+        saveRainbowCount(rainbowCount)
+        saveColorWipeCount(colorWipeCount)
     }
 
     private fun areBlocksRestorable(blocks: List<Block>?): Boolean {
@@ -563,14 +568,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // Deduct Inventory immediately
-        val newCount = currentState.colorWipeCount - 1
-        saveColorWipeCount(newCount)
-        _uiState.update { it.copy(colorWipeCount = newCount) }
-        saveSelectedBlockId(_uiState.value.selectedBlock?.id)
-        Log.d("GameViewModel", "Color wipe consumed -> newCount=$newCount")
-
-        // Use COLOR_WIPE_DRAWABLES as the single source of truth for mapping wheel index -> drawable id
+        // Validate the color index BEFORE deducting inventory — if the index is invalid we
+        // must not consume the color wipe (item would be lost with no effect).
         val targetDrawableId = try {
             COLOR_WIPE_DRAWABLES[colorIndex]
         } catch (t: Throwable) {
@@ -578,6 +577,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             playBadPlacementSfx()
             return
         }
+
+        // Index is valid — now safe to deduct inventory
+        val newCount = currentState.colorWipeCount - 1
+        saveColorWipeCount(newCount)
+        _uiState.update { it.copy(colorWipeCount = newCount) }
+        saveSelectedBlockId(_uiState.value.selectedBlock?.id)
+        Log.d("GameViewModel", "Color wipe consumed -> newCount=$newCount")
 
         val cellsToClear = mutableSetOf<Coord>()
         for (r in 0 until GRID_SIZE) {
@@ -1140,6 +1146,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             playLineClearSfx()
         }
 
+        // Award coins for crossing score thresholds (every COIN_REWARD_THRESHOLD points = COINS_PER_REWARD coins).
+        // Computed here so both the state update and coin persistence use the same value.
+        val previousScore = current.score
+        val newScore = previousScore + points
+        val coinsAwarded = ((newScore / COIN_REWARD_THRESHOLD) - (previousScore / COIN_REWARD_THRESHOLD)) * COINS_PER_REWARD
+
         val remainingBlocks = current.availableBlocks.filter { it.id != block.id }
         val nextBlocks = if (remainingBlocks.isEmpty()) generateNewBlocks(boardAfterClear)
         else remainingBlocks
@@ -1155,9 +1167,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 score = it.score + points,
                 clearingCells = cellsToClear,
                 // Update the single source-of-truth counter for lines cleared this run.
-                // Use rowsToClear.size + colsToClear.size (counts unique cleared lines)
-                linesClearedThisGame = it.linesClearedThisGame + (rowsToClear.size + colsToClear.size)
+                linesClearedThisGame = it.linesClearedThisGame + (rowsToClear.size + colsToClear.size),
+                // Accumulate coins earned this game session for the end-of-game summary.
+                coinsEarnedThisGame = it.coinsEarnedThisGame + coinsAwarded
             )
+        }
+
+        // Persist and reflect any coin rewards earned
+        if (coinsAwarded > 0) {
+            val newCoins = _uiState.value.coins + coinsAwarded
+            saveCoins(newCoins)
+            _uiState.update { it.copy(coins = newCoins) }
+            Log.d("GameViewModel", "Coin reward: +$coinsAwarded coins at score=$newScore (total=$newCoins)")
         }
 
         val updated = _uiState.value

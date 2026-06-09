@@ -16,17 +16,18 @@ object CouponManager {
     private const val PREFS_NAME = "coupon_prefs"
     private const val USED_COUPON_PREFIX = "used_coupon_"
 
+    // SECURITY: codes are opaque and non-guessable. Do NOT use real names or dictionary words —
+    // the APK can be decompiled and these values are visible in plain text.
     private val VALID_COUPONS = setOf(
-        "CraigUngaro",
-        "Nana",
-        "JoeAtchley",
-        "TanyaUngaro",
-        "RandyPeterson",
-        "WayneGreen",
-        "TonjaGreen",
-        "CieraUngaro",
-        "JamesGreen"
-
+        "BB-7X4K-2025",
+        "BB-9M2P-2025",
+        "BB-3R8W-2025",
+        "BB-5T6N-2025",
+        "BB-1Q9J-2025",
+        "BB-4V7H-2025",
+        "BB-8L3D-2025",
+        "BB-2Z5F-2025",
+        "BB-6Y1C-2025"
     )
 
     sealed class CouponResult {

@@ -3,6 +3,7 @@ package com.betterblocks
 //calling Game REady for closed testing
 
 import android.util.Log
+import com.betterblocks.BuildConfig
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
@@ -259,16 +260,10 @@ fun GameScreen(
     val screenH = sh(1f)
     val densityValue = LocalDensity.current.density
 
-    LaunchedEffect(Unit) {
-        Log.e(
-            "FOLD_DEBUG",
-            """
-        SCREEN METRICS
-        sw(1f) = $screenW
-        sh(1f) = $screenH
-        density = $densityValue
-        """.trimIndent()
-        )
+    if (BuildConfig.DEBUG) {
+        LaunchedEffect(Unit) {
+            Log.d("FOLD_DEBUG", "SCREEN METRICS sw=$screenW sh=$screenH density=$densityValue category=$cachedDeviceCategory")
+        }
     }
 
     // --- Double-ad countdown ticker for testing ---
@@ -298,34 +293,21 @@ fun GameScreen(
         }
     }
 
-    @Composable
-    fun deviceCategory(forcePreviewFold: Boolean = false): DeviceClass {
-        if (forcePreviewFold) {
-            Log.e("FOLD_DEBUG", "FORCED PREVIEW FOLD")
-            return DeviceClass.Foldable
-        }
-
-        val width = sw(1f)
-        val height = sh(1f)
-
-        val category = classifyDevice(width, height)
-
-        Log.e(
-            "FOLD_DEBUG",
-            """
-        deviceCategory()
-        widthDp = $width
-        heightDp = $height
-        RESULT = $category
-        """.trimIndent()
-        )
-
-        return category
+    // Compute device category once per composition — screen size doesn't change mid-session.
+    // This prevents deviceCategory() being called 7+ times per recomposition, each triggering
+    // sw/sh reads and string-building logs.
+    val cachedDeviceCategory: DeviceClass = if (forcePreviewFold) {
+        DeviceClass.Foldable
+    } else {
+        remember(sw(1f), sh(1f)) { classifyDevice(sw(1f), sh(1f)) }
     }
 
     @Composable
+    fun deviceCategory(forcePreviewFold: Boolean = false): DeviceClass = cachedDeviceCategory
+
+    @Composable
     fun boardSize(forcePreviewFold: Boolean = false): Dp {
-        val category = deviceCategory(forcePreviewFold)
+        val category = cachedDeviceCategory
         val smallest = minOf(sw(1f), sh(1f))
 
         val rawSize = when (category) {
@@ -334,23 +316,10 @@ fun GameScreen(
             DeviceClass.Foldable -> smallest * 0.50f
         }
 
-        val finalSize =
-            if (category == DeviceClass.Foldable)
-                minOf(rawSize, sh(1f) * 0.55f) // 👈 the FIX
-            else
-                rawSize
-
-        Log.e(
-            "FOLD_DEBUG",
-            """
-        boardSize()
-        category = $category
-        rawSize = $rawSize
-        finalSize = $finalSize
-        """.trimIndent()
-        )
-
-        return finalSize
+        return if (category == DeviceClass.Foldable)
+            minOf(rawSize, sh(1f) * 0.55f)
+        else
+            rawSize
     }
     @Composable
     fun gridVerticalOffset(forcePreviewFold: Boolean = false): Dp =
@@ -560,7 +529,7 @@ fun GameScreen(
                                     }
                                 },
                                 onDragStart = { block, fingerPosRoot ->
-                                    Log.d("GameScreen", "onDragStart (AvailableBlocks): block=${block.id} fingerPosRoot=$fingerPosRoot")
+                                    if (BuildConfig.DEBUG) Log.d("GameScreen", "onDragStart (AvailableBlocks): block=${block.id} fingerPosRoot=$fingerPosRoot")
                                     // record recent drag here as well (defensive in case DRAG_START path differs)
                                     recentlyDraggedBlockId = block.id
                                     recentDragTimeMs = System.currentTimeMillis()
@@ -569,12 +538,12 @@ fun GameScreen(
                                     drag.startDrag(block, fingerPosRoot, liftPx)
                                 },
                                 onDrag = { newFingerPos ->
-                                    Log.d("GameScreen", "onDrag (AvailableBlocks): pos=$newFingerPos")
+                                    if (BuildConfig.DEBUG) Log.d("GameScreen", "onDrag (AvailableBlocks): pos=$newFingerPos")
                                     drag.updatePosition(newFingerPos)
 
                                 },
                                 onDragEnd = {
-                                    Log.d("GameScreen", "onDragEnd (AvailableBlocks) called")
+                                    if (BuildConfig.DEBUG) Log.d("GameScreen", "onDragEnd (AvailableBlocks) called")
                                     val drop = drag.endDrag(uiState.board)
                                     // Clear the recent-drag guard on finger up (so later taps work normally)
                                     recentlyDraggedBlockId = null
@@ -647,7 +616,7 @@ fun GameScreen(
                         }
                     },
                     onDragStart = { block, previewOffset ->
-                        Log.d("GameScreen", "onDragStart (BottomBar): block=${block.id} previewOffset=$previewOffset")
+                        if (BuildConfig.DEBUG) Log.d("GameScreen", "onDragStart (BottomBar): block=${block.id} previewOffset=$previewOffset")
                         // record recent drag (special block drag starts too)
                         recentlyDraggedBlockId = block.id
                         recentDragTimeMs = System.currentTimeMillis()
@@ -657,11 +626,11 @@ fun GameScreen(
                         drag.startDrag(block, previewOffset, liftPx)
                     },
                     onDrag = { newFingerPos ->
-                        Log.d("GameScreen", "onDrag (BottomBar): pos=$newFingerPos")
+                        if (BuildConfig.DEBUG) Log.d("GameScreen", "onDrag (BottomBar): pos=$newFingerPos")
                         drag.updatePosition(newFingerPos)
                     },
                     onDragEnd = {
-                        Log.d("GameScreen", "onDragEnd (BottomBar) called")
+                        if (BuildConfig.DEBUG) Log.d("GameScreen", "onDragEnd (BottomBar) called")
                         val drop = drag.endDrag(uiState.board)
                         // Clear guard on drag end
                         recentlyDraggedBlockId = null

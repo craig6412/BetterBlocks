@@ -149,7 +149,7 @@ object FirestoreManager {
     ) {
         try {
             db().collection(COLLECTION)
-                .whereEqualTo("trophyTier", "UNRANKED")
+                .whereEqualTo("trophyTier", TrophyTier.UNRANKED.name)
                 .orderBy("score", Query.Direction.DESCENDING)
                 .orderBy("updatedAt_fallback", Query.Direction.DESCENDING)
                 .limit(100)
