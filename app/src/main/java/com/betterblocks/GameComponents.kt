@@ -4,6 +4,7 @@ import android.R.attr.shape
 import com.betterblocks.ui.detectSimpleDragOrTap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -218,37 +219,119 @@ fun ScoreDisplay(score: Int, label: String, modifier: Modifier = Modifier, showT
 
 @Composable
 fun SpecialMeterDisplay(currentValue: Int, maxValue: Int) {
-    val progress = currentValue.toFloat() / maxValue.toFloat()
+    val progress = (currentValue.toFloat() / maxValue.toFloat()).coerceIn(0f, 1f)
+    val isFull = currentValue >= maxValue
+
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(durationMillis = 300),
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
         label = "MeterProgress"
     )
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "SPECIAL CHARGE",
-            color = LightText.copy(alpha = 0.9f),
-            fontSize = ssp(0.022f),
-            fontFamily = Oswald,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = sdp(0.003f))
-        )
+    // Scale pulse — visible swell when meter gains value (0 = rest, 1 = peak)
+    val meterPulse = remember { Animatable(0f) }
+    val previousValue = remember { mutableIntStateOf(currentValue) }
+    LaunchedEffect(currentValue) {
+        if (currentValue > previousValue.intValue) {
+            meterPulse.snapTo(0f)
+            meterPulse.animateTo(1f, animationSpec = tween(280, easing = LinearOutSlowInEasing))
+            meterPulse.animateTo(0f, animationSpec = tween(450, easing = FastOutSlowInEasing))
+        }
+        previousValue.intValue = currentValue
+    }
+    // Vertical swell is much stronger than horizontal so the thin bar visibly thickens
+    val pulseScaleY = 1f + meterPulse.value * (if (isFull) 0.7f else 0.5f)
+    val pulseScaleX = 1f + meterPulse.value * (if (isFull) 0.05f else 0.03f)
+
+    // Glow intensity — brighter when full
+    val glowAlpha by animateFloatAsState(
+        targetValue = when {
+            isFull -> 0.55f
+            animatedProgress > 0.01f -> 0.28f
+            else -> 0f
+        },
+        animationSpec = tween(300),
+        label = "MeterGlow"
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Label row — READY badge appears when meter is full
+        Row(
+            modifier = Modifier
+                .fillMaxWidth(0.8f)
+                .padding(bottom = sdp(0.003f)),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SPECIAL CHARGE",
+                color = LightText.copy(alpha = 0.9f),
+                fontSize = ssp(0.022f),
+                fontFamily = Oswald,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (isFull) {
+                Text(
+                    text = "READY",
+                    color = Pink_Jackie,
+                    fontSize = ssp(0.022f),
+                    fontFamily = Oswald,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.8f)
-                .height(sdp(0.01f))
-                .clip(RoundedCornerShape(sdp(0.005f)))
-                .background(Color(0xFF2A0E45)) // Charge Bar (Empty Track): Dark Track
-                .border(sdp(0.0015f), Pink_Jackie.copy(alpha = 0.7f), RoundedCornerShape(sdp(0.005f)))
+                .graphicsLayer(scaleX = pulseScaleX, scaleY = pulseScaleY)
         ) {
+            // Glow halo painted behind the bar
+            if (glowAlpha > 0f) {
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(sdp(0.022f))
+                        .align(Alignment.Center)
+                ) {
+                    val fillW = size.width * animatedProgress
+                    if (fillW > 0f) {
+                        // Outer soft bloom
+                        drawRect(
+                            color = Pink_Jackie.copy(alpha = glowAlpha * 0.45f),
+                            topLeft = Offset(0f, -size.height * 0.55f),
+                            size = androidx.compose.ui.geometry.Size(fillW, size.height * 2.1f)
+                        )
+                        // Inner bright core
+                        drawRect(
+                            color = LightText.copy(alpha = glowAlpha * 0.22f),
+                            topLeft = Offset(0f, -size.height * 0.15f),
+                            size = androidx.compose.ui.geometry.Size(fillW, size.height * 1.3f)
+                        )
+                    }
+                }
+            }
+
+            // Empty track + animated fill bar
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(animatedProgress)
-                    .background(Color(0xFFD500F9)) // Special Charge Bar (Active): Neon Cyber-Violet
+                    .fillMaxWidth()
+                    .height(sdp(0.01f))
                     .clip(RoundedCornerShape(sdp(0.005f)))
-            )
+                    .background(Color(0xFF2A0E45))
+                    .border(sdp(0.0015f), Pink_Jackie.copy(alpha = 0.7f), RoundedCornerShape(sdp(0.005f)))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(animatedProgress)
+                        .clip(RoundedCornerShape(sdp(0.005f)))
+                        .background(if (isFull) LightText.copy(alpha = 0.95f) else Color(0xFFD500F9))
+                )
+            }
         }
     }
 }

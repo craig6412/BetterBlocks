@@ -527,8 +527,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Called when a player achieves a combo clear of 2 or more lines.
      */
-    private fun onSpecialMeterFilled(currentRainbowCount: Int, currentMeterValue: Int) {
-        val newMeter = currentMeterValue + 1
+    private fun onSpecialMeterFilled(currentRainbowCount: Int, currentMeterValue: Int, fillAmount: Int = 1) {
+        val newMeter = currentMeterValue + fillAmount
         if (newMeter >= SPECIAL_METER_MAX) {
             // Award block and reset meter
             val newCount = currentRainbowCount + 1
@@ -1121,9 +1121,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // --- SPECIAL METER: increment when player clears more than one line/column at once ---
         val clearedLines = rowsToClear.size + colsToClear.size
         if (clearedLines > 1) {
-            Log.d("GameViewModel", "placeBlock: combo clear detected clearedLines=$clearedLines -> increment special meter (currentMeter=${current.specialMeterValue})")
+            // Fill = floor((lines - 1)^1.3): linear base of (lines - 1) with a small
+            // exponential bonus for big combos. 2 lines -> 1, 3 -> 2, 4 -> 4, 5 -> 6.
+            val meterFill = Math.pow((clearedLines - 1).toDouble(), 1.3).toInt()
+            Log.d("GameViewModel", "placeBlock: combo clear detected clearedLines=$clearedLines -> meterFill=$meterFill (currentMeter=${current.specialMeterValue})")
             // Use current state's values; onSpecialMeterFilled will award a rainbow if meter completes
-            onSpecialMeterFilled(current.rainbowBlockCount, current.specialMeterValue)
+            onSpecialMeterFilled(current.rainbowBlockCount, current.specialMeterValue, meterFill)
         }
 
         val hasLineClear = cellsToClear.isNotEmpty()

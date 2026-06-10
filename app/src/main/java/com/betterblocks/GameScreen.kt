@@ -260,12 +260,6 @@ fun GameScreen(
     val screenH = sh(1f)
     val densityValue = LocalDensity.current.density
 
-    if (BuildConfig.DEBUG) {
-        LaunchedEffect(Unit) {
-            Log.d("FOLD_DEBUG", "SCREEN METRICS sw=$screenW sh=$screenH density=$densityValue category=$cachedDeviceCategory")
-        }
-    }
-
     // --- Double-ad countdown ticker for testing ---
     // Countdown ticking is owned by AdManager (main-thread handler). Compose must not mutate countdown state.
     // (Any previous UI-driven ticker has been removed.)
@@ -294,12 +288,18 @@ fun GameScreen(
     }
 
     // Compute device category once per composition — screen size doesn't change mid-session.
-    // This prevents deviceCategory() being called 7+ times per recomposition, each triggering
-    // sw/sh reads and string-building logs.
+    // screenW/screenH already captured above; pass as regular values into the remember lambda
+    // (composable functions can't be called inside a remember { } lambda).
     val cachedDeviceCategory: DeviceClass = if (forcePreviewFold) {
         DeviceClass.Foldable
     } else {
-        remember(sw(1f), sh(1f)) { classifyDevice(sw(1f), sh(1f)) }
+        remember(screenW, screenH) { classifyDevice(screenW, screenH) }
+    }
+
+    if (BuildConfig.DEBUG) {
+        LaunchedEffect(Unit) {
+            Log.d("FOLD_DEBUG", "SCREEN METRICS sw=$screenW sh=$screenH density=$densityValue category=$cachedDeviceCategory")
+        }
     }
 
     @Composable
