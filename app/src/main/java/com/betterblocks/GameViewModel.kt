@@ -1204,6 +1204,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // play over real cells instead of an already-cleared board.
                 board = if (hasLineClear) boardAfterPlacement else boardAfterClear,
                 availableBlocks = nextBlocks,
+                // Expose the engine combo streak so the UI can show "COMBO xN".
+                comboStreak = comboStreak,
                 selectedBlock = null,
                 score = it.score + points,
                 clearingCells = cellsToClear,

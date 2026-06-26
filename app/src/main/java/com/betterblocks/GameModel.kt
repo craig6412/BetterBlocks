@@ -101,6 +101,7 @@ data class GameUiState(
     val colorWipeCount: Int = 5,  // <-- ADDED: Color Wipe Inventory (match DEV_INITIAL_COLOR_WIPE)
     val showFirstInstallFreeCoinsDialog: Boolean = false,
     val specialMeterValue: Int = 0,
+    val comboStreak: Int = 0, // consecutive line-clearing placements; drives the combo-multiplier UI
     val isSoundEnabled: Boolean = true,
     val isMusicEnabled: Boolean = true,
     val showZeroCoinsDialog: Boolean = false, // <-- ADDED: Zero Coins Dialog Fla
