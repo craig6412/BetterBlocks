@@ -486,6 +486,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .onFailure { Log.w("GameViewModel", "Failed to stop color wheel SFX: ${it.message}") }
     }
 
+    // --- Haptics ---
+    // HapticManager was written but previously never called. These mirror the
+    // sound helpers above and fire at the same moments; HapticManager itself
+    // respects the user's haptic-enabled preference, so no extra gating is needed.
+
+    private fun hapticPlace() {
+        runCatching { HapticManager.vibrateShort(getApplication()) }
+            .onFailure { Log.w("GameViewModel", "Failed haptic (place): ${it.message}") }
+    }
+
+    private fun hapticLineClear() {
+        runCatching { HapticManager.vibrateMedium(getApplication()) }
+            .onFailure { Log.w("GameViewModel", "Failed haptic (clear): ${it.message}") }
+    }
+
+    private fun hapticBigClear() {
+        runCatching { HapticManager.vibrateHeavy(getApplication()) }
+            .onFailure { Log.w("GameViewModel", "Failed haptic (big clear): ${it.message}") }
+    }
+
     fun toggleSound() {
         val newState = !_uiState.value.isSoundEnabled
         saveSoundEnabled(newState)
@@ -1160,8 +1180,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         )
 
         playBlockPlaceSfx()
+        hapticPlace()
         if (hasLineClear) {
             playLineClearSfx()
+            // Heavier buzz for a multi-line combo clear; lighter for a single line.
+            if (clearedLines > 1) hapticBigClear() else hapticLineClear()
         }
 
         // Award coins for crossing score thresholds (every COIN_REWARD_THRESHOLD points = COINS_PER_REWARD coins).

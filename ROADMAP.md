@@ -43,8 +43,9 @@ Build order (critical path 1→4; 5–6 + zero-dev ASO copy run in parallel):
 3. **Living Board rules + tests, behind a flag.** ✅ *Rules + full lifecycle tests done at the engine
    layer (inert by default). Board-state integration awaits the cell-representation change.* *WOM exit gate here.*
 4. **Daily Challenge** as a supporting seeded mode + the crystallization A/B harness.
-5. **Wire up `HapticManager`** (already written, currently zero call sites) on
-   clear / combo / crystal-clear events.
+5. **Wire up `HapticManager`** (already written, was zero call sites). ✅ *Done — short buzz on
+   every placement, medium on a single-line clear, heavy on a multi-line combo clear; respects
+   the user's haptic preference.*
 6. **Revive-via-rewarded-ad at game over** (the missing high-eCPM placement; the
    ad pipe already exists).
 
