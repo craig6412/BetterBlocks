@@ -164,6 +164,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Internal tracking to trigger the animation only once per session/high score beat
     private var scoreToBeat: Int = 0
 
+    // Runtime-only combo streak for the engine-driven combo multiplier. Counts
+    // consecutive placements that each clear at least one line; resets to 0 on a
+    // non-clearing placement and at the start of a new game. Only affects score
+    // when GameTuning.SCORING.comboMultiplierEnabled is true.
+    private var comboStreak: Int = 0
+
     // NEW: runtime-only counter used to tie rotation payments to a specific selection session
     private var selectionCounter: Long = 0L
     // NEW: runtime-only flag to ensure we offer the "last chance" rainbow dialog only once per game
@@ -522,6 +528,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         lastChanceOfferedPersisted = false
         prefs.edit().putBoolean(KEY_LAST_CHANCE_OFFERED, false).apply()
         // If you had other session-only trackers, reset them here as well.
+        comboStreak = 0
     }
 
     /**
@@ -1139,10 +1146,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             newBoard
         }
 
-        var points = block.shape.size
-        if (hasLineClear) {
-            points += (rowsToClear.size + colsToClear.size) * 100
-        }
+        // Scoring is delegated to the pure, unit-tested rules engine. With the
+        // default tuning (combo multiplier OFF) this is identical to the legacy
+        // formula: placedCells + linesCleared * 100. Flipping the flag in
+        // GameTuning.SCORING activates the combo multiplier after A/B validation.
+        comboStreak = com.betterblocks.engine.RulesEngine.nextComboStreak(comboStreak, clearedLines)
+        val points = com.betterblocks.engine.RulesEngine.scorePlacement(
+            placedCellCount = block.shape.size,
+            linesCleared = clearedLines,
+            comboStreak = comboStreak,
+            crystalsCleared = 0,
+            config = com.betterblocks.engine.GameTuning.SCORING
+        )
 
         playBlockPlaceSfx()
         if (hasLineClear) {
