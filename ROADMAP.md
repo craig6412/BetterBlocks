@@ -36,11 +36,12 @@ shipped on a foundation that can hold a live-ops game.
 
 Build order (critical path 1→4; 5–6 + zero-dev ASO copy run in parallel):
 
-1. **Seedable rules engine slice + economy/billing characterization tests.** ✅ *Started — see below.*
-2. **Combo / chain score multiplier + on-screen feedback.** Scoring is currently
-   flat 100/line; combos only fill a meter, never the score. This is the genre's
-   core dopamine loop.
-3. **Living Board rules + tests, behind a flag.** *WOM exit gate here.*
+1. **Seedable rules engine slice + economy/billing characterization tests.** ✅ *Done — see below.*
+2. **Combo / chain score multiplier + on-screen feedback.** ✅ *Scoring path delegated to the
+   tested engine; combo multiplier wired into `GameViewModel`, shipped OFF behind a flag so live
+   score is unchanged. On-screen feedback remains to do.*
+3. **Living Board rules + tests, behind a flag.** ✅ *Rules + full lifecycle tests done at the engine
+   layer (inert by default). Board-state integration awaits the cell-representation change.* *WOM exit gate here.*
 4. **Daily Challenge** as a supporting seeded mode + the crystallization A/B harness.
 5. **Wire up `HapticManager`** (already written, currently zero call sites) on
    clear / combo / crystal-clear events.
@@ -86,6 +87,13 @@ migrate onto it incrementally.
 | `engine/EngineShapes.kt` | Canonical, Android-free block geometry (mirrors `BlockDefinitions.kt`). |
 | `engine/SeededBlockGenerator.kt` | Deterministic block sequences — the foundation for Daily Challenge & Gauntlet. |
 | `engine/RulesEngine.kt` | Pure board ops, line detection/clears, **combo multiplier**, and the **Living Board** cell-age / crystallize / resist model. |
+| `engine/GameTuning.kt` | Central one-flip activation flags (combo multiplier, Living Board) — both ship OFF. |
+| `engine/GameEngine.kt` | `resolvePlacement()` — the one-call orchestration seam the UI wires into (place → clear → combo → score → age). |
+| `engine/BoardBridge.kt` | Adapter between the legacy `Array<Array<Int?>>` board and `EngineGrid` (strangler hinge). |
+| `engine/DailyChallenge.kt` | Daily seed + shareable challenge code (the Gauntlet substrate). |
+
+`GameViewModel` now scores via the engine (`RulesEngine.scorePlacement`) with a runtime combo
+streak; with combos disabled this is byte-for-byte identical to the legacy formula.
 
 Tests (run as fast JVM unit tests, **23 passing**):
 
