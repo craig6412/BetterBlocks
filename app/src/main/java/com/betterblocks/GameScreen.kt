@@ -386,6 +386,11 @@ fun GameScreen(
                 .onGloballyPositioned { overlayOriginRoot = it.positionInRoot() }
         ) {
 
+            // Combo / score-popup overlay. Lives in the full-screen Box and
+            // self-positions at top-center via its own zIndex(999f). Layout-safe:
+            // it does not touch the board Box whose size the drag controller measures.
+            com.betterblocks.ui.ScorePopupRenderer(scoreState = uiState.scoreState)
+
             // =====================
             // UPPER GAME COLUMN
             // =====================

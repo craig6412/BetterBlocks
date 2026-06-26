@@ -29,11 +29,16 @@ passing.)
 ## Remaining Phase 1 work
 
 ### Step 2 (finish) — On-screen combo feedback + activate combos
-1. In `GameScreen.kt`, read `uiState.comboStreak` and render a "COMBO ×N" flourish
-   when it is ≥ 2 (reuse the existing score-popup / `ScorePopupState` styling).
-2. Activate by setting `GameTuning.SCORING.comboMultiplierEnabled = true`. Do this
-   **after** wiring the Daily Challenge A/B harness (below) and passing the
-   one-line-WOM exit gate. Until then, score is identical to legacy.
+1. ✅ Done: `ScorePopupRenderer` (previously never mounted, like HapticManager) is
+   now mounted in the full-screen Box in `GameScreen.kt` and driven by
+   `GameViewModel.showComboPopup(points, comboStreak)` on every clear — it shows
+   "+points" and "COMBO ×N" (from the 2nd consecutive clear). Verify on device
+   that the popup position/scale reads well; tune padding in `ScorePopupRenderer`
+   if needed.
+2. Activate the score multiplier by setting
+   `GameTuning.SCORING.comboMultiplierEnabled = true`. Do this **after** wiring the
+   Daily Challenge A/B harness (below) and passing the one-line-WOM exit gate.
+   Until then, score is identical to legacy but the popup still gives feedback.
 
 ### Step 3b — Living Board board-state integration (the differentiator)
 This is the one item that needs the board to carry per-cell age, so it is the

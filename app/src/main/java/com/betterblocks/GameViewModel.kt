@@ -506,6 +506,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .onFailure { Log.w("GameViewModel", "Failed haptic (big clear): ${it.message}") }
     }
 
+    // Drives the (previously unwired) ScorePopupRenderer: shows "+points" and a
+    // "COMBO xN" flourish on a clear, then auto-hides. Self-expiring so it does
+    // not depend on the multi-branch clear-animation lifecycle.
+    private fun showComboPopup(points: Int, combo: Int) {
+        _uiState.update {
+            it.copy(scoreState = com.betterblocks.model.ScorePopupState(
+                currentScore = points, isAnimating = true, comboCount = combo
+            ))
+        }
+        viewModelScope.launch {
+            delay(1200)
+            _uiState.update { it.copy(scoreState = com.betterblocks.model.ScorePopupState()) }
+        }
+    }
+
     fun toggleSound() {
         val newState = !_uiState.value.isSoundEnabled
         saveSoundEnabled(newState)
@@ -1185,6 +1200,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             playLineClearSfx()
             // Heavier buzz for a multi-line combo clear; lighter for a single line.
             if (clearedLines > 1) hapticBigClear() else hapticLineClear()
+            // Visible "+points / COMBO xN" feedback (comboStreak counts consecutive
+            // line-clearing placements; the popup shows the combo from the 2nd on).
+            showComboPopup(points, comboStreak)
         }
 
         // Award coins for crossing score thresholds (every COIN_REWARD_THRESHOLD points = COINS_PER_REWARD coins).

@@ -39,7 +39,9 @@ Build order (critical path 1→4; 5–6 + zero-dev ASO copy run in parallel):
 1. **Seedable rules engine slice + economy/billing characterization tests.** ✅ *Done — see below.*
 2. **Combo / chain score multiplier + on-screen feedback.** ✅ *Scoring path delegated to the
    tested engine; combo multiplier wired into `GameViewModel`, shipped OFF behind a flag so live
-   score is unchanged. On-screen feedback remains to do.*
+   score is unchanged. On-screen "+points / COMBO ×N" feedback now wired too — the previously dead
+   `ScorePopupRenderer` is mounted and driven by the combo streak. Flip the flag to activate the
+   score multiplier after A/B.*
 3. **Living Board rules + tests, behind a flag.** ✅ *Rules + full lifecycle tests done at the engine
    layer (inert by default). Board-state integration awaits the cell-representation change.* *WOM exit gate here.*
 4. **Daily Challenge** as a supporting seeded mode + the crystallization A/B harness.
